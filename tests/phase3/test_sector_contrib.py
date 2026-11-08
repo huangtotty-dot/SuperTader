@@ -133,3 +133,17 @@ def test_下拉选择也能看贡献度() -> None:
     assert 'onchange="if(this.value) selectStarBoardFromSel(this.value)"' in _HTML
     assert "function selectStarBoardFromSel(name)" in _JS
     assert "showStarContribPop(name, r.left, r.bottom + 6)" in _JS
+
+
+def test_关闭后不留残影() -> None:
+    """owner 2026-11-08：「取消贡献度显示后仍然发现有窗口残影」。
+
+    根因：原来只把浮层 display:none —— WebView2 对被 fixed 浮层盖住的画布区域
+    不一定重绘，屏幕上残留旧画面。修法：关闭时**移除 DOM 节点**（强制重绘）
+    + 顺手收起图表右侧展开的多行标签。
+    """
+    assert "try { _starPopEl.remove(); } catch (e)" in _JS
+    assert "_starPopEl = null;" in _JS
+    assert 'if (_starSelBoard) {\n    _starSelBoard = "";' in _JS
+    assert "_starLast) echGuard(\"板块星轨图\", () => renderSectorStars(_starLast));" in _JS
+    assert "transform:translateZ(0);" in _JS, "浮层自身也开合成层，减少残影"

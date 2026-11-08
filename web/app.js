@@ -2470,7 +2470,7 @@ async function loadSectorContrib(name) {
     if (_starSelBoard === name) {
       renderSectorContrib(d);
       if (_starLast) echGuard("板块星轨图", () => renderSectorStars(_starLast));   // 右侧标签展开
-      if (_starPopEl && _starPopEl.style.display !== "none") _fillStarPop(name, d);  // 弹出框填充
+      if (_starPopEl && _starSelBoard === name) _fillStarPop(name, d);  // 弹出框填充（node 在 = 打开中）
     }
   } catch (e) {
     el.innerHTML = `<span class="down" style="font-size:11px">取数失败：${esc(e.message || e)}</span>`;
@@ -2482,36 +2482,49 @@ async function loadSectorContrib(name) {
 /* 2026-11-08 owner：「点击具体板块时，贡献度显示在弹出来的框中」 ⇒ 点击图上的板块
    在鼠标旁弹出浮层（不依赖图下方面板是否可见）。内容 = _contribHtml(d)。
    关闭：× / Esc / 点空白处。 */
-let _starPopEl = null, _starPopXY = { x: 0, y: 0 };
+let _starPopEl = null, _starPopXY = { x: 0, y: 0 }, _starPopBound = false;
 
 function _ensureStarPop() {
-  if (_starPopEl) return _starPopEl;
+  if (_starPopEl && document.body.contains(_starPopEl)) return _starPopEl;
   const el = document.createElement("div");
   el.id = "starContribPop";
-  el.style.cssText = "position:fixed;z-index:9600;display:none;min-width:320px;max-width:470px;"
+  // ⚠️ 2026-11-08 owner 报「取消后仍有窗口残影」：WebView2 对 position:fixed 的浮层
+  //    只设 display:none 时，被盖住的画布区域不一定重绘 ⇒ 屏幕上残留旧画面。
+  //    对策 = 关闭时**把节点整个移除**（DOM 删除会强制那块区域重绘），打开时再建。
+  el.style.cssText = "position:fixed;z-index:9600;min-width:320px;max-width:470px;"
     + "background:#fff;border:1px solid #d3d9e3;border-radius:8px;"
-    + "box-shadow:0 10px 28px rgba(40,60,90,.20);padding:10px 12px;font-size:12px;color:#1f2937;";
+    + "box-shadow:0 10px 28px rgba(40,60,90,.20);padding:10px 12px;font-size:12px;color:#1f2937;"
+    + "transform:translateZ(0);";
   el.addEventListener("mousedown", e => e.stopPropagation());
   document.body.appendChild(el);
   _starPopEl = el;
-  document.addEventListener("mousedown", e => {
-    if (el.style.display === "none") return;
-    if (!el.contains(e.target)) hideStarContribPop();
-  }, true);
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape") hideStarContribPop();
-  });
+  if (!_starPopBound) {
+    _starPopBound = true;
+    document.addEventListener("mousedown", e => {
+      if (_starPopEl && !_starPopEl.contains(e.target)) hideStarContribPop();
+    }, true);
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") hideStarContribPop();
+    });
+  }
   return el;
 }
 
+/* 关闭 = 移除节点（强制重绘）+ 收起右侧多行标签（否则图上会留下展开的贡献度文字）。 */
 function hideStarContribPop() {
-  if (_starPopEl) _starPopEl.style.display = "none";
+  if (_starPopEl) {
+    try { _starPopEl.remove(); } catch (e) { /* 忽略 */ }
+    _starPopEl = null;
+  }
+  if (_starSelBoard) {
+    _starSelBoard = "";
+    if (_starLast) echGuard("板块星轨图", () => renderSectorStars(_starLast));
+  }
 }
 
 function _placeStarPop(x, y) {
   const el = _ensureStarPop();
   _starPopXY = { x: x || 0, y: y || 0 };
-  el.style.display = "block";
   el.style.left = "0px";
   el.style.top = "0px";
   const w = el.offsetWidth, h = el.offsetHeight;
