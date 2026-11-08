@@ -2206,6 +2206,33 @@ function renderSectorStars(d) {
   const roseSet = new Set(rose.map(r => r.s.name));
   const roseUp = new Map(rose.map(r => [r.s.name, r.up]));
 
+  /* 2026-11-08 owner：「贡献度的显示要在图中的板块右侧显示」。
+     选中板块（点线/星/表格名字）⇒ 它的**末端直标**展开成多行：
+        电力 ↑9
+        电力运营 +128
+        智能电网-用户侧 +9
+        虚拟电厂 +2
+     Top3 按「较前一日得分变化」排序；数据还没到时先只显示板块名。 */
+  const _starCd = (_starContribCache.data && _starContribCache.data.board === _starSelBoard)
+    ? _starContribCache.data : null;
+  const _contribLabel = (name) => {
+    if (!_starSelBoard || name !== _starSelBoard) return null;
+    const days = (_starCd && _starCd.days) || [];
+    if (!days.length) return name;
+    const last = days[days.length - 1];
+    const prev = days.length >= 2 ? days[days.length - 2] : null;
+    const pm = new Map(((prev && prev.subs) || []).map(x => [x["细分"], x]));
+    const rows = (last.subs || []).map(x => {
+      const p = pm.get(x["细分"]);
+      return { sub: x["细分"], s: x["得分和"],
+               d: p ? +(x["得分和"] - (p["得分和"] || 0)).toFixed(1) : null };
+    }).sort((a, b) => ((b.d == null ? -1e9 : b.d) - (a.d == null ? -1e9 : a.d)) || (b.s - a.s)).slice(0, 3);
+    const rk = prev ? (prev.rank - last.rank) : 0;
+    const head = name + (rk > 0 ? ` ↑${rk}` : (rk < 0 ? ` ↓${-rk}` : " —"));
+    if (!rows.length) return head;
+    return head + "\n" + rows.map(r => `${r.sub} ${r.d == null ? "—" : (r.d > 0 ? "+" + r.d : r.d)}`).join("\n");
+  };
+
   const mk = (sec, color, isHl) => ({
     name: sec.name,
     type: "line",
@@ -2231,10 +2258,18 @@ function renderSectorStars(d) {
     // 2026-10-17 owner：「显示不全，需要显示全」⇒ **所有板块**都在末端直标。
     // 25 个板块五天全在榜 ⇒ 末日名次互不相同 ⇒ 右端标签各占一行、不会重叠。
     // 高亮的用正文墨色加粗，其余用灰色小字（保持层级，但仍能认出是谁）。
-    endLabel: { show: true, formatter: sec.name,
-                color: isHl ? "#1f2937" : "#9ca3af",
-                fontSize: isHl ? 11 : 10, fontWeight: isHl ? 600 : 400,
-                distance: 8, align: "left" },
+    endLabel: (() => {
+      const _txt = _contribLabel(sec.name);
+      const _multi = !!_txt && _txt.includes("\n");
+      return { show: true, formatter: _txt || sec.name,
+               color: _multi ? "#1f2937" : (isHl ? "#1f2937" : "#9ca3af"),
+               fontSize: _multi ? 10 : (isHl ? 11 : 10),
+               fontWeight: (_multi || isHl) ? 600 : 400,
+               distance: 8, align: "left", lineHeight: 14,
+               ...(_multi ? { backgroundColor: "rgba(255,255,255,.96)",
+                              borderColor: "#d3d9e3", borderWidth: 1, borderRadius: 4,
+                              padding: [3, 6] } : {}) };
+    })(),
     z: isHl ? 3 : 1,
   });
 
@@ -2255,7 +2290,8 @@ function renderSectorStars(d) {
       inactiveColor: "#c9ced8",
     },
     // 右边距留给**全部**板块的末端直标（最长 5 个汉字 ≈ 60px）+ 一点余量
-    grid: { left: 56, right: 150, top: 34, bottom: 30 },
+    // 右侧余量：选中板块的贡献度标签是多行，要比平时宽（2026-11-08）
+    grid: { left: 56, right: _starSelBoard ? 260 : 150, top: 34, bottom: 30 },
     tooltip: {
       trigger: "axis",
       backgroundColor: "#ffffff", borderColor: "#d3d9e3", borderWidth: 1,
@@ -2372,7 +2408,8 @@ function renderSectorStars(d) {
     renderSectorContrib(_starContribCache.data);
   } else if (_contribEl && !_contribEl.innerHTML.trim()) {
     _contribEl.innerHTML = `<div class="cell-dim" style="font-size:11px">`
-      + `点击图上的板块（线/星/右侧名字）→ 查看它的<b>二级细分贡献度</b>：谁在带动这个板块的排名变化</div>`;
+      + `点击图上的板块（线/星/下方表格里的名字）→ <b>右侧标签会展开成「板块 ↑名次 + Top3 细分贡献」</b>，`
+      + `这里同时列出完整明细（谁在带动排名变化）</div>`;
   }
 }
 
@@ -2404,7 +2441,10 @@ async function loadSectorContrib(name) {
     el.innerHTML = `<div class="cell-dim" style="font-size:11px">${esc(name)} 细分贡献加载中…</div>`;
     const d = await apiCall("load_sector_contrib", name, 10, _panelDate());
     _starContribCache = { key: _key, ts: Date.now(), data: d };
-    if (_starSelBoard === name) renderSectorContrib(d);
+    if (_starSelBoard === name) {
+      renderSectorContrib(d);
+      if (_starLast) echGuard("板块星轨图", () => renderSectorStars(_starLast));   // 右侧标签展开
+    }
   } catch (e) {
     el.innerHTML = `<span class="down" style="font-size:11px">取数失败：${esc(e.message || e)}</span>`;
   } finally {

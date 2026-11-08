@@ -100,3 +100,17 @@ def test_前端_点板块出贡献面板() -> None:
     assert "function renderSectorContrib(d)" in _JS
     assert 'Δ对比' in _JS, "面板要写明是与哪一天对比"
     assert '各细分之和 ≥ 板块股票数' in _JS, "口径提示必须在面板里"
+
+
+def test_右侧标签显示贡献度() -> None:
+    """owner 2026-11-08：「贡献度的显示要在图中的板块右侧显示」。
+
+    选中板块 ⇒ endLabel（末端直标）展开成多行：板块名 + 名次变化 + Top3 细分 Δ得分；
+    未选中仍是单行板块名；右侧 grid 余量随选中状态变宽。
+    """
+    assert "const _contribLabel = (name) => {" in _JS
+    assert "_contribLabel(sec.name)" in _JS
+    assert 'formatter: _txt || sec.name' in _JS
+    assert 'grid: { left: 56, right: _starSelBoard ? 260 : 150, top: 34, bottom: 30 }' in _JS
+    assert "right: _starSelBoard ? 260 : 150" in _JS
+    assert "renderSectorStars(_starLast));   // 右侧标签展开" in _JS
