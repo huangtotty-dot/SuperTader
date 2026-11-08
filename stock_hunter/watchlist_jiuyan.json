@@ -4406,12 +4406,12 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电缆",
   "name": "新能泰山",
   "primary_source": "legacy",
   "sector": "电网设备/光纤概念/央企国企改革",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_concept_desc": {
    "电力设备": "电缆、变压器、开关柜等输配电一次/二次设备"
   },
@@ -4419,7 +4419,10 @@
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "新能泰山：电缆业务"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电缆"
  },
  "000721": {
   "business_summary": "主营餐饮业",
@@ -5485,7 +5488,7 @@
   "primary_source": "legacy",
   "sector": "通用设备/中芯国际概念/超导概念/液冷服务器",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
@@ -5497,17 +5500,18 @@
    "场地设备": "冰轮环境：工业制冷，数据中心温控配套",
    "电力设备": "冰轮环境：工业制冷，数据中心温控配套"
   },
+  "jiuyan_category": "电力|液冷|可控核聚变|冰雪经济",
+  "jiuyan_concept": "电力电子与配套|冷却塔|热管理/制冷|场地设备",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：AIDC相关 → 电力设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
+  "jiuyan_concept1": "电力电子与配套",
   "jiuyan_category2": "液冷",
   "jiuyan_concept2": "冷却塔",
   "jiuyan_category3": "可控核聚变",
   "jiuyan_concept3": "热管理/制冷",
   "jiuyan_category4": "冰雪经济",
   "jiuyan_concept4": "场地设备",
-  "jiuyan_category": "电力|液冷|可控核聚变|冰雪经济",
-  "jiuyan_concept": "电力设备|冷却塔|热管理/制冷|场地设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：AIDC相关 → 电力设备"
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力电子与配套"
  },
  "000812": {
   "business_summary": "主营印刷和记录媒介复制业",
@@ -7791,17 +7795,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电缆",
   "name": "华菱线缆",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "华菱线缆：特种电缆"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电缆"
  },
  "001209": {
   "business_summary": "主营纺织服装、服饰业",
@@ -8250,16 +8257,19 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "风电设备",
   "name": "永达股份",
   "primary_source": "legacy",
   "sector": "工程机械/高端装备/机器人概念/海工装备",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "电力设备": "永达股份：大型金属结构件与锻件，风电/电力装备配套"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "风电设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力/风电设备"
  },
  "001248": {
   "business_summary": "",
@@ -9540,17 +9550,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "智能电网",
   "name": "信通电子",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "信通电子：电力智能巡检"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "智能电网",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力/智能电网"
  },
  "001389": {
   "business_summary": "多高层印制电路板的研发、生产与销售。",
@@ -14731,7 +14744,7 @@
   "primary_source": "legacy",
   "sector": "电池/钠离子电池/固态电池/MiniLED",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_concept_desc": {
    "spacex-潜在供应商": "市场预期可能进入 SpaceX/星链供应链的配套商"
   },
@@ -14761,11 +14774,12 @@
    "verdict": "摘除",
    "reason": "公司主营业务为锂电池、LED和金属物流配送，2025年对应收入分别为35.9658亿元、15.8385亿元和26.0514亿元，未披露卫星、火箭或商业航天收入。针对市场流传的SpaceX供应关系，公司明确表示没有直接为卫星、火箭供应锂电池，仅披露为台湾能元科技提供代工；即使能元科技自身进入低轨卫星客户体系，也不能跳过实际产品流向和客户确认，直接推定蔚蓝锂芯产品已经供给SpaceX。现有证据既不能证明直接供货，也不能证明代工产品最终用于特定火箭或卫星型号，更谈不上可量化收入占比。因此旧“spacex-供应商”及“潜在供应商”均属于客户链条外推，应摘除，而不能借锂电池通用可上天属性改写保留。"
   },
-  "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
-  "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：配套相关 → 电力设备"
+  "jiuyan_category": "电池",
+  "jiuyan_concept": "锂电池",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：配套相关 → 电力设备",
+  "jiuyan_category1": "电池",
+  "jiuyan_concept1": "锂电池",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电池/锂电池"
  },
  "002246": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -15747,17 +15761,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "开关与成套设备",
   "name": "中电鑫龙",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "中电鑫龙：智慧用能设备"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 开关与成套设备"
  },
  "002299": {
   "business_summary": "主营农副食品加工业",
@@ -15782,17 +15799,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电缆",
   "name": "太阳电缆",
   "primary_source": "legacy",
   "sector": "特高压/风电",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "太阳电缆：电线电缆"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电缆"
  },
  "002301": {
   "business_summary": "主营文教、工美、体育和娱乐用品制造业",
@@ -15861,17 +15881,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电缆",
   "name": "中利集团",
   "primary_source": "legacy",
   "sector": "电网设备/光伏建筑一体化/绿色电力/TOPCON电池",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "中利集团：线缆业务"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电缆"
  },
  "002310": {
   "business_summary": "新能源电站开发、投资、建设及运营。",
@@ -19809,20 +19832,21 @@
   "primary_source": "legacy",
   "sector": "元件/超级电容/5G",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
    "快换接头": "江海股份：铝电解电容器",
    "电力设备": "江海股份：铝电解电容器"
   },
+  "jiuyan_category": "液冷|电力",
+  "jiuyan_concept": "快换接头|电力电子与配套",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：配套相关 → 电力设备",
   "jiuyan_category1": "液冷",
   "jiuyan_concept1": "快换接头",
   "jiuyan_category2": "电力",
-  "jiuyan_concept2": "电力设备",
-  "jiuyan_category": "液冷|电力",
-  "jiuyan_concept": "快换接头|电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：配套相关 → 电力设备"
+  "jiuyan_concept2": "电力电子与配套",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力电子与配套"
  },
  "002486": {
   "business_summary": "主营纺织服装、服饰业",
@@ -20761,17 +20785,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "输电铁塔",
   "name": "东方铁塔",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "电力设备": "东方铁塔：铁塔钢结构+钾肥"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "输电铁塔",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 输电铁塔"
  },
  "002546": {
   "business_summary": "主营仪器仪表制造业",
@@ -21937,20 +21964,21 @@
   "business_summary": "主营特高压",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_category1": "电力",
-  "jiuyan_concept": "",
-  "jiuyan_concept1": "电力设备",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "绝缘子",
   "name": "大连电瓷",
   "primary_source": "legacy",
   "sector": "特高压/虚拟电厂",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "大连电瓷：绝缘子"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "绝缘子",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 绝缘子"
  },
  "002607": {
   "business_summary": "主营教育",
@@ -23161,14 +23189,15 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电缆",
   "name": "远程股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-03 15:03:10",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备"
+  "jiuyan_concept1": "电缆",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电缆"
  },
  "002693": {
   "business_summary": "主营其他",
@@ -26094,17 +26123,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电缆",
   "name": "长缆科技",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "长缆科技：电缆附件"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电缆"
  },
  "002880": {
   "business_summary": "主营医药制造业",
@@ -30054,20 +30086,21 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "开关与成套设备",
   "name": "九洲集团",
   "primary_source": "legacy",
   "sector": "电力/生物质能发电/抽水蓄能/虚拟电厂",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "九洲集团：智能配电网设备"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：电力设备|智能电网-虚拟电厂 → 电力设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：电力设备|智能电网-虚拟电厂 → 电力设备"
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 开关与成套设备"
  },
  "300041": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -37319,20 +37352,21 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_category1": "电力",
-  "jiuyan_concept": "",
-  "jiuyan_concept1": "电力设备",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "开关与成套设备",
   "name": "昇辉科技",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "电力设备": "昇辉科技：电气成套+智慧城市"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 开关与成套设备"
  },
  "300424": {
   "business_summary": "主营金属制品、机械和设备修理业",
@@ -42993,21 +43027,22 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电力电子与配套",
   "name": "盛弘股份",
   "primary_source": "legacy",
   "sector": "其他电源设备Ⅱ/数据中心(AIDC)/高压快充/虚拟电厂",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'AIDC相关|龙头-储能PCS' → 'AIDC相关'",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "盛弘股份：充电与工业配套电源"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：AIDC相关 → 电力设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：AIDC相关 → 电力设备"
+  "jiuyan_concept1": "电力电子与配套",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力电子与配套"
  },
  "300694": {
   "business_summary": "主营汽车制造业",
@@ -48713,7 +48748,7 @@
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
@@ -48723,7 +48758,10 @@
   "jiuyan_category1": "算力租赁",
   "jiuyan_concept1": "算力租赁",
   "jiuyan_category2": "电力",
-  "jiuyan_concept2": "电力设备"
+  "jiuyan_concept2": "变压器/SST",
+  "jiuyan_category": "算力租赁|电力",
+  "jiuyan_concept": "算力租赁|变压器/SST",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力/变压器/SST"
  },
  "301013": {
   "business_summary": "主营专用设备制造、MLCC(多层陶瓷电容器)等，国内移动智能终端检测领域行业较为领先",
@@ -52790,20 +52828,21 @@
   "business_summary": "输配电及控制设备的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_category1": "电力",
-  "jiuyan_concept": "",
-  "jiuyan_concept1": "电力设备",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "开关与成套设备",
   "name": "明阳电气",
   "primary_source": "legacy",
   "sector": "电网设备/智能电网/风电/储能",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "明阳电气：输配电及控制设备"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 开关与成套设备"
  },
  "301292": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -59197,17 +59236,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "开关与成套设备",
   "name": "长城电工",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "长城电工：电工电气产品"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 开关与成套设备"
  },
  "600195": {
   "business_summary": "主营医药制造业",
@@ -59301,13 +59343,16 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "发电设备",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "哈空调：电站空冷器"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "发电设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力/发电设备"
  },
  "600203": {
   "business_summary": "智能终端产品业务、LED光电业务。",
@@ -60548,20 +60593,21 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "开关与成套设备",
   "name": "平高电气",
   "primary_source": "legacy",
   "sector": "电网设备/柔性直流输电/特高压/智能电网",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "平高电气：高压开关"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-输变配电|电力建设 → 电力设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-输变配电|电力建设 → 电力设备"
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 开关与成套设备"
  },
  "600313": {
   "business_summary": "主营批发业",
@@ -69249,21 +69295,22 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电力电子与配套",
   "name": "宏发股份",
   "primary_source": "legacy",
   "sector": "电网设备/汽车电子/智能电网/商业航天",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'AIDC相关|中军-继电器全球龙头' → 'AIDC相关'",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "电力设备": "宏发股份：继电器（电力/数据中心配套）"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：AIDC相关 → 电力设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：AIDC相关 → 电力设备"
+  "jiuyan_concept1": "电力电子与配套",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力电子与配套"
  },
  "600886": {
   "business_summary": "各类型能源电力项目的全生命周期投资、开发、建设与运营管理。",
@@ -73217,17 +73264,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "输电铁塔",
   "name": "风范股份",
   "primary_source": "legacy",
   "sector": "金属制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "风范股份：输电铁塔"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "输电铁塔",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 输电铁塔"
  },
  "601702": {
   "business_summary": "铝板带箔的研发、生产和销售。",
@@ -73821,17 +73871,18 @@
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "正泰电器：低压电器与智能配用电"
   },
-  "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：变压器（含SST）|智能电网-用户侧 → 电力设备"
+  "jiuyan_concept": "开关与成套设备",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：变压器（含SST）|智能电网-用户侧 → 电力设备",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 开关与成套设备"
  },
  "601878": {
   "business_summary": "主营资本市场服务",
@@ -74851,14 +74902,15 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "开关与成套设备",
   "name": "新宏泰",
   "primary_source": "legacy",
   "sector": "电网设备/国企改革/特高压",
   "sector_type": "legacy",
-  "updated_at": "2026-11-02 15:16:34",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备"
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 开关与成套设备"
  },
  "603017": {
   "business_summary": "主营工程咨询服务Ⅱ",
@@ -80011,17 +80063,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电缆",
   "name": "福华尚纬",
   "primary_source": "legacy",
   "sector": "电网设备/水利/专精特新/海工装备",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "福华尚纬：特种电缆"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电缆"
  },
  "603334": {
   "business_summary": "主营废弃资源综合利用业",
@@ -81627,17 +81682,18 @@
   "primary_source": "legacy",
   "sector": "柔性直流输电/特高压",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "神马电力：电网绝缘子/复合外绝缘"
   },
-  "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：输电设备（绝缘子）|电力设备 → 电力设备"
+  "jiuyan_concept": "绝缘子",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：输电设备（绝缘子）|电力设备 → 电力设备",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "绝缘子",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 绝缘子"
  },
  "603533": {
   "business_summary": "主营互联网和相关服务",
@@ -82378,17 +82434,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电缆",
   "name": "杭电股份",
   "primary_source": "legacy",
   "sector": "电网设备/光纤概念/特高压/抽水蓄能",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "杭电股份：电缆+光纤"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电缆"
  },
  "603619": {
   "business_summary": "主营石油和天然气开采业",
@@ -91556,15 +91615,16 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "电力设备",
+  "jiuyan_concept": "电力电子与配套",
   "name": "中国电研",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:40:21",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：检测设备 → 电力设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "电力设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：检测设备 → 电力设备"
+  "jiuyan_concept1": "电力电子与配套",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力电子与配套"
  },
  "688129": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -100493,20 +100553,21 @@
   "business_summary": "主营仪器仪表制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_category1": "电力",
-  "jiuyan_concept": "",
-  "jiuyan_concept1": "电力设备",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "智能电网",
   "name": "西力科技",
   "primary_source": "legacy",
   "sector": "仪器仪表制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:40:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "西力科技：智能电表"
-  }
+  },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "智能电网",
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力/智能电网"
  },
  "688617": {
   "business_summary": "主营医疗器械",
