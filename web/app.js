@@ -9146,6 +9146,20 @@ const TAG_DESC = {
   "破10日线": "【日线口径】今收 < 日线10日均线，中期走弱。"
     + "⚠️ 这是**日线**的10日线，不是30分钟图上的 MA10。",
 };
+/* 2026-11-08：电力运营的发电方式徽章（水电/火电/核电/风光/热电联产…），
+   数据来自猎手个股行的 `power_type`（后端从 watchlist `jiuyan_power_type` 注入）。 */
+const POWER_TYPE_COLORS = {
+  "水电": "#1f6feb", "火电": "#bc4c00", "核电": "#8250df", "风光": "#1a7f37",
+  "光伏": "#9a6700", "热电联产": "#a40e26", "供热": "#57606a",
+  "电网供电": "#0969da", "综合能源": "#57606a", "待定": "#8b949e",
+};
+function powerTypeBadge(t) {
+  if (!t) return "";
+  const c = POWER_TYPE_COLORS[t] || "#57606a";
+  return `<span class="badge" style="background:${c}22;border:1px solid ${c}88;color:${c};`
+    + `font-size:10px;margin-left:4px" title="电力运营·发电方式">${esc(t)}</span>`;
+}
+
 function tagBadge(t) {
   const colorMap = {
     up: "t-long", down: "t-short", warn: "approach", neutral: "chop",
@@ -10409,7 +10423,7 @@ function renderHunter(h) {
           return `<span class="h-verdict v-${esc(tv[0])}" title="${esc(tip)}">${esc(tv[0])}</span>`;
         })()} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
-          title="加入建仓股池监控买点">+股池</button></td>
+          title="加入建仓股池监控买点">+股池</button>${powerTypeBadge(s.power_type)}</td>
         <!-- 2026-10-22 owner：市值挪到名称右边（放在「价」旁边太靠右，注意不到） -->
         <td class="num h-mktcap" data-hcode="${esc(s.code)}" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。随行情 10s 刷新">${hunterMktcapHtml(null)}</td>
         <td style="text-align:center;white-space:nowrap">${tierBadge(s.tier, s.tier_static, s.tier_reason)}</td>

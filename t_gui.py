@@ -8725,6 +8725,18 @@ class Api:
             # ⚠️ 实测无前瞻区分度，勿当依据 —— 见 `_tier_sector_stocks` docstring。
             for _cat, _ss in sector_stocks.items():
                 _tier_sector_stocks(_ss)
+            # 2026-11-08 owner：「电力运营每支股一个标签：火电/核电/水电/储能相关？」
+            # 发电方式写在 watchlist 的 `jiuyan_power_type`（tag_power_type_20261108.py），
+            # 这里随个股行下发，前端在名字后面显示小徽章。
+            try:
+                _wl_raw = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {}) or {}
+                for _ss in sector_stocks.values():
+                    for _s in _ss:
+                        _t = str((_wl_raw.get(str(_s.get("code"))) or {}).get("jiuyan_power_type") or "")
+                        if _t:
+                            _s["power_type"] = _t
+            except Exception:
+                pass
 
             # 盘后建仓信号符合度注入（实盘盘中跳过省资源；盘后点击"今日数据"时显示）
             try:

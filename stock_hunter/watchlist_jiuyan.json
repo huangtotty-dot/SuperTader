@@ -504,9 +504,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "深南电A：电力生产销售、综合能源服务（发电运营）"
+   "电力运营": "深南电A：电力生产销售、综合能源服务（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000039": {
   "business_summary": "主营通用设备",
@@ -1037,14 +1039,16 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "电力运营": "川能动力：新能源电力（电力运营）",
+   "电力运营": "川能动力：新能源电力（发电运营·风光）",
    "锂矿资源": "川能动力：新能源电力"
   },
   "jiuyan_category1": "电池",
   "jiuyan_concept1": "锂矿资源",
   "jiuyan_category2": "电力",
   "jiuyan_concept2": "电力运营",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000156": {
   "business_summary": "主营电视广播Ⅱ",
@@ -2155,13 +2159,15 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "绿发电力：风能、太阳能投资、开发、运营（发电运营）"
+   "电力运营": "绿发电力：风能、太阳能投资、开发、运营（发电运营·风光）"
   },
   "jiuyan_category1": "电力",
   "jiuyan_concept1": "电力运营",
   "jiuyan_category2": "央企",
   "jiuyan_concept2": "",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000538": {
   "business_summary": "主营医药制造业",
@@ -2199,9 +2205,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "粤电力A：电力项目、新能源项目的投资、建设和经营管理，电…（发电运营）"
+   "电力运营": "粤电力A：电力项目、新能源项目的投资、建设和经营管理，电…（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000541": {
   "business_summary": "主营电气机械和器材制造业",
@@ -2231,9 +2239,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "皖能电力：发电业务（发电运营）"
+   "电力运营": "皖能电力：发电业务（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000544": {
   "business_summary": "主营水的生产和供应业",
@@ -3090,9 +3100,11 @@
   "jiuyan_category1": "电力",
   "jiuyan_concept1": "电力运营",
   "jiuyan_concept_reason": {
-   "电力运营": "新能股份：新能源发电、储能电站并网，宁夏国资背景（发电运营）"
+   "电力运营": "新能股份：新能源发电、储能电站并网，宁夏国资背景（发电运营·风光）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000596": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -3170,9 +3182,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "建投能源：火力发电及供热等业务（发电运营）"
+   "电力运营": "建投能源：火力发电及供热等业务（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000601": {
   "business_summary": "能源（电力、供热、供汽）、生态植物纤维制品、精密（智能）制造。",
@@ -3190,9 +3204,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "韶能股份：清洁可再生能源（新能源）（发电运营）"
+   "电力运营": "韶能股份：清洁可再生能源（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000603": {
   "business_summary": "主营有色金属矿采选业",
@@ -4470,9 +4486,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "湖南发展：清洁能源业务（电力运营）"
+   "电力运营": "湖南发展：清洁能源业务（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000723": {
   "business_summary": "主营石油、煤炭及其他燃料加工业",
@@ -4978,9 +4996,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "晋控电力：发电业务（发电运营）"
+   "电力运营": "晋控电力：发电业务（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000768": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -5219,9 +5239,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "甘肃能源：火力发电、水力发电、风力发电、光伏发电（发电运营）"
+   "电力运营": "甘肃能源：火力发电、水力发电、风力发电、光伏发电（发电运营·综合能源）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "综合能源",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000792": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -6067,9 +6089,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "银星能源：新能源发电、新能源装备工程（发电运营）"
+   "电力运营": "银星能源：新能源发电、新能源装备工程（发电运营·风光）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000863": {
   "business_summary": "主营房地产业",
@@ -6125,13 +6149,15 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "电力运营": "电投绿能：发电（发电运营）"
+   "电力运营": "电投绿能：发电（发电运营·综合能源）"
   },
   "jiuyan_category1": "央企",
   "jiuyan_category2": "电力",
   "jiuyan_concept2": "电力运营",
   "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂|电力运营 → 电力运营",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "综合能源",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000876": {
   "business_summary": "主营农副食品加工业",
@@ -6481,9 +6507,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "赣能股份：综合型电力企业（发电运营）"
+   "电力运营": "赣能股份：综合型电力企业（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000900": {
   "business_summary": "主营道路运输业",
@@ -7641,9 +7669,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "闽东电力：电力生产与开发（发电运营）"
+   "电力运营": "闽东电力：电力生产与开发（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "000995": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -7858,9 +7888,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
-   "电力运营": "金房能源：建筑供能领域（供热供能）"
+   "电力运营": "金房能源：建筑供能领域（发电运营·供热）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "供热",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "001211": {
   "business_summary": "主营木材加工和木、竹、藤、棕、草制品业",
@@ -8356,9 +8388,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "立新能源：风力发电、光伏发电（发电运营）"
+   "电力运营": "立新能源：风力发电、光伏发电（发电运营·风光）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "001259": {
   "business_summary": "厨房小家电与家居小家电系列产品研发、设计、生产与销售。",
@@ -9474,9 +9508,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "百通能源：工业园区集中供热（供热供能）"
+   "电力运营": "百通能源：工业园区集中供热（发电运营·热电联产）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "001378": {
   "business_summary": "主营其他",
@@ -9780,9 +9816,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "豫能控股：火电项目投资管理业务（发电运营）"
+   "电力运营": "豫能控股：火电项目投资管理业务（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "001914": {
   "business_summary": "主营房地产业",
@@ -10072,9 +10110,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "协鑫能科：电力、热力生产和供应等业务（供热供能）"
+   "电力运营": "协鑫能科：电力、热力生产和供应等业务（发电运营·综合能源）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "综合能源",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "002016": {
   "business_summary": "主营房地产业",
@@ -10579,9 +10619,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "黔源电力：水力发电站的开发、建设与经营管理（发电运营）"
+   "电力运营": "黔源电力：水力发电站的开发、建设与经营管理（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "002040": {
   "business_summary": "主营水上运输业",
@@ -15945,9 +15987,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "东方新能：新能源发电（发电运营）"
+   "电力运营": "东方新能：新能源发电（发电运营·风光）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "002311": {
   "business_summary": "主营饲料",
@@ -19806,9 +19850,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "富春环保：热电联产业务（供热供能）"
+   "电力运营": "富春环保：热电联产业务（发电运营·热电联产）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "002480": {
   "business_summary": "轨道交通业务、桥梁功能部件业务、光伏发电业务。",
@@ -19824,9 +19870,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
-   "电力运营": "新筑股份：轨道交通业务（发电运营）"
+   "电力运营": "新筑股份：轨道交通业务（发电运营·待定）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "待定",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "002481": {
   "business_summary": "主营食品制造业",
@@ -22150,9 +22198,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "长青集团：生物质热电联产、工业园区燃煤集中供热、生活垃圾…（供热供能）"
+   "电力运营": "长青集团：生物质热电联产、工业园区燃煤集中供热、生活垃圾…（发电运营·热电联产）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "002617": {
   "business_summary": "碳化硅业务、登高机业务、光伏发电业务、漆包线业务。",
@@ -26420,9 +26470,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "京能热力：热力生产与供应（供热供能）"
+   "电力运营": "京能热力：热力生产与供应（发电运营·供热）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "供热",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "002895": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -29115,14 +29167,16 @@
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "智能电网": "南网能源：综合能源/节能服务",
-   "电力运营": "南网能源：节能服务业务（综合能源服务）"
+   "电力运营": "南网能源：节能服务业务（发电运营·综合能源）"
   },
   "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网",
   "jiuyan_category1": "央企",
   "jiuyan_category2": "电力",
   "jiuyan_concept2": "电力运营",
   "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 电力/电力运营（按公司简介核实）",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "综合能源",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "003036": {
   "business_summary": "高端纺织机械装备的研发和制造。(电子布纺织机)",
@@ -29254,10 +29308,12 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "中国广核：建设、运营及管理核电站，销售电力，组织开发核电…（发电运营）",
+   "电力运营": "中国广核：建设、运营及管理核电站，销售电力，组织开发核电…（发电运营·核电）",
    "聚变更新": "中国广核：核电运营"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "核电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "300001": {
   "business_summary": "“智能制造+系统集成”业务以及电动汽车充电网业务。",
@@ -56930,13 +56986,15 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "华能国际：电力、热力及综合能源服务（发电运营）"
+   "电力运营": "华能国际：电力、热力及综合能源服务（发电运营·火电）"
   },
   "jiuyan_category1": "央企",
   "jiuyan_concept1": "",
   "jiuyan_category2": "电力",
   "jiuyan_concept2": "电力运营",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600012": {
   "business_summary": "主营道路运输业",
@@ -57040,9 +57098,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "上海电力：现代能源业务（发电运营）"
+   "电力运营": "上海电力：现代能源业务（发电运营·综合能源）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "综合能源",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600022": {
   "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -57086,9 +57146,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "华能水电：水力和新能源发电项目的开发、建设、运营与管理（发电运营）"
+   "电力运营": "华能水电：水力和新能源发电项目的开发、建设、运营与管理（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600026": {
   "business_summary": "主营水上运输业",
@@ -57114,13 +57176,15 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "华电国际：电力产品和热力产品（发电运营）"
+   "电力运营": "华电国际：电力产品和热力产品（发电运营·火电）"
   },
   "jiuyan_category1": "央企",
   "jiuyan_concept1": "",
   "jiuyan_category2": "电力",
   "jiuyan_concept2": "电力运营",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600028": {
   "business_summary": "主营石油和天然气开采业",
@@ -57204,9 +57268,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "浙江新能：可再生能源业务（发电运营）"
+   "电力运营": "浙江新能：可再生能源业务（发电运营·风光）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600033": {
   "business_summary": "主营道路运输业",
@@ -57930,9 +57996,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "明星电力：电力生产与供应、自来水供应、综合能源服务（发电运营）"
+   "电力运营": "明星电力：电力生产与供应、自来水供应、综合能源服务（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600103": {
   "business_summary": "主营造纸和纸制品业",
@@ -58605,9 +58673,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "廊坊发展：供热业务（供热供能）"
+   "电力运营": "廊坊发展：供热业务（发电运营·供热）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "供热",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600150": {
   "business_summary": "造船业务（军、民）、修船业务、海洋工程及机电设备等。",
@@ -58841,9 +58911,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "中闽能源：新能源发电项目的投资、开发、建设、运营（发电运营）"
+   "电力运营": "中闽能源：新能源发电项目的投资、开发、建设、运营（发电运营·风光）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600165": {
   "business_summary": "",
@@ -59918,9 +59990,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "桂冠电力：发电业务（发电运营）"
+   "电力运营": "桂冠电力：发电业务（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600237": {
   "business_summary": "薄膜电容器及其薄膜材料的研发、生产和销售。",
@@ -60661,9 +60735,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "广西能源：发电业务（发电运营）"
+   "电力运营": "广西能源：发电业务（发电运营·综合能源）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "综合能源",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600312": {
   "business_summary": "中压、高压、超高压、特高压交直流开关设备研发制造、销售安装、检修服务。",
@@ -61941,13 +62017,15 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "华电辽能：电力的生产与销售、热力的生产与销售（发电运营）"
+   "电力运营": "华电辽能：电力的生产与销售、热力的生产与销售（发电运营·火电）"
   },
   "jiuyan_category1": "电力",
   "jiuyan_concept1": "电力运营",
   "jiuyan_category2": "央企",
   "jiuyan_concept2": "",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600397": {
   "business_summary": "主营其他",
@@ -62591,13 +62669,15 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "涪陵电力：电网运营业务（供电/电网运营）"
+   "电力运营": "涪陵电力：电网运营业务（发电运营·电网供电）"
   },
   "jiuyan_category1": "电力",
   "jiuyan_concept1": "电力运营",
   "jiuyan_category2": "央企",
   "jiuyan_concept2": "",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "电网供电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600455": {
   "business_summary": "主营教育",
@@ -63096,9 +63176,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "福能股份：电力、热力生产和销售（发电运营）"
+   "电力运营": "福能股份：电力、热力生产和销售（发电运营·综合能源）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "综合能源",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600486": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -63546,9 +63628,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "西昌电力：发供电业务（发电运营）"
+   "电力运营": "西昌电力：发供电业务（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600506": {
   "business_summary": "主营石油、煤炭及其他燃料加工业",
@@ -64598,9 +64682,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "京能电力：电力和热力（发电运营）"
+   "电力运营": "京能电力：电力和热力（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600579": {
   "business_summary": "主营专用设备制造业",
@@ -65895,9 +65981,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "乐山电力：电力业务（供热供能）"
+   "电力运营": "乐山电力：电力业务（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600645": {
   "business_summary": "主营医药制造业",
@@ -66954,9 +67042,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "大连热电：热电联产、集中供热（供热供能）"
+   "电力运营": "大连热电：热电联产、集中供热（发电运营·热电联产）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600720": {
   "business_summary": "主营专业技术服务业",
@@ -67304,9 +67394,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "华银电力：火力发电业务、水电业务、风电业务、太阳能业务、…（发电运营）"
+   "电力运营": "华银电力：火力发电业务、水电业务、风电业务、太阳能业务、…（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600746": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -68056,9 +68148,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "国电电力：火电（发电运营）"
+   "电力运营": "国电电力：火电（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600796": {
   "business_summary": "主营其他",
@@ -68930,9 +69024,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "华能蒙电：火力发电、供热、风力发电、新能源发电和供应（发电运营）"
+   "电力运营": "华能蒙电：火力发电、供热、风力发电、新能源发电和供应（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600864": {
   "business_summary": "主营其他",
@@ -69421,9 +69517,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "国投电力：水电、火电、风电、光伏、储能（发电运营）"
+   "电力运营": "国投电力：水电、火电、风电、光伏、储能（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600887": {
   "business_summary": "各类乳品及健康饮品的生产与销售。",
@@ -69663,9 +69761,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "长江电力：大型水电运营（发电运营）"
+   "电力运营": "长江电力：大型水电运营（发电运营·水电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "水电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600901": {
   "business_summary": "主营货币金融服务",
@@ -69709,13 +69809,15 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "三峡能源：风能、太阳能的开发、投资和运营（电力运营）"
+   "电力运营": "三峡能源：风能、太阳能的开发、投资和运营（发电运营·风光）"
   },
   "jiuyan_category1": "央企",
   "jiuyan_concept1": "",
   "jiuyan_category2": "电力",
   "jiuyan_concept2": "电力运营",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600906": {
   "business_summary": "主营期货概念",
@@ -70265,14 +70367,16 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "郴电国际：供电业务、供水业务（供热供能）",
+   "电力运营": "郴电国际：供电业务、供水业务（发电运营·电网供电）",
    "锡": "郴电国际：供电+供水"
   },
   "jiuyan_category1": "有色金属",
   "jiuyan_concept1": "锡",
   "jiuyan_category2": "电力",
   "jiuyan_concept2": "电力运营",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "电网供电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600970": {
   "business_summary": "主营土木工程建筑业",
@@ -70376,9 +70480,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "广安爱众：水电气相关业务（发电运营）"
+   "电力运营": "广安爱众：水电气相关业务（发电运营·综合能源）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "综合能源",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600980": {
   "business_summary": "主营专用设备制造业",
@@ -70418,9 +70524,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "宁波能源：热电联产、生物质发电、抽水蓄能、综合能源服务、…（发电运营）"
+   "电力运营": "宁波能源：热电联产、生物质发电、抽水蓄能、综合能源服务、…（发电运营·热电联产）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "600983": {
   "business_summary": "主营电气机械和器材制造业",
@@ -74491,10 +74599,12 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "中国核电：核电等业务（发电运营）",
+   "电力运营": "中国核电：核电等业务（发电运营·核电）",
    "中核集团控股": "中国核电：核电运营"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "核电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "601988": {
   "business_summary": "主营货币金融服务",
@@ -74548,9 +74658,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "大唐发电：发电等业务（发电运营）"
+   "电力运营": "大唐发电：发电等业务（发电运营·火电）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "火电",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "601992": {
   "business_summary": "主营其他",
@@ -76527,13 +76639,15 @@
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
    "智能电网": "芯能科技：分布式光伏电站运营，虚拟电厂属性弱",
-   "电力运营": "芯能科技：分布式光伏电站投资运营业务（供热供能）"
+   "电力运营": "芯能科技：分布式光伏电站投资运营业务（发电运营·光伏）"
   },
   "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网",
   "jiuyan_category1": "电力",
   "jiuyan_concept1": "电力运营",
   "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 电力/电力运营（按公司简介核实）",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "光伏",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "603106": {
   "business_summary": "主营计算机设备",
@@ -83560,9 +83674,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "江苏新能：风能发电、光伏发电、新型储能（发电运营）"
+   "电力运营": "江苏新能：风能发电、光伏发电、新型储能（发电运营·风光）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "风光",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "603696": {
   "business_summary": "主营食品制造业",
@@ -86717,9 +86833,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "杭州热电：供热、发电、分布式光伏发电、煤炭批发（发电运营）"
+   "电力运营": "杭州热电：供热、发电、分布式光伏发电、煤炭批发（发电运营·热电联产）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "605016": {
   "business_summary": "主营代糖概念",
@@ -86781,9 +86899,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "世茂能源：热电联产（供热供能）"
+   "电力运营": "世茂能源：热电联产（发电运营·热电联产）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "605033": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -87455,12 +87575,14 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "电力运营": "新中港：蒸汽产品（供热供能）"
+   "电力运营": "新中港：蒸汽产品（发电运营·热电联产）"
   },
   "jiuyan_category1": "电力",
   "jiuyan_concept1": "电力运营",
   "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂|电力运营 → 电力运营",
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "605166": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -88567,9 +88689,11 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "电力运营": "恒盛能源：热电联产业务、固废资源综合利用业务、CVD金刚…（供热供能）"
+   "电力运营": "恒盛能源：热电联产业务、固废资源综合利用业务、CVD金刚…（发电运营·热电联产）"
   },
-  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08"
+  "jiuyan_power_reason_20261108": "2026-11-08 20:01:08",
+  "jiuyan_power_type": "热电联产",
+  "jiuyan_power_type_20261108": "2026-11-08 20:45:36"
  },
  "605588": {
   "business_summary": "主营其他",
