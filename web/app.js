@@ -2399,7 +2399,13 @@ function renderSectorStars(d) {
       _inst.off("click");
       _inst.on("click", p => {
         const nm = (p && (p.seriesName || (p.series && p.series.name))) || "";
-        if (nm) selectStarBoard(nm);
+        if (!nm) return;
+        // 2026-11-08 owner：「点击具体板块时，贡献度显示在弹出来的框中」
+        const _ev = (p && p.event && (p.event.event || p.event)) || null;
+        const _x = (_ev && _ev.clientX) || (p && p.event && p.event.zrX) || 120;
+        const _y = (_ev && _ev.clientY) || (p && p.event && p.event.zrY) || 120;
+        selectStarBoard(nm);
+        showStarContribPop(nm, _x, _y);
       });
     }
   } catch (e) { /* 绑定失败不影响图 */ }
@@ -2444,6 +2450,7 @@ async function loadSectorContrib(name) {
     if (_starSelBoard === name) {
       renderSectorContrib(d);
       if (_starLast) echGuard("板块星轨图", () => renderSectorStars(_starLast));   // 右侧标签展开
+      if (_starPopEl && _starPopEl.style.display !== "none") _fillStarPop(name, d);  // 弹出框填充
     }
   } catch (e) {
     el.innerHTML = `<span class="down" style="font-size:11px">取数失败：${esc(e.message || e)}</span>`;
@@ -2452,25 +2459,88 @@ async function loadSectorContrib(name) {
   }
 }
 
-function renderSectorContrib(d) {
-  const el = document.getElementById("sectorContrib");
-  if (!el) return;
+/* 2026-11-08 owner：「点击具体板块时，贡献度显示在弹出来的框中」 ⇒ 点击图上的板块
+   在鼠标旁弹出浮层（不依赖图下方面板是否可见）。内容 = _contribHtml(d)。
+   关闭：× / Esc / 点空白处。 */
+let _starPopEl = null, _starPopXY = { x: 0, y: 0 };
+
+function _ensureStarPop() {
+  if (_starPopEl) return _starPopEl;
+  const el = document.createElement("div");
+  el.id = "starContribPop";
+  el.style.cssText = "position:fixed;z-index:9600;display:none;min-width:320px;max-width:470px;"
+    + "background:#fff;border:1px solid #d3d9e3;border-radius:8px;"
+    + "box-shadow:0 10px 28px rgba(40,60,90,.20);padding:10px 12px;font-size:12px;color:#1f2937;";
+  el.addEventListener("mousedown", e => e.stopPropagation());
+  document.body.appendChild(el);
+  _starPopEl = el;
+  document.addEventListener("mousedown", e => {
+    if (el.style.display === "none") return;
+    if (!el.contains(e.target)) hideStarContribPop();
+  }, true);
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") hideStarContribPop();
+  });
+  return el;
+}
+
+function hideStarContribPop() {
+  if (_starPopEl) _starPopEl.style.display = "none";
+}
+
+function _placeStarPop(x, y) {
+  const el = _ensureStarPop();
+  _starPopXY = { x: x || 0, y: y || 0 };
+  el.style.display = "block";
+  el.style.left = "0px";
+  el.style.top = "0px";
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const left = Math.max(8, Math.min((x || 0) + 14, window.innerWidth - w - 8));
+  const top = Math.max(8, Math.min((y || 0) + 14, window.innerHeight - h - 8));
+  el.style.left = left + "px";
+  el.style.top = top + "px";
+}
+
+function _starPopHead(name) {
+  return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">`
+    + `<b>${esc(name)}</b><span class="cell-dim" style="font-size:11px">二级细分贡献</span>`
+    + `<span style="margin-left:auto;cursor:pointer;color:#6b7280;font-size:14px;line-height:1"`
+    + ` onclick="hideStarContribPop()" title="关闭">×</span></div>`;
+}
+
+function _fillStarPop(name, d) {
+  const el = _ensureStarPop();
+  el.innerHTML = _starPopHead(name) + _contribHtml(d);
+  _placeStarPop(_starPopXY.x, _starPopXY.y);      // 内容尺寸变了，重新夹位置
+}
+
+function showStarContribPop(name, x, y) {
+  if (!name) return;
+  const el = _ensureStarPop();
+  el.innerHTML = _starPopHead(name) + `<div class="cell-dim" style="font-size:11px">加载中…</div>`;
+  _placeStarPop(x, y);
+  const _key = `${name}|${String(_panelDate())}`;
+  if (_starContribCache.key === _key && _starContribCache.data) {
+    _fillStarPop(name, _starContribCache.data);
+  }
+}
+
+/* 贡献度正文（面板与浮层共用） */
+function _contribHtml(d) {
   if (!d || !d.available) {
-    el.innerHTML = d && d.board
+    return d && d.board
       ? `<div class="cell-dim" style="font-size:11px">${esc(d.board)}：${esc(d.error || "无拆解数据")}</div>`
-      : "";
-    return;
+      : `<div class="cell-dim" style="font-size:11px">无拆解数据</div>`;
   }
   const days = d.days || [];
-  if (!days.length) { el.innerHTML = ""; return; }
+  if (!days.length) return `<div class="cell-dim" style="font-size:11px">没有记录</div>`;
   const last = days[days.length - 1];
   const prev = days.length >= 2 ? days[days.length - 2] : null;
   const prevMap = new Map(((prev && prev.subs) || []).map(x => [x["细分"], x]));
   if (!(last.subs || []).length) {
-    el.innerHTML = `<div class="cell-dim" style="font-size:11px">`
+    return `<div class="cell-dim" style="font-size:11px">`
       + `<b>${esc(d.board)}</b> · ${esc(last.date)} 排名 <b>#${last.rank}</b>：`
-      + `这一天还没有细分明细（2026-11-08 起才会写入，历史日需跑回填脚本）</div>`;
-    return;
+      + `这一天还没有细分明细（2026-11-08 起才会写入，更早的日期需跑回填脚本）</div>`;
   }
   const rows = (last.subs || []).map(x => {
     const p = prevMap.get(x["细分"]);
@@ -2494,15 +2564,27 @@ function renderSectorContrib(d) {
       + `<td class="num">${r.score.toFixed(1)}</td><td class="num">${r.lu}</td>`
       + `<td class="num">${dTxt}</td></tr>`;
   }).join("");
-  el.innerHTML = `<div style="font-size:12px;margin-bottom:4px">`
+  return `<div style="font-size:12px;margin-bottom:4px">`
     + `<b>${esc(d.board)}</b> · ${esc(last.date)} 排名 <b>#${last.rank}</b> ${_rankTxt}`
     + `<span class="cell-dim" style="font-size:11px"> · 平均分 ${last.score.toFixed(2)} · 涨停 ${last.lu} · 股票 ${last.n}`
     + `${prev ? ` · Δ对比 ${esc(prev.date)}` : " · 无前一日可比"}</span></div>`
-    + `<div style="max-height:240px;overflow:auto"><table><thead><tr>`
+    + `<div style="max-height:260px;overflow:auto"><table><thead><tr>`
     + `<th>二级细分</th><th class="num">股票数</th><th class="num">得分和</th>`
     + `<th class="num">涨停</th><th class="num">Δ得分</th></tr></thead><tbody>${body}</tbody></table></div>`
     + `<div class="cell-dim" style="font-size:10px;margin-top:4px">`
     + `按「较前一日得分变化」排序；一只票可同属多个细分 ⇒ 各细分之和 ≥ 板块股票数</div>`;
+}
+
+function renderSectorContrib(d) {
+  const el = document.getElementById("sectorContrib");
+  if (!el) return;
+  if (!d || !d.available) {
+    el.innerHTML = d && d.board
+      ? `<div class="cell-dim" style="font-size:11px">${esc(d.board)}：${esc(d.error || "无拆解数据")}</div>`
+      : "";
+    return;
+  }
+  el.innerHTML = _contribHtml(d);
 }
 
 /* ---- 板块「站上5日线 / 20日线」成分股占比（2026-10-20 owner：星空图下方多坐标轴）----

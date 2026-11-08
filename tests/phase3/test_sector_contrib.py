@@ -114,3 +114,14 @@ def test_右侧标签显示贡献度() -> None:
     assert 'grid: { left: 56, right: _starSelBoard ? 260 : 150, top: 34, bottom: 30 }' in _JS
     assert "right: _starSelBoard ? 260 : 150" in _JS
     assert "renderSectorStars(_starLast));   // 右侧标签展开" in _JS
+
+
+def test_点击板块弹出浮层() -> None:
+    """owner 2026-11-08：「点击具体板块时，贡献度显示在弹出来的框中」。"""
+    assert "function _ensureStarPop()" in _JS
+    assert "function showStarContribPop(name, x, y)" in _JS
+    assert "function _fillStarPop(name, d)" in _JS
+    assert 'showStarContribPop(nm, _x, _y);' in _JS
+    assert 'id="starContribPop"' in _JS or 'el.id = "starContribPop"' in _JS
+    assert "_fillStarPop(name, d);  // 弹出框填充" in _JS
+    assert 'onclick="hideStarContribPop()"' in _JS, "浮层要有关闭按钮"
