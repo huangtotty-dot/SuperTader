@@ -56,7 +56,11 @@ def _loader(merge=None):
 
 class TestCategoryMerge(unittest.TestCase):
     def test_default_mapping_is_medicine(self):
-        self.assertEqual(DEFAULT_CATEGORY_MERGE, {"创新药": "医药", "中药": "医药"})
+        # 2026-11-08：默认映射已扩到 6 条（含 锂电池/算力金属 兼容别名 + 煤化工→化工）。
+        # 原来这里写死 2 条字典，从加别名那天起就一直是红的。
+        for k, v in (("创新药", "医药"), ("中药", "医药"), ("煤化工", "化工"),
+                     ("锂电池", "电池"), ("算力金属", "有色金属")):
+            self.assertEqual(DEFAULT_CATEGORY_MERGE.get(k), v, f"{k} 应并入 {v}")
 
     def test_merged_rows_carry_parent_and_original(self):
         df = _loader()
@@ -80,6 +84,23 @@ class TestCategoryMerge(unittest.TestCase):
         self.assertIn("中医药", cats)
         self.assertIn("生物医药", cats)
         self.assertNotIn("医药", cats, "自定义映射应覆盖默认（否则说明默认被无条件叠加）")
+
+    def test_coalchem_merges_into_chem(self):
+        """owner 2026-11-08：「煤化工合入到化工板块」——原分类=煤化工 作子概念。"""
+        sample = {"600001": {"name": "煤化A", "jiuyan_category": "煤化工",
+                             "jiuyan_concept": "煤化工", "sector": "化工行业"},
+                  "600002": {"name": "化工B", "jiuyan_category": "化工",
+                             "jiuyan_concept": "基础化工", "sector": "化工行业"}}
+        with tempfile.TemporaryDirectory() as td:
+            fp = os.path.join(td, "watchlist_jiuyan.json")
+            with open(fp, "w", encoding="utf-8") as f:
+                json.dump(sample, f, ensure_ascii=False)
+            df = WatchlistLoader().load(fp)
+        by_code = {r["代码"]: r for _, r in df.iterrows()}
+        assert by_code["600001"]["韭研分类"] == "化工"
+        assert by_code["600001"]["原分类"] == "煤化工"
+        assert by_code["600002"]["韭研分类"] == "化工"
+        assert "煤化工" not in set(df["韭研分类"])
 
     def test_data_loader_subconcept_is_original_category(self):
         """端到端：DataLoader 的板块明细里，医药的子概念应为 创新药/中药 两个。"""
