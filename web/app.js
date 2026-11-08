@@ -637,7 +637,7 @@ function _refreshQuotesAndSidebar(pre) {
 //    按日聚类 t、分半窗符号翻转；涨幅头名 vs 杂毛 H=5 仅 −0.021pp t=−0.40，成交额头名反而
 //    −0.302pp t=−5.7）。本面板只回答「今天钱在哪个板块、谁在场」，**不是买卖依据**。
 //
-// 列沿用「建仓信号扫描」那套（判定/得分/通过/日线阶段/20日线观察/价涨幅/技术标签/时机条件/
+// 列沿用「建仓信号扫描」那套的子集（判定/通过/日线阶段/价涨幅/技术标签/
 // 30min判定/仓位结构/30m MA5），另加「梯队」。**刻意不含「池」「扫描」「依据」三列**：（「依据」2026-10-30 按 owner 要求移除）
 // 本面板不是扫描产物 —— 没有池归属、也没有 scan_time（后端返回里就没有这两个字段）。
 // date：缓存归属日期。风向标必须跟着**全局选中日**走（与选股猎手同一天），
@@ -2126,7 +2126,6 @@ let _hunterPanelDateGlobal = null;  // 设置时的全局日期快照
 function _clearHunterDayCaches() {
   try {
     Object.keys(hunterTagsCache).forEach(k => delete hunterTagsCache[k]);
-    Object.keys(hunterStructCache).forEach(k => delete hunterStructCache[k]);
   } catch (e) { /* 模块初始化前调用：跳过 */ }
 }
 function _setHunterPanelDate(d) {
@@ -3762,16 +3761,6 @@ const MA20_OBS_TIP = "是否站上 20 日线。**观察列，不驱动任何判�
    `otherV` 只是**另一条**均线的状态，降级进 tooltip、不占列。
    ⚠️ 得分里那个 −70 悬崖走的是 **5 日线**；本列看哪条线由调用方传 `n` 决定，别在 tooltip 里
    把两条线说成同源（那正是误导）。 */
-function maStateCellHtml(v, n, otherV, otherN, missingTip, belowColor, belowText) {
-  const _bc = belowColor || "#f85149";
-  const _bt = belowText || "破位";
-  const _o = (otherV === true) ? "站上" : (otherV === false) ? "破位" : "—";
-  const _tip = `现价 vs ${n} 日简单均线。${otherN} 日线：${_o}。观察列，不参与其它判定。`;
-  if (v === true) return `<td style="text-align:center" title="${esc("站上 " + n + " 日线。" + _tip)}"><b style="color:#3fb950">站上</b></td>`;
-  if (v === false) return `<td style="text-align:center" title="${esc("未站上 " + n + " 日线。" + _tip)}"><b style="color:${_bc}">${_bt}</b></td>`;
-  return `<td style="text-align:center" title="${esc(missingTip || "无该特征（旧数据/未扫描）")}"><span class="cell-dim">—</span></td>`;
-}
-
 function ma20FlagCellHtml(v, missingTip, detail) {
   const _d = detail ? "　" + detail + "。" : "";
   if (v === true) return `<td style="text-align:center" title="${esc("站上 20 日线。" + _d + MA20_OBS_TIP)}"><span class="cell-dim">站上</span></td>`;
@@ -9189,37 +9178,6 @@ function buildBadge(s) {
   }
   return `<span class="badge" title="建仓符合度: ${esc(s.build_reason || "")}" style="background:#5a5a6a;color:#ccc">${metTxt}</span>`;
 }
-/* 猎手「均线突破（当日·时刻）」：**只对展开板块当前渲染出来的个股**现算。
-   猎手池 2000+ 只，全量算要 5 分钟；表格每页 50 只 ⇒ 把页面上真实存在的 `td.h-mr` 收集起来
-   一次问后端（后端只读缓存 + 踢预热队列）。有 pending 的 4 秒后补一次。 */
-const _hunterMrRetry = {};
-async function loadHunterMaReclaim(category) {
-  const tds = [];
-  document.querySelectorAll("tbody.h-sector-group").forEach(tb => {
-    if (tb.getAttribute("data-category") !== category) return;
-    tb.querySelectorAll("td.h-mr[data-mrcode]").forEach(td => tds.push(td));
-  });
-  if (!tds.length) return;
-  const codes = Array.from(new Set(tds.map(td => td.getAttribute("data-mrcode"))));
-  try {
-    const r = await apiCall("load_ma_reclaim", codes);
-    const items = (r && r.items) || {};
-    let pend = 0;
-    tds.forEach(td => {
-      const v = items[td.getAttribute("data-mrcode")];
-      if (!v) return;
-      td.innerHTML = maReclaimInnerHtml(v);
-      if (v.pending) pend++;
-    });
-    if (pend && !_hunterMrRetry[category]) {
-      _hunterMrRetry[category] = setTimeout(() => {
-        _hunterMrRetry[category] = null;
-        loadHunterMaReclaim(category);
-      }, 4000);
-    }
-  } catch (e) { /* 静默：非关键列 */ }
-}
-
 // 板块分页翻页
 // 2026-10-24：二级分组的「说明 · 个股理由」折叠面板（owner：悬停不好用，要能点开看全部）
 function hunterToggleNote(id, btn) {
@@ -9244,8 +9202,6 @@ const hunterOpenSectors = new Set();
 const hunterTagsCache = {};
 
 const hunterTagsRetry = {};      // 空结果重试计数（防死循环）
-const hunterStructRetry = {};    // 30m MA5（仓位结构）的重试计数（2026-10-17）
-const hunterStructCache = {};    // category -> {code: structure}（30m MA5 列，与标签分开存）
 /* 猎手展开行的**实时**行情缓存（2026-10-12）。
    ⚠️ 为什么必须有它：猎手 payload 里的 `change_pct` / `build_price` 是**扫描时**快照
    （实测 300821 显示 10-09 收盘的 +20.01%，当天实时只有 +5.83%）⇒ 直接把 payload 的值
@@ -9282,9 +9238,7 @@ async function loadSectorTags(category) {
   if (!want.length) return {};
   const have = hunterTagsCache[category] || {};
   const codes = want.filter(c => !(c in have));
-  const _sc = hunterStructCache[category] || {};
-  const _structMissing = want.some(c => !(_sc[c] && !_sc[c].pending));   // 30m MA5 还没齐
-  if (!codes.length && !_structMissing) return have;
+  if (!codes.length) return have;
   const _ask = codes.length ? codes : want;
   try {
     // offline=true（2026-10-11）：猎手是**批量视图**，标签走"本地日线缓存"零网络路径
@@ -9293,12 +9247,6 @@ async function loadSectorTags(category) {
     // 2026-10-23：带上全局选中日 ⇒ 猎手看历史日时标签按**那一天**的日线算（原来永远是今天的）
     const r = await apiCall("load_stock_tags_batch", _ask, true, _panelDate());
     const tagsMap = (r && r.tags) || {};
-    // 30m MA5（2026-10-17）：仓位结构层，与持仓30min体检/风向标**同源**。
-    // 走**独立缓存** —— 标签是异步批算（冷启动先空），结构是另一步，两者到达时间不同步。
-    const structMap = (r && r.struct) || {};
-    if (Object.keys(structMap).length) {
-      hunterStructCache[category] = Object.assign(hunterStructCache[category] || {}, structMap);
-    }
     // 2026-10-08: 后端**冷启动会先回空 map**（改后台算后），空 map 若被缓存 ⇒ 该板块标签永远空。
     // 故**只缓存非空**；空则稍后重试，等后台算完再填。
     if (Object.keys(tagsMap).length) {
@@ -9319,27 +9267,6 @@ async function loadSectorTags(category) {
         }, 3000);
       }
     }
-    // 30m MA5（仓位结构）比标签慢：只要还有 pending 就 5s 后重试，有界 12 次
-    try {
-      const _pend = Object.values(structMap).some(v => (v || {}).pending);
-      const _rn = hunterStructRetry[category] || 0;
-      if (_pend && _rn < 12) {
-        hunterStructRetry[category] = _rn + 1;
-        setTimeout(() => {
-          if (!hunterOpenSectors.has(category)) return;
-          apiCall("load_stock_tags_batch", _renderedCodesFor(category), true, _panelDate()).then(r2 => {
-            const sm2 = (r2 && r2.struct) || {};
-            if (!Object.keys(sm2).length) return;
-            hunterStructCache[category] = Object.assign(hunterStructCache[category] || {}, sm2);
-            const el2 = document.getElementById("hunterBody");
-            if (el2) el2.querySelectorAll("tbody.h-sector-group").forEach(tb => {
-              if (tb.getAttribute("data-category") === category) applySectorTags(tb, category);
-            });
-            if (Object.values(sm2).some(v => (v || {}).pending)) loadSectorTags(category);
-          }).catch(() => {});
-        }, 5000);
-      }
-    } catch (e) { /* 忽略 */ }
     // 标签到位后，若该板块仍展开则刷新当前可见行（分页跳页后也生效）
     const el = document.getElementById("hunterBody");
     if (el && hunterOpenSectors.has(category)) {
@@ -9520,12 +9447,6 @@ function applySectorTags(tbody, category) {
         _u30Td.title = up30Tip(info.up30, info.up30_prev);
       }
     }
-    // 2026-10-17：30m MA5 走的是**仓位结构**缓存（比标签慢一拍）⇒ 这里同款回填
-    const _st = (hunterStructCache[category] || {})[code];
-    if (_st) {
-      const _ma5Td = row.querySelector("td.h-ma5");
-      if (_ma5Td) _ma5Td.outerHTML = ma5CellHtml(_st, "h-ma5");
-    }
   });
   // 板块阶段判定（用 trend）
   // 2026-10-24：若后端已下发韭研广度阶段（data-breadth=1），**不要**用个股趋势覆盖它——
@@ -9562,7 +9483,6 @@ async function toggleSectorExpand(head, category) {
   // 实时价/涨幅：**先发**，与标签**并行**跑（2026-10-12）。⚠️ 上一版误把它放在 `await` 之后 ⇒
   // 白等标签 4~7 秒才发请求，等于没优化。必须在这行 await **之前**。
   loadHunterQuotes();
-  loadHunterMaReclaim(category);        // 与标签并行：只算本板块当前页渲染出来的那些码
   await loadSectorTags(category);
   if (tbody) applySectorTags(tbody, category);
 }
@@ -10458,10 +10378,6 @@ function renderHunter(h) {
       const _v = s.build_verdict;
       const verdictTxt = _v ? verdictBadge(_v) : (_pend ? UPDATING_HTML : '<span class="cell-dim">—</span>');
       const _sc = (s.build_score != null) ? s.build_score : null;
-      const _ceil = (s.build_ceiling != null) ? s.build_ceiling : 100;
-      const _reach = (s.build_reachable != null) ? s.build_reachable : true;
-      const scoreTxt = _sc == null ? (_pend ? UPDATING_HTML : '<span class="cell-dim">—</span>')
-        : (_reach ? `<b>${_sc}</b>` : `<b>${_sc}</b><span class="cell-dim" style="font-size:10px">/${_ceil}🔒</span>`);
       const _metTxt = (s.build_met != null) ? `${s.build_met}/3` : (_pend ? UPDATING_HTML : "—");
       const tagsTxt = s.tags && s.tags.length
         ? s.tags.map(t => tagBadge(t)).join(" ")
@@ -10498,7 +10414,6 @@ function renderHunter(h) {
         <td class="num h-mktcap" data-hcode="${esc(s.code)}" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。随行情 10s 刷新">${hunterMktcapHtml(null)}</td>
         <td style="text-align:center;white-space:nowrap">${tierBadge(s.tier, s.tier_static, s.tier_reason)}</td>
         <td>${verdictTxt}</td>
-        <td class="num">${scoreTxt}</td>
         ${(() => {
           // D1~D11 打分明细（2026-10-17）。后端只下发**非零**维度 ⇒ 大多数票是空的。
           const dims = s.dims || {};
@@ -10513,14 +10428,9 @@ function renderHunter(h) {
         })()}
         <td class="num">${_metTxt}</td>
         <td style="text-align:center" title="${esc("日线阶段。" + _stageSlope + " " + DAY_STAGE_TIP)}">${_stageTxt}</td>
-        ${maStateCellHtml(s.build_above_ma20, 20, s.build_above_ma5, 5, undefined, "#d29922", "未站上")}
-        ${ma5CellHtml((hunterStructCache[category] || {})[s.code], "h-ma5")}
-        <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
+                        <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
-        <td class="h-mr" data-mrcode="${esc(s.code)}" style="text-align:center;white-space:nowrap"
-            title="当日刚站上 5/10/20/30/60 日线的时刻（展开板块后按可见个股现算）">${maReclaimInnerHtml(s.ma_reclaim, "展开板块后自动加载")}</td>
-        ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
-        <td class="num h-up30" style="text-align:center"
+                <td class="num h-up30" style="text-align:center"
             title="${esc(up30Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30, (hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30_prev, s.build_reason || ""))}">${up30InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30, (hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30_prev)}</td>
         <td class="num h-bias5" style="text-align:center"
             title="${esc(bias5Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].bias5, s.build_reason || ""))}">${bias5InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].bias5)}</td>
@@ -10598,13 +10508,13 @@ function renderHunter(h) {
       const _withWhy = _members.filter(m => m[1]).length;
       const _noteId = ("hnote-" + category + "-" + gk).replace(/[^\w一-龥-]/g, "_");
       const _gTip = [_gDesc ? `${gk}：${_gDesc}` : ""].filter(Boolean).join("");
-      const head = `<tr class="h-subgroup-head"><td colspan="18">
+      const head = `<tr class="h-subgroup-head"><td colspan="13">
         <span class="h-subgroup-name"${_gTip ? ` title="${esc(_gTip)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
         ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(_gTip)}">${esc(_gDesc)}</span>` : ""}
         <button class="mini-btn h-note-btn" onclick="hunterToggleNote('${_noteId}', this)">▸ 说明 · 个股理由</button>
       </td></tr>
-      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="18">
+      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="13">
         <div class="h-note-desc">${esc(_gDesc || "（该细分概念暂无解释）")}</div>
         <div class="h-note-hint cell-dim">本组 ${gs.length} 只，其中 ${_withWhy} 只有入选理由；再点一次按钮收起</div>
         <ul class="h-note-list">${_members.slice(0, 80).map(([n, r, v]) =>
@@ -10718,24 +10628,19 @@ function renderHunter(h) {
           </div>
           ${(hunterTagsCache[category] || _buildReady) ? "" :
             `<div class="h-updating-strip cell-dim" style="font-size:11px;padding:4px 8px;background:rgba(210,153,34,.10);border-left:3px solid #d29922">
-               ⏳ 正在更新：${(!_buildReady) ? "建仓符合度（判定/得分/通过/日线阶段）" : ""}${(!_buildReady && !hunterTagsCache[category]) ? " 与 " : ""}${hunterTagsCache[category] ? "" : "技术标签"} —— 后台算完自动填上，无需操作
+               ⏳ 正在更新：${(!_buildReady) ? "建仓符合度（判定/通过/日线阶段）" : ""}${(!_buildReady && !hunterTagsCache[category]) ? " 与 " : ""}${hunterTagsCache[category] ? "" : "技术标签"} —— 后台算完自动填上，无需操作
              </div>`}
           <table><thead><tr>
             <th>代码</th><th>名称</th>
             <th class="num" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。与「价」同一轮 10s 刷新；取不到显示 ⏳。⚠️ 历史 market_{date}.csv 里没有换手率可反推，只能走实时快照">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
             <th title="板块内梯队（**描述性方位标签，非信号**）：龙头=本板块当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余；板块<8只不标。⚠️ 实测该分层无前瞻区分度（四种定义×四个持有期≈全无差异、分半窗符号翻转、效应量远低于交易成本）⇒ 只看方位，不参与任何判定与排序。依据 doc/research/2026-10-11_板块内龙头中军杂毛_分层实验.md">梯队</th>
             <th title="与建仓信号扫描同口径（go→signal / approaching / watch_signal / weak）">判定</th>
-            <th class="num" title="综合得分（与建仓表同口径；破5日线扣70且不给signal）">得分</th>
-            <th class="num" title="韭研 D1~D12 打分合计（选股猎手的原始评分，满分 47；D3/D10 未在 config 启用）。⚠️ 与左边「得分」不是一回事：那个是建仓综合得分 0~100。下方小字＝命中的维度与分数。&#10;D1 强势形态且新高 8 · D2 强势形态 6 · D4 首板资金池 3 · D5 潜在突破10日 2 · D6 潜在突破5日 1 · D7 持续性(二板+) 5 · D8 情绪分数(一字板) 6 · D9 活跃程度(近10日有涨停) 3 · D11 刚站上5日线 2 · D12 趋势性(站上20日线) 8 · 大额(成交额≥50亿) 3">D分<br><span style="font-size:9px;opacity:.6">D1~D12</span></th>
+                        <th class="num" title="韭研 D1~D12 打分合计（选股猎手的原始评分，满分 47；D3/D10 未在 config 启用）。⚠️ 与左边「得分」不是一回事：那个是建仓综合得分 0~100。下方小字＝命中的维度与分数。&#10;D1 强势形态且新高 8 · D2 强势形态 6 · D4 首板资金池 3 · D5 潜在突破10日 2 · D6 潜在突破5日 1 · D7 持续性(二板+) 5 · D8 情绪分数(一字板) 6 · D9 活跃程度(近10日有涨停) 3 · D11 刚站上5日线 2 · D12 趋势性(站上20日线) 8 · 大额(成交额≥50亿) 3">D分<br><span style="font-size:9px;opacity:.6">D1~D12</span></th>
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
             <th title="日线三态（描述状态，紧挨得分/通过便于对照）：多头=MA60 近20个交易日上涨>3%；空头=MA60 近20日下跌>3%；震荡=其余（60日线走平）。⚠️ 实测(977只×2017-2026/156万股票·日)：分布 多头31%/震荡39%/空头30%；未来20日超额 多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)，H=5/10/20 排序一致。仅作状态描述，不是买卖信号。⚠️ 得分里的阶段项**仍是旧四阶段口径**（三态映射会让得分 IC 变负）">日线阶段</th>
-            <th title="现价 vs 20 日简单均线（观察列，不驱动判定）。选股猎手口径：**站上=绿、其它=黄**（建仓信号扫描用绿/红）；5 日线状态放在单元格 tooltip。⚠️「得分」里那个 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列不是同一条线；行底色也仍按 5 日线">20日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
-            <th title="30 分钟 K 线的 5 根均线（现价站上/跌破 + 距上次翻转多少根）。**与「持仓 30 分钟风险体检」同源**（position_structure，同一缓存）。⚠️ 实测无前瞻信息量 ⇒ 只展示，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
-            <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
+                                    <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
-            <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「持仓 30 分钟风险体检」「异常监控池」同源同渲染）。猎手池 2000+ 只，只对**展开板块当前页**的股票现算">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
-            <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
-            ${UP30_TH}
+                                    ${UP30_TH}
             <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
             <th title="(现价 − 365 日均线) / 365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。原来这列是「理由」，已挪到本格 tooltip">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
           </tr></thead>
@@ -10844,7 +10749,6 @@ function renderHunter(h) {
         }
         applySectorTags(tb, cat);
         loadSectorTags(cat);      // 翻页后补当前页缺的 code（已缓存的跳过）
-        loadHunterMaReclaim(cat); // 翻页/重渲染后补「均线突破时刻」（只算当前页渲染出来的码）
       }
     });
   }

@@ -20,12 +20,12 @@ _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 class TestBuildScanMa5Flag(unittest.TestCase):
     def test_renderer_exists_with_green_red(self):
-        # 2026-10-20：渲染器泛化成「哪条均线由调用方传 n」⇒ ma5FlagCellHtml → maStateCellHtml
-        self.assertIn("function maStateCellHtml(", _JS)
-        self.assertIn('color:#3fb950">站上', _JS)
-        # 建仓表默认红「破位」；猎手表通过参数改成黄「未站上」
-        self.assertIn('const _bc = belowColor || "#f85149";', _JS)
-        self.assertIn('const _bt = belowText || "破位";', _JS)
+        # 2026-11-08 owner：猎手表的 20 日线列（maStateCellHtml）已随整列删除，
+        # 建仓表仍用 ma20FlagCellHtml（站上=绿、破位=红）。
+        self.assertIn("function ma20FlagCellHtml(", _JS)
+        self.assertIn('>站上</span>', _JS)
+        self.assertIn('<b class="down">破位</b>', _JS)
+        self.assertNotIn("function maStateCellHtml(", _JS, "猎手专用渲染器应已删除")
 
     def test_build_scan_column_is_ma20_row_color_is_ma5(self):
         """列 = 20 日线观察；行底色 = 5 日线（两者刻意分开）。"""
@@ -44,28 +44,40 @@ class TestBuildScanMa5Flag(unittest.TestCase):
             _JS, "建仓表表头应为 20日线（行底色才是 5 日线口径）")
 
 
-class TestHunterMa5Flag(unittest.TestCase):
-    """选股猎手个股：站上=绿、其它=黄（`belowColor` 黄「未站上」）。
+class TestHunterRemovedColumns(unittest.TestCase):
+    """2026-11-08 owner：「选股猎手中我画出来的这些列…取消并且删除相关的代码」。
 
-    2026-10-20 owner：「选股猎手图中的该列换成 20 日均线」⇒
-      · **列**改为 20 日线状态（`build_above_ma20`），5 日线状态降级进 tooltip；
-      · **行底色**仍是 5 日线口径（与建仓表同一套：列看 20 日线、底色看 5 日线）。
+    从猎手个股表移除 5 列：**得分 / 20日线 / 30m MA5 / 均线突破 / 时机条件**
+    （其它表 —— 建仓扫描、风向标、监控池 —— 仍保留各自的同名列）。
+    行底色仍按 5 日线（与建仓表同一套），只是不再有 20 日线这一列。
     """
 
-    def test_hunter_row_uses_ma20_green_yellow(self):
-        self.assertIn(
-            '${maStateCellHtml(s.build_above_ma20, 20, s.build_above_ma5, 5, '
-            'undefined, "#d29922", "未站上")}', _JS)
-        # 2026-10-26 owner：「破5日线应该和建仓信号扫描一样显示红色」——行底色从
-        # 琥珀 rgba(210,153,34,.14) 改成与 pb 表 `_scoreBg` / 监控池 `rowBg` 同值的红。
-        # ⚠️ 上面那条 `"#d29922"` 是**20 日线列**的颜色（未站上 20 日线用琥珀提示），
-        # 与行底色是两回事，别一起改。
-        self.assertIn("background:rgba(248,81,73,.12);", _JS)
-        # 行底色仍按 5 日线
-        self.assertIn('const _ab5 = s.build_above_ma5;', _JS)
+    def _hunter_seg(self):
+        i = _JS.index("function renderHunter(h)")
+        nxt = _JS.index("\nfunction ", i + 10)
+        return _JS[i:nxt]
 
-    def test_hunter_header_is_20day(self):
-        self.assertIn('>20日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>', _JS)
+    def test_hunter_columns_removed(self):
+        seg = self._hunter_seg()
+        for bad in ('>得分</th>', '>20日线<br>', '>30m MA5<br>',
+                    '>均线突破<br>', '>时机条件</th>'):
+            self.assertNotIn(bad, seg, f"猎手表不应再有这一列：{bad}")
+        # 只查**调用**（注释里还提到这些名字，不能按字符串一刀切）
+        self.assertNotIn("${maStateCellHtml(", seg)
+        self.assertNotIn("${condCellHtml(", seg)
+        self.assertNotIn('class="h-mr"', seg)
+        self.assertNotIn("${maReclaimInnerHtml(", seg)
+
+    def test_hunter_row_bg_still_ma5(self):
+        seg = self._hunter_seg()
+        self.assertIn("const _ab5 = s.build_above_ma5;", seg)
+        self.assertIn("background:rgba(248,81,73,.12);", seg)
+
+    def test_其它表仍保留这些列(self):
+        # 建仓扫描 / 监控池 / 风向标 仍用共享渲染器
+        self.assertIn("function condCellHtml(", _JS)
+        self.assertIn("function maReclaimInnerHtml(", _JS)
+        self.assertIn("function ma5CellHtml(", _JS)
 
 
 if __name__ == "__main__":

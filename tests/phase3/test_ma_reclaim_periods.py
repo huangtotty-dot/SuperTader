@@ -428,18 +428,19 @@ class TestFrontendWiring(unittest.TestCase):
         for k in ("pending", "na", "badge t-long"):
             self.assertIn(k, seg)
 
-    def test_选股猎手也接了这一列(self):
-        """2026-10-23 owner：「选股猎手增加均线突破时间这一列」。
-        猎手池 2000+ 只 ⇒ 只对**展开板块当前页**的码现算（`load_ma_reclaim` 端点）。"""
+    def test_选股猎手的均线突破列已删除(self):
+        """2026-11-08 owner：「选股猎手中我画出来的这些列…取消并且删除相关的代码」。
+
+        猎手的「均线突破（当日·时刻）」列连同 `loadHunterMaReclaim` 懒加载一起删除；
+        建仓扫描 / 监控池 / 异常池的该列**仍保留**（共享 `maReclaimCellHtml`）。
+        """
         i = self.js.index("function renderHunter(h)")
         nxt = self.js.index("\nfunction ", i + 10)
         seg = self.js[i:nxt]
-        self.assertIn("h-mr", seg, "猎手个股行要有均线突破单元格")
-        self.assertIn("maReclaimInnerHtml", seg)
-        self.assertIn("function loadHunterMaReclaim", self.js)
-        self.assertIn('apiCall("load_ma_reclaim"', self.js)
-        # 展开板块 / 翻页重渲染后都要补一次
-        self.assertGreaterEqual(self.js.count("loadHunterMaReclaim("), 3)
+        self.assertNotIn('class="h-mr"', seg, "猎手个股行不应再有均线突破单元格")
+        self.assertNotIn("loadHunterMaReclaim", self.js, "懒加载函数应已删除")
+        self.assertNotIn('apiCall("load_ma_reclaim"', self.js)
+        self.assertIn("function maReclaimCellHtml(", self.js)   # 其它表仍保留
 
     def test_趋势线默认不显示(self):
         """owner 2026-10-23：K 线图「趋势线」默认关。"""
