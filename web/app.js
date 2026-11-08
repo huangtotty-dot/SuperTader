@@ -2343,7 +2343,8 @@ function renderSectorStars(d) {
     // 2026-10-17 owner：「只显示部分，需要显示全部」⇒ 表格列出**全部**板块（原来截前 12）。
     // 外层给了 max-height + 滚动，所以列全不会把面板撑爆。
     const rows = shownSecs.map(s => `<tr>
-      <td>${esc(s.name)}</td>
+      <td><a href="javascript:void(0)" style="color:inherit;text-decoration:underline dotted"
+             onclick='selectStarBoard(${JSON.stringify(s.name)})'>${esc(s.name)}</a></td>
       ${ymds.map((ymd, xi) => {
         const p = at(s, xi);
         return `<td class="num">${p ? `#${p.rank} <span class="cell-dim">${p.score.toFixed(1)}</span>` : "—"}</td>`;
@@ -2354,6 +2355,114 @@ function renderSectorStars(d) {
       + labels.map(l => `<th class="num">${esc(l)}</th>`).join("")
       + `<th class="num">五日变化</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
+  // 2026-11-08 owner：「大板块（如电力）排名上升时，要看各个二级板块的贡献度」
+  // ⇒ 点图上的板块（线/星/末端标签）选中它，下方面板列细分明细 + 与前一日相比的 Δ。
+  try {
+    const _inst = echInstances["echSectorStars"];
+    if (_inst) {
+      _inst.off("click");
+      _inst.on("click", p => {
+        const nm = (p && (p.seriesName || (p.series && p.series.name))) || "";
+        if (nm) selectStarBoard(nm);
+      });
+    }
+  } catch (e) { /* 绑定失败不影响图 */ }
+  const _contribEl = document.getElementById("sectorContrib");
+  if (_starSelBoard) {
+    renderSectorContrib(_starContribCache.data);
+  } else if (_contribEl && !_contribEl.innerHTML.trim()) {
+    _contribEl.innerHTML = `<div class="cell-dim" style="font-size:11px">`
+      + `点击图上的板块（线/星/右侧名字）→ 查看它的<b>二级细分贡献度</b>：谁在带动这个板块的排名变化</div>`;
+  }
+}
+
+/* ---- 2026-11-08：星轨图「板块 → 二级细分贡献度」 ----
+   数据 = 后端 `load_sector_contrib(board, 10, date)`，取 daily_summary.json 的 `细分明细`
+   （2026-11-08 起猎手每次运行写入；历史 10 个交易日已由
+   scripts/backfill_sector_subdetail.py 回填）。
+   ⚠️ 一只票可同时属于多个细分 ⇒ 各细分「股票数」之和 ≥ 板块股票数，别当互斥拆分加总。 */
+let _starSelBoard = "", _starContribCache = { key: "", ts: 0, data: null }, _starContribInflight = false;
+
+function selectStarBoard(name) {
+  if (!name) return;
+  _starSelBoard = name;
+  loadSectorContrib(name);
+}
+
+async function loadSectorContrib(name) {
+  const el = document.getElementById("sectorContrib");
+  if (!el) return;
+  if (_starContribInflight) return;
+  _starContribInflight = true;
+  const _key = `${name}|${String(_panelDate())}`;
+  try {
+    if (_starContribCache.key === _key && _starContribCache.data
+        && Date.now() - _starContribCache.ts < 60000) {
+      renderSectorContrib(_starContribCache.data);
+      return;
+    }
+    el.innerHTML = `<div class="cell-dim" style="font-size:11px">${esc(name)} 细分贡献加载中…</div>`;
+    const d = await apiCall("load_sector_contrib", name, 10, _panelDate());
+    _starContribCache = { key: _key, ts: Date.now(), data: d };
+    if (_starSelBoard === name) renderSectorContrib(d);
+  } catch (e) {
+    el.innerHTML = `<span class="down" style="font-size:11px">取数失败：${esc(e.message || e)}</span>`;
+  } finally {
+    _starContribInflight = false;
+  }
+}
+
+function renderSectorContrib(d) {
+  const el = document.getElementById("sectorContrib");
+  if (!el) return;
+  if (!d || !d.available) {
+    el.innerHTML = d && d.board
+      ? `<div class="cell-dim" style="font-size:11px">${esc(d.board)}：${esc(d.error || "无拆解数据")}</div>`
+      : "";
+    return;
+  }
+  const days = d.days || [];
+  if (!days.length) { el.innerHTML = ""; return; }
+  const last = days[days.length - 1];
+  const prev = days.length >= 2 ? days[days.length - 2] : null;
+  const prevMap = new Map(((prev && prev.subs) || []).map(x => [x["细分"], x]));
+  if (!(last.subs || []).length) {
+    el.innerHTML = `<div class="cell-dim" style="font-size:11px">`
+      + `<b>${esc(d.board)}</b> · ${esc(last.date)} 排名 <b>#${last.rank}</b>：`
+      + `这一天还没有细分明细（2026-11-08 起才会写入，历史日需跑回填脚本）</div>`;
+    return;
+  }
+  const rows = (last.subs || []).map(x => {
+    const p = prevMap.get(x["细分"]);
+    return {
+      sub: x["细分"], n: x["股票数"], score: x["得分和"], lu: x["涨停数"],
+      dScore: p ? +(x["得分和"] - (p["得分和"] || 0)).toFixed(1) : null,
+      dN: p ? (x["股票数"] - (p["股票数"] || 0)) : null,
+    };
+  }).sort((a, b) => ((b.dScore == null ? -1e9 : b.dScore) - (a.dScore == null ? -1e9 : a.dScore))
+                    || (b.score - a.score));
+  const rankDelta = prev ? (prev.rank - last.rank) : null;
+  const _rankTxt = rankDelta == null ? "" :
+    (rankDelta > 0 ? `<span class="up">↑${rankDelta}</span>` :
+     rankDelta < 0 ? `<span class="down">↓${-rankDelta}</span>` : `<span class="cell-dim">持平</span>`);
+  const body = rows.slice(0, 12).map(r => {
+    const dTxt = r.dScore == null ? `<span class="cell-dim">—</span>` :
+      (r.dScore > 0 ? `<span class="up">+${r.dScore}</span>` :
+       r.dScore < 0 ? `<span class="down">${r.dScore}</span>` : `<span class="cell-dim">0</span>`);
+    const nTxt = r.dN == null ? "" : (r.dN > 0 ? ` <span class="up">+${r.dN}</span>` : (r.dN < 0 ? ` <span class="down">${r.dN}</span>` : ""));
+    return `<tr><td>${esc(r.sub)}</td><td class="num">${r.n}${nTxt}</td>`
+      + `<td class="num">${r.score.toFixed(1)}</td><td class="num">${r.lu}</td>`
+      + `<td class="num">${dTxt}</td></tr>`;
+  }).join("");
+  el.innerHTML = `<div style="font-size:12px;margin-bottom:4px">`
+    + `<b>${esc(d.board)}</b> · ${esc(last.date)} 排名 <b>#${last.rank}</b> ${_rankTxt}`
+    + `<span class="cell-dim" style="font-size:11px"> · 平均分 ${last.score.toFixed(2)} · 涨停 ${last.lu} · 股票 ${last.n}`
+    + `${prev ? ` · Δ对比 ${esc(prev.date)}` : " · 无前一日可比"}</span></div>`
+    + `<div style="max-height:240px;overflow:auto"><table><thead><tr>`
+    + `<th>二级细分</th><th class="num">股票数</th><th class="num">得分和</th>`
+    + `<th class="num">涨停</th><th class="num">Δ得分</th></tr></thead><tbody>${body}</tbody></table></div>`
+    + `<div class="cell-dim" style="font-size:10px;margin-top:4px">`
+    + `按「较前一日得分变化」排序；一只票可同属多个细分 ⇒ 各细分之和 ≥ 板块股票数</div>`;
 }
 
 /* ---- 板块「站上5日线 / 20日线」成分股占比（2026-10-20 owner：星空图下方多坐标轴）----

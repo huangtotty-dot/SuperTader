@@ -367,6 +367,11 @@ def _get_past_scores(sector: str, history: dict, sorted_dates: list,
 def _save_sector_history(date_str: str, summary_df: pd.DataFrame, heat_rows: list) -> None:
     """保存带热度分的完整板块历史。成交额统一存原始单位元，字段名 `成交额总额`"""
     sectors = []
+    # 2026-11-08：二级细分拆解（星轨图贡献度用）——由 data_loader.load_concept_summary 挂在 attrs
+    try:
+        _sub_details = dict((getattr(summary_df, "attrs", {}) or {}).get("sub_details") or {})
+    except Exception:
+        _sub_details = {}
     for hr in heat_rows:
         sector_name = hr.get("板块", "")
         match = summary_df[summary_df["板块"] == sector_name] \
@@ -396,6 +401,8 @@ def _save_sector_history(date_str: str, summary_df: pd.DataFrame, heat_rows: lis
             "成交额放大倍数": hr.get("成交额放大倍数", 1.0),
             "上涨家数占比%": hr.get("上涨家数占比%", 0),
         }
+        if _sub_details.get(sector_name):
+            entry["细分明细"] = _sub_details[sector_name]
         sectors.append(entry)
     save_daily_summary(date_str, sectors)
 

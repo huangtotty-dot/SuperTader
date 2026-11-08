@@ -8778,6 +8778,13 @@ class Api:
                     delta = int(ht["heat"] - ht["prev_heat"])
                     trend_str += (" +" if delta >= 0 else " ") + str(delta)
                 row["趋势"] = trend_str
+            # 2026-11-08：二级细分拆解（星轨图点板块看贡献度）——load_concept_summary 挂在 attrs
+            try:
+                _subd = dict((getattr(df_summary, "attrs", {}) or {}).get("sub_details") or {})
+                for _r in sum_rows:
+                    _r["细分明细"] = _subd.get(_r.get("板块"), [])
+            except Exception:
+                pass
             sum_cols = ["排名", "板块", "平均分", "涨停数", "热度", "趋势", "前三强", "股票数"]
 
             # 4) 概念得分趋势（近14天热度+均分）
@@ -11273,6 +11280,59 @@ class Api:
         except Exception as e:
             out["error"] = f"读取历史失败: {e}"
             return out
+
+    def load_sector_contrib(self, board, days=10, end_date=None):
+        """某板块最近 N 个交易日的**二级细分贡献**（星轨图点板块时用）。
+
+        数据源 = daily_summary.json 的 `细分明细`（2026-11-08 起猎手每次运行都会写，
+        历史 10 个交易日已由 `scripts/backfill_sector_subdetail.py` 回填）。
+        返回每天该板块的 排名/平均分/涨停数/股票数 + 细分列表；前端用「最新 vs 前一日」算 Δ。
+
+        ⚠️ 一只票可同时计入多个细分（`韭研概念` 用 | 分隔）⇒ 各细分「股票数」之和
+        **≥** 板块股票数；「得分和」同理，不要当成互斥拆分去加总。
+        """
+        try:
+            n = max(2, min(int(days or 10), 30))
+        except Exception:
+            n = 10
+        board = str(board or "").strip()
+        if not board:
+            return {"available": False, "error": "缺少板块名"}
+        fp = BASE / "stock_hunter" / "history" / "daily_summary.json"
+        try:
+            d = json.loads(fp.read_text(encoding="utf-8"))
+        except Exception as e:
+            return {"available": False, "error": f"读 daily_summary.json 失败: {e}"}
+        end = str(end_date or "").replace("-", "")
+        keys_all = sorted(k for k, v in d.items()
+                          if isinstance(v, list) and v and (not end or k <= end))
+        # 交易日过滤：与星轨图同一口径（周末/假日被手动跑出的快照不算）
+        try:
+            _idx = json.loads((BASE / "t_io" / "cache" / "daily_kline" / "index_sh000001.json")
+                              .read_text(encoding="utf-8")).get("rows", [])
+            _trading = {str(r.get("date"))[:10].replace("-", "") for r in _idx if r.get("date")}
+        except Exception:
+            _trading = None
+        if _trading:
+            keys_all = [k for k in keys_all if k in _trading]
+        keys = keys_all[-n:]
+        out_days = []
+        for k in keys:
+            row = next((r for r in d[k] if str(r.get("板块")) == board), None)
+            if not row:
+                continue
+            out_days.append({
+                "ymd": k, "date": f"{k[:4]}-{k[4:6]}-{k[6:]}",
+                "rank": int(row.get("排名") or 0),
+                "score": float(row.get("平均分") or 0),
+                "lu": int(row.get("涨停数") or 0),
+                "n": int(row.get("股票数") or 0),
+                "subs": row.get("细分明细") or [],
+            })
+        if not out_days:
+            return {"available": False, "error": f"{board} 在最近 {n} 个交易日没有排名记录"}
+        return {"available": True, "board": board, "days": out_days,
+                "has_detail": any(x.get("subs") for x in out_days)}
 
     def sector_history(self, sector):
         """板块历史：近 N 日该板块的热度/均分/涨停/股票数趋势。"""

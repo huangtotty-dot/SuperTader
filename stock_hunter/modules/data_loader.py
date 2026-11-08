@@ -225,6 +225,11 @@ class DataLoader:
             return pd.DataFrame()
 
         summary_rows = []
+        # 2026-11-08：二级细分拆解（星轨图「板块贡献度」用）。口径与 sub_concepts 一致：
+        # 合并板块用「原分类」当细分子概念，其余按韭研概念 | 拆分；一只票可同时计入多个细分
+        #（所以各细分之和 ≥ 板块股票数）。落在 `summary_df.attrs["sub_details"]`，
+        # 不新增列 ⇒ 不影响 Excel/前端现有表结构。
+        sub_details = {}
         # 直接按韭研分类分组（已精确拆分，无需 explode）
         for category in sorted(df_pool["韭研分类"].unique()):
             if not category:
@@ -243,6 +248,37 @@ class DataLoader:
                     if c:
                         sub_concepts.add(c)
             sub_concepts = sorted(sub_concepts)
+
+            # 每个细分的 股票数 / 得分和 / 涨停数 / 平均分
+            _sub_acc = {}
+            _has_score = "总得分" in cat_df.columns and cat_df["总得分"].notna().any()
+            _has_lu = "涨停" in cat_df.columns
+            for _, _r in cat_df.iterrows():
+                _orig = str(_r.get("原分类", "") or "").strip()
+                _names = ([_orig] if _orig else
+                          [c.strip() for c in str(_r.get("韭研概念", "") or "").split("|") if c.strip()])
+                try:
+                    _tot = float(_r.get("总得分", 0) or 0) if _has_score else 0.0
+                except Exception:
+                    _tot = 0.0
+                if _tot != _tot:          # NaN
+                    _tot = 0.0
+                try:
+                    _lu = int(float(_r.get("涨停", 0) or 0)) if _has_lu else 0
+                except Exception:
+                    _lu = 0
+                for _nm in dict.fromkeys(_names):
+                    _d = _sub_acc.setdefault(_nm, {"细分": _nm, "股票数": 0,
+                                                   "得分和": 0.0, "涨停数": 0})
+                    _d["股票数"] += 1
+                    _d["得分和"] += _tot
+                    _d["涨停数"] += _lu
+            _lst = sorted(_sub_acc.values(),
+                          key=lambda x: (-x["得分和"], -x["股票数"], x["细分"]))[:12]
+            for _d in _lst:
+                _d["得分和"] = round(_d["得分和"], 1)
+                _d["平均分"] = round(_d["得分和"] / _d["股票数"], 2) if _d["股票数"] else 0.0
+            sub_details[category] = _lst
 
             stock_count = len(cat_df)
 
@@ -300,6 +336,7 @@ class DataLoader:
         summary_df = pd.DataFrame(summary_rows)
         summary_df = summary_df.sort_values("平均分", ascending=False).reset_index(drop=True)
         summary_df["排名"] = range(1, len(summary_df) + 1)
+        summary_df.attrs["sub_details"] = sub_details      # 2026-11-08：二级细分拆解
         return summary_df
 
     def load_detail_ranking(self) -> pd.DataFrame:
