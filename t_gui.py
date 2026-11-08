@@ -8832,6 +8832,11 @@ class Api:
             out["available"] = True
             out["pool_size"] = len(codes)
             out["summary_cols"] = sum_cols
+            # 2026-11-08：`细分明细`（含每细分 ≤10 只个股）体积不小，且只有星轨图的
+            # `load_sector_contrib` 用得到（它直接读 daily_summary）⇒ 落盘之后就从
+            # 猎手的大 payload 里摘掉，别让每次 run_hunter 多背 ~150KB 过 js_api。
+            for _r in sum_rows:
+                _r.pop("细分明细", None)
             out["summary_rows"] = sum_rows
             out["top5"] = top5_list
             out["heat_trends"] = heat_trends

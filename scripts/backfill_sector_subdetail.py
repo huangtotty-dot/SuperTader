@@ -55,13 +55,15 @@ def main() -> int:
     for d in dates:
         t = time.time()
         try:
-            r = api._load_hunter_impl(d)
-            rows = r.get("summary_rows") or []
+            api._load_hunter_impl(d)          # 会把当天汇总（含细分明细）落盘
             key = d.replace("-", "")
+            # ⚠️ 2026-11-08：`_load_hunter_impl` 返回的 summary_rows 会**摘掉**细分明细
+            #    （不随猎手大 payload 下发），所以这里从**刚写好的文件**里读。
+            saved = json.loads(SUMMARY.read_text(encoding="utf-8")).get(key) or []
             details[key] = {str(x.get("板块")): (x.get("细分明细") or [])
-                            for x in rows if x.get("板块")}
+                            for x in saved if isinstance(x, dict) and x.get("板块")}
             n_sub = sum(len(v) for v in details[key].values())
-            print(f"  {d} {time.time()-t:5.1f}s rows={len(rows)} 细分条目={n_sub}", flush=True)
+            print(f"  {d} {time.time()-t:5.1f}s rows={len(saved)} 细分条目={n_sub}", flush=True)
         except Exception as e:
             print(f"  {d} ERR {type(e).__name__}: {e}", flush=True)
 

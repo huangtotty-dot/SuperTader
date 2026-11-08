@@ -55,6 +55,11 @@ def test_细分明细_按细分聚合() -> None:
     assert subs["火电"]["得分和"] == 4.0
     # 一只票同时计入多个细分 ⇒ 各细分股票数之和 ≥ 板块股票数
     assert sum(x["股票数"] for x in det["电力"]) == 4 > 3
+    # 2026-11-08：每个细分下带「贡献最大的个股」（按得分降序）
+    top1 = subs["水电"]["个股"]
+    assert [x["名称"] for x in top1] == ["甲", "乙"]
+    assert top1[0]["得分"] == 10.0 and top1[0]["涨停"] == 1
+    assert subs["火电"]["个股"][0]["名称"] == "丙"
 
 
 def _write_fake_summary(base: Path) -> None:
@@ -62,7 +67,8 @@ def _write_fake_summary(base: Path) -> None:
              "细分明细": [{"细分": "水电", "股票数": 10, "得分和": 30.0, "涨停数": 1, "平均分": 3.0},
                           {"细分": "火电", "股票数": 8, "得分和": 20.0, "涨停数": 0, "平均分": 2.5}]}]
     day2 = [{"排名": 9, "板块": "电力", "平均分": 4.7, "涨停数": 2, "股票数": 258,
-             "细分明细": [{"细分": "水电", "股票数": 12, "得分和": 50.0, "涨停数": 2, "平均分": 4.17},
+             "细分明细": [{"细分": "水电", "股票数": 12, "得分和": 50.0, "涨停数": 2, "平均分": 4.17,
+                           "个股": [{"代码": "600001", "名称": "甲", "得分": 10.0, "涨停": 1}]},
                           {"细分": "火电", "股票数": 8, "得分和": 20.0, "涨停数": 0, "平均分": 2.5}]}]
     (base / "stock_hunter" / "history").mkdir(parents=True, exist_ok=True)
     (base / "stock_hunter" / "history" / "daily_summary.json").write_text(
@@ -83,6 +89,7 @@ def test_contrib接口_按板块返回每日细分(tmp_path, monkeypatch) -> Non
     assert last["rank"] == 9 and prev["rank"] == 12
     subs = {x["细分"]: x for x in last["subs"]}
     assert subs["水电"]["得分和"] == 50.0 and subs["水电"]["涨停数"] == 2
+    assert subs["水电"]["个股"][0]["名称"] == "甲", "个股明细要透传给前端"
 
 
 def test_contrib接口_未知板块(tmp_path, monkeypatch) -> None:
@@ -161,3 +168,23 @@ def test_上升速度用多色并标注() -> None:
     assert "const _plain = isHl && _up ? `${sec.name} ↑${_up}` : sec.name;" in _JS
     assert "■ 橙 ↑${STAR_RISE_MID_MIN}~${STAR_RISE_FAST_MIN - 1}" in _JS
     assert "红/橙/品红线" in _HTML or "品红" in _HTML
+
+
+def test_每个细分最多十只个股() -> None:
+    """owner 2026-11-08：「二级板块下再显示贡献度大的个股，为了控制数量，各细分不要超过 10 个」。"""
+    import pandas as pd
+    l = DataLoader(config={})
+    rows = [{"代码": f"6000{i:02d}", "名称": f"股{i}", "韭研分类": "电力", "韭研概念": "水电",
+             "总得分": 20 - i, "涨停": 0, "成交额": 1e8} for i in range(15)]
+    l.set_watchlist(pd.DataFrame(rows))
+    det = l.load_concept_summary().attrs["sub_details"]["电力"][0]
+    assert len(det["个股"]) == 10, "每细分最多 10 只"
+    assert det["个股"][0]["名称"] == "股0", "按得分降序"
+    assert det["个股"][-1]["名称"] == "股9"
+
+
+def test_前端细分行可展开个股() -> None:
+    assert "function toggleSubStocks(tr)" in _JS
+    assert "onclick=\"toggleSubStocks(this)\"" in _JS
+    assert "_st.slice(0, 10)" in _JS, "前端也截断到 10"
+    assert "sub-stock-row" in _JS

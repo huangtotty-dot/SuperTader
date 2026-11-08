@@ -2598,6 +2598,7 @@ function _contribHtml(d) {
     const p = prevMap.get(x["细分"]);
     return {
       sub: x["细分"], n: x["股票数"], score: x["得分和"], lu: x["涨停数"],
+      top: x["个股"] || [],          // 2026-11-08：该细分下贡献最大的个股（≤10 只，后端已排序）
       dScore: p ? +(x["得分和"] - (p["得分和"] || 0)).toFixed(1) : null,
       dN: p ? (x["股票数"] - (p["股票数"] || 0)) : null,
     };
@@ -2607,14 +2608,36 @@ function _contribHtml(d) {
   const _rankTxt = rankDelta == null ? "" :
     (rankDelta > 0 ? `<span class="up">↑${rankDelta}</span>` :
      rankDelta < 0 ? `<span class="down">↓${-rankDelta}</span>` : `<span class="cell-dim">持平</span>`);
-  const body = rows.slice(0, 12).map(r => {
+  // 2026-11-08 owner：「二级板块贡献基础上再进一步：显示二级板块下贡献度大的个股，每个细分 ≤10 只」
+  // ⇒ 每个细分一行，**点击展开**该细分下得分最高的个股（后端已截断到 10 只并按得分排序）；
+  //    默认展开第一行（当日贡献最大的细分），其余收起，避免 12×10 行把浮层撑爆。
+  const body = rows.slice(0, 12).map((r, i) => {
     const dTxt = r.dScore == null ? `<span class="cell-dim">—</span>` :
       (r.dScore > 0 ? `<span class="up">+${r.dScore}</span>` :
        r.dScore < 0 ? `<span class="down">${r.dScore}</span>` : `<span class="cell-dim">0</span>`);
     const nTxt = r.dN == null ? "" : (r.dN > 0 ? ` <span class="up">+${r.dN}</span>` : (r.dN < 0 ? ` <span class="down">${r.dN}</span>` : ""));
-    return `<tr><td>${esc(r.sub)}</td><td class="num">${r.n}${nTxt}</td>`
+    const _st = r.top || [];
+    const _open = i === 0 && _st.length > 0;
+    const _caret = _st.length
+      ? `<span class="sub-caret" style="display:inline-block;width:12px;color:#6b7280">${_open ? "▾" : "▸"}</span>`
+      : `<span style="display:inline-block;width:12px"></span>`;
+    const _row = `<tr class="sub-row"${_st.length ? ' style="cursor:pointer" onclick="toggleSubStocks(this)" title="点击展开该细分下贡献最大的个股（≤10 只）"' : ""}>`
+      + `<td>${_caret}${esc(r.sub)}</td><td class="num">${r.n}${nTxt}</td>`
       + `<td class="num">${r.score.toFixed(1)}</td><td class="num">${r.lu}</td>`
       + `<td class="num">${dTxt}</td></tr>`;
+    if (!_st.length) return _row;
+    const _stocks = _st.slice(0, 10).map(x => {
+      const nm = esc(x["名称"] || x["代码"] || "?");
+      const cd = esc(x["代码"] || "");
+      const sc = Number(x["得分"] || 0);
+      return `<span class="prof-chip" style="display:inline-block;margin:1px 5px 1px 0">`
+        + `${nm}<span class="cell-dim">(${cd})</span> <b>${Number.isInteger(sc) ? sc : sc.toFixed(1)}</b>`
+        + `${Number(x["涨停"] || 0) ? ' <span class="up">涨停</span>' : ""}</span>`;
+    }).join("");
+    return _row + `<tr class="sub-stock-row" style="display:${_open ? "table-row" : "none"}">`
+      + `<td colspan="5" style="padding:4px 0 6px 18px;background:rgba(110,118,129,.06)">`
+      + `<div class="cell-dim" style="font-size:10px;margin-bottom:2px">该细分贡献最大的个股（按得分，最多 10 只）：</div>`
+      + _stocks + `</td></tr>`;
   }).join("");
   return `<div style="font-size:12px;margin-bottom:4px">`
     + `<b>${esc(d.board)}</b> · ${esc(last.date)} 排名 <b>#${last.rank}</b> ${_rankTxt}`
@@ -2625,6 +2648,18 @@ function _contribHtml(d) {
     + `<th class="num">涨停</th><th class="num">Δ得分</th></tr></thead><tbody>${body}</tbody></table></div>`
     + `<div class="cell-dim" style="font-size:10px;margin-top:4px">`
     + `按「较前一日得分变化」排序；一只票可同属多个细分 ⇒ 各细分之和 ≥ 板块股票数</div>`;
+}
+
+/* 2026-11-08：点细分行展开/收起「该细分下的个股」。 */
+function toggleSubStocks(tr) {
+  try {
+    const next = tr && tr.nextElementSibling;
+    if (!next || !next.classList.contains("sub-stock-row")) return;
+    const open = next.style.display !== "none";
+    next.style.display = open ? "none" : "table-row";
+    const c = tr.querySelector(".sub-caret");
+    if (c) c.textContent = open ? "▸" : "▾";
+  } catch (e) { /* 忽略 */ }
 }
 
 function renderSectorContrib(d) {

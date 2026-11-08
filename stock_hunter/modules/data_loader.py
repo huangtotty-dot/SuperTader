@@ -267,17 +267,25 @@ class DataLoader:
                     _lu = int(float(_r.get("涨停", 0) or 0)) if _has_lu else 0
                 except Exception:
                     _lu = 0
+                _code = str(_r.get("代码", "") or "").strip()
+                _nm_zh = str(_r.get("名称", "") or "").strip()
                 for _nm in dict.fromkeys(_names):
                     _d = _sub_acc.setdefault(_nm, {"细分": _nm, "股票数": 0,
-                                                   "得分和": 0.0, "涨停数": 0})
+                                                   "得分和": 0.0, "涨停数": 0,
+                                                   "_members": []})
                     _d["股票数"] += 1
                     _d["得分和"] += _tot
                     _d["涨停数"] += _lu
+                    # 2026-11-08 owner：二级板块下再列**贡献最大的个股**（每细分 ≤10 只）
+                    _d["_members"].append((_tot, _lu, _code, _nm_zh))
             _lst = sorted(_sub_acc.values(),
                           key=lambda x: (-x["得分和"], -x["股票数"], x["细分"]))[:12]
             for _d in _lst:
                 _d["得分和"] = round(_d["得分和"], 1)
                 _d["平均分"] = round(_d["得分和"] / _d["股票数"], 2) if _d["股票数"] else 0.0
+                _mem = sorted(_d.pop("_members", []), key=lambda x: (-x[0], -x[1], x[3]))[:10]
+                _d["个股"] = [{"代码": m[2], "名称": m[3], "得分": round(m[0], 1), "涨停": m[1]}
+                              for m in _mem if m[2] or m[3]]
             sub_details[category] = _lst
 
             stock_count = len(cat_df)
