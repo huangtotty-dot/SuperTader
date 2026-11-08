@@ -110,7 +110,7 @@ def test_右侧标签显示贡献度() -> None:
     """
     assert "const _contribLabel = (name) => {" in _JS
     assert "_contribLabel(sec.name)" in _JS
-    assert 'formatter: _txt || sec.name' in _JS
+    assert 'formatter: _txt || _plain' in _JS
     assert 'grid: { left: 56, right: _starSelBoard ? 260 : 150, top: 34, bottom: 30 }' in _JS
     assert "right: _starSelBoard ? 260 : 150" in _JS
     assert "renderSectorStars(_starLast));   // 右侧标签展开" in _JS
@@ -147,3 +147,17 @@ def test_关闭后不留残影() -> None:
     assert 'if (_starSelBoard) {\n    _starSelBoard = "";' in _JS
     assert "_starLast) echGuard(\"板块星轨图\", () => renderSectorStars(_starLast));" in _JS
     assert "transform:translateZ(0);" in _JS, "浮层自身也开合成层，减少残影"
+
+
+def test_上升速度用多色并标注() -> None:
+    """owner 2026-11-08：「上升速度排名靠前的板块不要只用红色，也要用其它颜色，并且标注出来」。
+
+    三档：↑1~2 红 / ↑3~5 橙 / ↑≥6 品红；末端直标带 `↑名次`，说明区有颜色图例。
+    """
+    assert 'const SECTOR_STAR_RISE_MID = "#f0883e";' in _JS
+    assert 'const SECTOR_STAR_RISE_FAST = "#bf3989";' in _JS
+    assert "function starRiseColor(up)" in _JS
+    assert "mk(s, isRose ? starRiseColor(roseUp.get(s.name) || 0) : SECTOR_STAR_MUTED, isRose)" in _JS
+    assert "const _plain = isHl && _up ? `${sec.name} ↑${_up}` : sec.name;" in _JS
+    assert "■ 橙 ↑${STAR_RISE_MID_MIN}~${STAR_RISE_FAST_MIN - 1}" in _JS
+    assert "红/橙/品红线" in _HTML or "品红" in _HTML

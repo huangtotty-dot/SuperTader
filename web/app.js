@@ -2058,8 +2058,21 @@ function _putBackNode(slotId, node, fallbackHtml) {
 //   上升 = 红（与全仓 A 股「涨红」同源 #f85149），其余中性灰作背景。
 //   ⚠️ 不给每个上升板块分不同色：上升板块每天 5~15 个，逐块配色会变成彩虹，而且
 //   "谁和谁挨着"每天在变（CVD 可辨性无法保证）。身份交给末端直标 + 悬浮提示 + 下方名单。
-const SECTOR_STAR_ROSE = "#f85149";      // 当日排名上升
-const SECTOR_STAR_MUTED = "#b9c2cf";     // 未上升板块：中性灰，作为背景星
+// 2026-11-08 owner：「上升速度排名靠前的板块不要只用红色，也要用其它颜色，并且标注出来」
+// ⇒ 颜色按**当日上升名次**分三档（速度），并在末端直标里带上 ↑名次：
+//   1~2 名 = 红；3~5 名 = 橙；≥6 名 = 品红（最快一档）。
+//   仍是「状态编码」而非身份编码 —— 同一板块的颜色每天随上升速度变，不是固定身份色。
+const SECTOR_STAR_ROSE = "#f85149";        // 上升 1~2 名
+const SECTOR_STAR_RISE_MID = "#f0883e";    // 上升 3~5 名
+const SECTOR_STAR_RISE_FAST = "#bf3989";   // 上升 ≥6 名（速度最快的一档）
+const STAR_RISE_MID_MIN = 3;               // 中档阈值（名次）
+const STAR_RISE_FAST_MIN = 6;              // 快档阈值（名次）
+const SECTOR_STAR_MUTED = "#b9c2cf";       // 未上升板块：中性灰，作为背景星
+function starRiseColor(up) {
+  const u = Number(up) || 0;
+  return u >= STAR_RISE_FAST_MIN ? SECTOR_STAR_RISE_FAST
+    : (u >= STAR_RISE_MID_MIN ? SECTOR_STAR_RISE_MID : SECTOR_STAR_ROSE);
+}
 
 /* 「连续提升」筛选（2026-10-17 owner）：只看最近 10 日排名持续提升的板块。
    判定在后端 `load_sector_constellation`（sector.sustained）：
@@ -2261,8 +2274,11 @@ function renderSectorStars(d) {
     endLabel: (() => {
       const _txt = _contribLabel(sec.name);
       const _multi = !!_txt && _txt.includes("\n");
-      return { show: true, formatter: _txt || sec.name,
-               color: _multi ? "#1f2937" : (isHl ? "#1f2937" : "#9ca3af"),
+      const _up = roseUp.get(sec.name) || 0;
+      // 2026-11-08：上升的板块直标带上 ↑名次（速度），颜色与线色同档
+      const _plain = isHl && _up ? `${sec.name} ↑${_up}` : sec.name;
+      return { show: true, formatter: _txt || _plain,
+               color: _multi ? "#1f2937" : (isHl ? starRiseColor(_up) : "#9ca3af"),
                fontSize: _multi ? 10 : (isHl ? 11 : 10),
                fontWeight: (_multi || isHl) ? 600 : 400,
                distance: 8, align: "left", lineHeight: 14,
@@ -2275,7 +2291,7 @@ function renderSectorStars(d) {
 
   const series = shownSecs.map(s => {
     const isRose = roseSet.has(s.name);
-    return mk(s, isRose ? SECTOR_STAR_ROSE : SECTOR_STAR_MUTED, isRose);
+    return mk(s, isRose ? starRiseColor(roseUp.get(s.name) || 0) : SECTOR_STAR_MUTED, isRose);
   });
 
   echRender("echSectorStars", {
@@ -2307,8 +2323,9 @@ function renderSectorStars(d) {
           + `<span style="color:#6b7280;font-size:11px">　${rows.length} 个板块上榜</span>`;
         rows.slice(0, 8).forEach(({ s, p }) => {
           const isRose = roseSet.has(s.name);
-          const dot = `<span style="color:${isRose ? SECTOR_STAR_ROSE : SECTOR_STAR_MUTED}">●</span>`;
-          const up = isRose ? ` <span style="color:${SECTOR_STAR_ROSE};font-size:11px">↑${roseUp.get(s.name)}</span>` : "";
+          const _uc = starRiseColor(roseUp.get(s.name) || 0);
+          const dot = `<span style="color:${isRose ? _uc : SECTOR_STAR_MUTED}">●</span>`;
+          const up = isRose ? ` <span style="color:${starRiseColor(roseUp.get(s.name) || 0)};font-size:11px">↑${roseUp.get(s.name)}</span>` : "";
           out += `<br>${dot} ${esc(s.name)}　<b>#${p.rank}</b>${up}　`
             + `${p.score.toFixed(2)} 分　涨停 ${p.lu}`;
         });
@@ -2345,10 +2362,12 @@ function renderSectorStars(d) {
       .map(s => `${esc(s.name)} ${s.delta > 0 ? "+" : ""}${s.delta}`).join(" · ");
     // 三种模式都要说明红线含义；上升名单只在这里列（图例可滚动，但文字版更好抄）
     const roseTxt = rose.length
-      ? rose.map(r => `${esc(r.s.name)} <b>↑${r.up}</b>`).join(" · ")
+      ? rose.map(r => `<span style="color:${starRiseColor(r.up)}">${esc(r.s.name)} <b>↑${r.up}</b></span>`).join(" · ")
       : "无";
-    const roseNote = `<b style="color:${SECTOR_STAR_ROSE}">当日排名上升</b>的 <b>${rose.length}</b> 个用红色直标，`
-      + `其余灰星。`
+    const roseNote = `<b>当日排名上升</b>的 <b>${rose.length}</b> 个按<b>上升速度</b>着色直标：`
+      + `<span style="color:${SECTOR_STAR_ROSE}">■ 红 ↑1~${STAR_RISE_MID_MIN - 1}</span> · `
+      + `<span style="color:${SECTOR_STAR_RISE_MID}">■ 橙 ↑${STAR_RISE_MID_MIN}~${STAR_RISE_FAST_MIN - 1}</span> · `
+      + `<span style="color:${SECTOR_STAR_RISE_FAST}">■ 品红 ↑≥${STAR_RISE_FAST_MIN}</span>，其余灰星。`
       + (rose.length ? `<br><span class="cell-dim">上升：${roseTxt}</span>` : "");
     let line;
     if (_starSustainedOnly) {
