@@ -13278,20 +13278,21 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "智能电网",
+  "jiuyan_concept": "储能",
   "name": "智光电气",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:50:33",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "智能电网": "智光电气：储能与电力电子"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "智能电网",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网"
+  "jiuyan_concept1": "储能",
+  "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 电力/储能（按公司简介核实）"
  },
  "002170": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -29060,21 +29061,22 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "央企|电力",
-  "jiuyan_concept": "智能电网",
+  "jiuyan_concept": "电力运营",
   "name": "南网能源",
   "primary_source": "legacy",
   "sector": "科技推广和应用服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:50:33",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "智能电网": "南网能源：综合能源/节能服务"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网",
   "jiuyan_category1": "央企",
   "jiuyan_category2": "电力",
-  "jiuyan_concept2": "智能电网",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网"
+  "jiuyan_concept2": "电力运营",
+  "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 电力/电力运营（按公司简介核实）"
  },
  "003036": {
   "business_summary": "高端纺织机械装备的研发和制造。(电子布纺织机)",
@@ -35191,21 +35193,22 @@
   "business_summary": "新能源发电相关业务及光伏消费产品的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "电力",
-  "jiuyan_concept": "智能电网",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "珈伟新能",
   "primary_source": "legacy",
   "sector": "电力/虚拟电厂/绿色电力/光伏建筑一体化",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:50:33",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
    "智能电网": "珈伟新能：智慧照明为主"
   },
-  "jiuyan_category1": "电力",
-  "jiuyan_concept1": "智能电网",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网"
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 消费电子/LED（按公司简介核实）"
  },
  "300318": {
   "business_summary": "主营专用设备制造业",
@@ -54281,20 +54284,21 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "智能电网",
+  "jiuyan_concept": "开关与成套设备",
   "name": "未来电器",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:50:33",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "智能电网": "未来电器：低压断路器附件"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-用户侧 → 智能电网",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "智能电网",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-用户侧 → 智能电网"
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 电力/开关与成套设备（按公司简介核实）"
  },
  "301387": {
   "business_summary": "消费电子防护性及功能性产品的研发、生产与销售。",
@@ -67612,18 +67616,21 @@
   "business_summary": "主营电力、热力生产和供应业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "电力",
-  "jiuyan_concept": "电力运营",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "芯片设计-功率半导体",
   "name": "综艺股份",
   "primary_source": "legacy",
   "sector": "电力、热力生产和供应业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-08 19:50:33",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
    "电力运营": "综艺股份：信息科技为主，电力为历史业务"
-  }
+  },
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "芯片设计-功率半导体",
+  "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/电力运营 → 半导体/芯片设计-功率半导体（按公司简介核实）"
  },
  "600771": {
   "business_summary": "主营医药制造业",
@@ -76415,20 +76422,21 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "智能电网",
+  "jiuyan_concept": "电力运营",
   "name": "芯能科技",
   "primary_source": "legacy",
   "sector": "电力、热力生产和供应业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:50:33",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
    "智能电网": "芯能科技：分布式光伏电站运营，虚拟电厂属性弱"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "智能电网",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网"
+  "jiuyan_concept1": "电力运营",
+  "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 电力/电力运营（按公司简介核实）"
  },
  "603106": {
   "business_summary": "主营计算机设备",
@@ -86826,20 +86834,21 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "智能电网",
+  "jiuyan_concept": "开关与成套设备",
   "name": "天正电气",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:50:33",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "智能电网": "天正电气：配电电器"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-用户侧 → 智能电网",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "智能电网",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-用户侧 → 智能电网"
+  "jiuyan_concept1": "开关与成套设备",
+  "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 电力/开关与成套设备（按公司简介核实）"
  },
  "605068": {
   "business_summary": "主营皮革、毛皮、羽毛及其制品和制鞋业",
@@ -93859,21 +93868,22 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "央企|电力",
-  "jiuyan_concept": "智能电网",
+  "jiuyan_concept": "储能",
   "name": "南网科技",
   "primary_source": "legacy",
   "sector": "虚拟电厂/柔性直流输电",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-08 19:50:33",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "智能电网": "南网科技：储能与电网技术服务"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网",
   "jiuyan_category1": "央企",
   "jiuyan_category2": "电力",
-  "jiuyan_concept2": "智能电网",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-虚拟电厂 → 智能电网"
+  "jiuyan_concept2": "储能",
+  "jiuyan_power_fix_20261108": "2026-11-08 19:50:33 电力错位纠正：电力/智能电网 → 电力/储能（按公司简介核实）"
  },
  "688249": {
   "business_summary": "12英寸晶圆代工业务及其配套服务。",
