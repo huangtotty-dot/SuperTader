@@ -2409,6 +2409,17 @@ function renderSectorStars(d) {
       });
     }
   } catch (e) { /* 绑定失败不影响图 */ }
+  // 2026-11-08：下拉里列出**当前画出的**板块（选中即弹浮层，不依赖点图命中）
+  try {
+    const _sel = document.getElementById("starBoardSel");
+    if (_sel) {
+      const _cur = _sel.value;
+      const _names = shownSecs.map(s => s.name);
+      _sel.innerHTML = `<option value="">🔎 看板块细分贡献…</option>`
+        + _names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      if (_cur && _names.includes(_cur)) _sel.value = _cur;
+    }
+  } catch (e) { /* 下拉失败不影响图 */ }
   const _contribEl = document.getElementById("sectorContrib");
   if (_starSelBoard) {
     renderSectorContrib(_starContribCache.data);
@@ -2430,6 +2441,15 @@ function selectStarBoard(name) {
   if (!name) return;
   _starSelBoard = name;
   loadSectorContrib(name);
+}
+
+/* 下拉选择入口：在**下拉框下方**弹浮层（不依赖图上点击命中） */
+function selectStarBoardFromSel(name) {
+  if (!name) return;
+  selectStarBoard(name);
+  const sel = document.getElementById("starBoardSel");
+  const r = sel ? sel.getBoundingClientRect() : { left: 120, bottom: 120 };
+  showStarContribPop(name, r.left, r.bottom + 6);
 }
 
 async function loadSectorContrib(name) {

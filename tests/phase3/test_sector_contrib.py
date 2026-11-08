@@ -125,3 +125,11 @@ def test_点击板块弹出浮层() -> None:
     assert 'id="starContribPop"' in _JS or 'el.id = "starContribPop"' in _JS
     assert "_fillStarPop(name, d);  // 弹出框填充" in _JS
     assert 'onclick="hideStarContribPop()"' in _JS, "浮层要有关闭按钮"
+
+
+def test_下拉选择也能看贡献度() -> None:
+    """点图命中不稳时的兜底：标题栏下拉选板块 → 同样弹浮层。"""
+    assert 'id="starBoardSel"' in _HTML
+    assert 'onchange="if(this.value) selectStarBoardFromSel(this.value)"' in _HTML
+    assert "function selectStarBoardFromSel(name)" in _JS
+    assert "showStarContribPop(name, r.left, r.bottom + 6)" in _JS
