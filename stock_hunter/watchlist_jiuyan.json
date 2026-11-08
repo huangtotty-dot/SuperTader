@@ -104967,16 +104967,17 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "大农业",
-  "jiuyan_concept": "北交所",
+  "jiuyan_concept": "种业-玉米",
   "sector": "种子/种植业/农林牧渔/河南板块/粮食概念/转基因/农业种植/融资融券/机构重仓",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-10-25 04:00:00",
+  "updated_at": "2026-11-08 16:58:18",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'北交所|龙头-北交所种业龙头' → '北交所'",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "北交所": "秋乐种业：玉米/小麦种子（「北交所」只是板块标记）"
-  }
+   "种业-玉米": "秋乐种业：玉米/小麦种子（「北交所」只是板块标记）"
+  },
+  "jiuyan_beijiaosuo_reassigned_20261108": "2026-11-08 16:58:18 由 大农业/北交所 改派为 大农业/种业-玉米（owner 2026-11-08）"
  },
  "920088": {
   "name": "科力股份",
@@ -106609,15 +106610,16 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "大农业",
-  "jiuyan_concept": "北交所",
+  "jiuyan_concept": "种业-玉米",
   "sector": "种子/种植业/农林牧渔/湖北板块/2026中报预增/粮食概念/转基因/农业种植/中药概念/融资融券/机构重仓/基金重仓",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-10-25 04:00:00",
+  "updated_at": "2026-11-08 16:58:18",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "北交所": "康农种业：杂交玉米种子"
-  }
+   "种业-玉米": "康农种业：杂交玉米种子"
+  },
+  "jiuyan_beijiaosuo_reassigned_20261108": "2026-11-08 16:58:18 由 大农业/北交所 改派为 大农业/种业-玉米（owner 2026-11-08）"
  },
  "920405": {
   "name": "海希通讯",
@@ -107649,15 +107651,16 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "大农业",
-  "jiuyan_concept": "北交所",
+  "jiuyan_concept": "牛",
   "sector": "乳品/饮料乳品/食品饮料/内蒙古/味蕾经济/调味品概念/乳业/农业种植/乡村振兴/电商概念/融资融券/西部大开发",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-10-25 04:00:00",
+  "updated_at": "2026-11-08 16:58:18",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "北交所": "骑士乳业：生鲜乳（「北交所」只是板块标记）"
-  }
+   "牛": "骑士乳业：生鲜乳（「北交所」只是板块标记）"
+  },
+  "jiuyan_beijiaosuo_reassigned_20261108": "2026-11-08 16:58:18 由 大农业/北交所 改派为 大农业/牛（owner 2026-11-08）"
  },
  "920790": {
   "name": "联迪信息",
@@ -107855,15 +107858,16 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "大农业",
-  "jiuyan_concept": "北交所",
+  "jiuyan_concept": "农药",
   "sector": "农药/基础化工/农化制品/广东板块/破发股/粮食概念/农业种植/农药兽药/融资融券",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-10-25 04:00:00",
+  "updated_at": "2026-11-08 16:58:18",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "北交所": "绿亨科技：农药制剂"
-  }
+   "农药": "绿亨科技：农药制剂"
+  },
+  "jiuyan_beijiaosuo_reassigned_20261108": "2026-11-08 16:58:18 由 大农业/北交所 改派为 大农业/农药（owner 2026-11-08）"
  },
  "920870": {
   "name": "恒进感应",
@@ -107943,15 +107947,16 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "大农业",
-  "jiuyan_concept": "北交所",
+  "jiuyan_concept": "农机",
   "sector": "农用机械/机械设备/专用设备/河南板块/微利股/专精特新/农业种植/融资融券",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-10-25 04:00:00",
+  "updated_at": "2026-11-08 16:58:18",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "北交所": "花溪科技：打捆机/玉米割台等农机"
-  }
+   "农机": "花溪科技：打捆机/玉米割台等农机"
+  },
+  "jiuyan_beijiaosuo_reassigned_20261108": "2026-11-08 16:58:18 由 大农业/北交所 改派为 大农业/农机（owner 2026-11-08）"
  },
  "920896": {
   "name": "旺成科技",
@@ -108155,15 +108160,16 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "大农业",
-  "jiuyan_concept": "北交所",
+  "jiuyan_concept": "农机",
   "sector": "农业综合Ⅲ/农业综合Ⅱ/农林牧渔/河北板块/专精特新/农业种植/央国企改革/融资融券/工程建设",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-10-25 04:00:00",
+  "updated_at": "2026-11-08 16:58:18",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "北交所": "润农节水：节水灌溉装备与工程"
-  }
+   "农机": "润农节水：节水灌溉装备与工程"
+  },
+  "jiuyan_beijiaosuo_reassigned_20261108": "2026-11-08 16:58:18 由 大农业/北交所 改派为 大农业/农机（owner 2026-11-08）"
  },
  "920970": {
   "name": "大禹生物",
