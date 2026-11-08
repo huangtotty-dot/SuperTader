@@ -6318,6 +6318,16 @@ function renderStockProfile(body, d, live) {
          : `background:rgba(88,166,255,.20);border:1px solid #58a6ff;color:#9ecbff`)
        + `" title="${esc("【研究定性·" + d.local_role + "】" + (d.local_role_reason ? d.local_role_reason + "。" : "") + "按产业链地位核实，与当日涨跌无关。")}">◆${esc(d.local_role)}</span>` : "")
      + ((d.local_concepts && d.local_concepts.length) ? chips(d.local_concepts, d.concept_descs) : none) + "</div>";
+  // 2026-11-08 owner：「在公司资料中补充为什么它跟冰雪经济相关」——
+  // 把逐股「为什么算这个概念」的理由（watchlist.jiuyan_concept_reason）直接铺在资料面板，
+  // 不再只藏在 chip 的悬停提示里。来源与口径由研究/对账写入（例：龙江交通 601188）。
+  const _rs = (d && d.concept_reasons) || {};
+  const _rsKeys = Object.keys(_rs).filter(k => String(_rs[k] || "").trim());
+  if (_rsKeys.length) {
+    h += `<div class="prof-sec"><b>题材关联</b>：`
+      + _rsKeys.map(k => `<div style="margin:2px 0;line-height:1.6">· <b>${esc(k)}</b>：${esc(_rs[k])}</div>`).join("")
+      + `</div>`;
+  }
   if (live) {
     h += `<div class="prof-sec"><b>所属板块</b>`
        + `<span class="prof-note">${esc(d.boards_note || "")}</span>：`;
