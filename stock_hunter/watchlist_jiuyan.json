@@ -1948,15 +1948,17 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "化工",
-  "jiuyan_concept": "农药",
+  "jiuyan_category": "化工|大农业",
+  "jiuyan_concept": "农药|农药",
   "name": "红太阳",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-10-30 21:40:08",
+  "updated_at": "2026-11-08 17:21:26",
   "jiuyan_category1": "化工",
-  "jiuyan_concept1": "农药"
+  "jiuyan_concept1": "农药",
+  "jiuyan_category2": "大农业",
+  "jiuyan_concept2": "农药"
  },
  "000526": {
   "business_summary": "主营其他",
@@ -3063,13 +3065,15 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电力运营",
   "name": "新能股份",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-08 17:21:26",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电力运营"
  },
  "000596": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -8751,13 +8755,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "光学显示",
   "name": "康冠科技",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-08 17:21:26",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学显示"
  },
  "001309": {
   "business_summary": "主营半导体",
@@ -8907,13 +8913,15 @@
   "business_summary": "主营批发业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "低空经济",
+  "jiuyan_concept": "制造链",
   "name": "润贝航科",
   "primary_source": "legacy",
   "sector": "批发业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-08 17:21:26",
+  "jiuyan_category1": "低空经济",
+  "jiuyan_concept1": "制造链"
  },
  "001317": {
   "business_summary": "主营多式联运和运输代理业",
@@ -17556,14 +17564,12 @@
   "primary_source": "legacy",
   "sector": "其他电子Ⅱ/锂电池概念/有机硅概念/消费电子概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-11-08 17:21:26",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "半导体材料-封装材料": "公司真实半导体相关产品包括用于集成电路封装的底部填充胶、聚氨酯反应型热熔胶以及适配IGBT等功率器件的灌封凝胶，属于封装保护和互连辅助材料，不是芯片设计或封装设备。iFinD二〇二五年胶粘剂收入二点八六亿元，占营业收入百分之十四点八四，半导体应用收入没有独立拆分，胶粘剂还服务消费电子及其他工业场景，因此不能把整个胶粘剂分部或公司电子制程业务都算作半导体。考虑已有明确产品用途但收入占比和半导体规模尚不透明，定为相关而非核心。旧标签若泛化为半导体核心材料、电子化学品全部用于芯片，或忽略具体封装用途，应纠正为半导体封装材料。"
   },
-  "jiuyan_category1": "半导体",
-  "jiuyan_concept1": "半导体材料-封装材料",
   "jiuyan_concept_desc": {
    "半导体材料-封装材料": "引线框架、键合丝、塑封料、底填胶和先进封装材料。"
   },
@@ -17594,7 +17600,13 @@
    ],
    "verdict": "相关",
    "reason": "公司真实半导体相关产品包括用于集成电路封装的底部填充胶、聚氨酯反应型热熔胶以及适配IGBT等功率器件的灌封凝胶，属于封装保护和互连辅助材料，不是芯片设计或封装设备。iFinD二〇二五年胶粘剂收入二点八六亿元，占营业收入百分之十四点八四，半导体应用收入没有独立拆分，胶粘剂还服务消费电子及其他工业场景，因此不能把整个胶粘剂分部或公司电子制程业务都算作半导体。考虑已有明确产品用途但收入占比和半导体规模尚不透明，定为相关而非核心。旧标签若泛化为半导体核心材料、电子化学品全部用于芯片，或忽略具体封装用途，应纠正为半导体封装材料。"
-  }
+  },
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "半导体材料-封装材料",
+  "jiuyan_category2": "电池",
+  "jiuyan_concept2": "电解液",
+  "jiuyan_category": "半导体|电池",
+  "jiuyan_concept": "半导体材料-封装材料|电解液"
  },
  "002389": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -21362,17 +21374,21 @@
   "business_summary": "主营有色金属冶炼和压延加工业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "有色金属",
-  "jiuyan_concept": "铝",
+  "jiuyan_category": "有色金属|光伏",
+  "jiuyan_concept": "铝|太空光伏辅材",
   "name": "闽发铝业",
   "primary_source": "legacy",
   "sector": "有色金属冶炼和压延加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-08 17:21:26",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "铝": "主营：建筑铝型材、工业铝型材、建筑铝模板；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "有色金属",
+  "jiuyan_concept1": "铝",
+  "jiuyan_category2": "光伏",
+  "jiuyan_concept2": "太空光伏辅材"
  },
  "002579": {
   "business_summary": "公印制电路板(PCB)的研发、生产、销售与服务。",
@@ -27709,13 +27725,15 @@
   "business_summary": "主营公共设施管理业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "算力租赁",
+  "jiuyan_concept": "算力租赁",
   "name": "侨银股份",
   "primary_source": "legacy",
   "sector": "公共设施管理业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-08 17:21:26",
+  "jiuyan_category1": "算力租赁",
+  "jiuyan_concept1": "算力租赁"
  },
  "002975": {
   "business_summary": "电子测试设备、工业自动化设备的研发、生产和销售。",
@@ -56547,15 +56565,17 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "半导体",
-  "jiuyan_concept": "半导体材料-封装材料",
+  "jiuyan_category": "半导体|光伏",
+  "jiuyan_concept": "半导体材料-封装材料|太空光伏辅材",
   "name": "N贝特利",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-11-04 15:56:49",
+  "updated_at": "2026-11-08 17:21:26",
   "jiuyan_category1": "半导体",
-  "jiuyan_concept1": "半导体材料-封装材料"
+  "jiuyan_concept1": "半导体材料-封装材料",
+  "jiuyan_category2": "光伏",
+  "jiuyan_concept2": "太空光伏辅材"
  },
  "301707": {
   "business_summary": "",
@@ -58522,13 +58542,15 @@
   "business_summary": "主营纺织业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "算力租赁",
+  "jiuyan_concept": "算力租赁",
   "name": "华升股份",
   "primary_source": "legacy",
   "sector": "纺织业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:15:16"
+  "updated_at": "2026-11-08 17:21:26",
+  "jiuyan_category1": "算力租赁",
+  "jiuyan_concept1": "算力租赁"
  },
  "600157": {
   "business_summary": "电力和煤炭业务。",
@@ -59289,13 +59311,15 @@
   "business_summary": "光伏玻璃、浮法玻璃、药用玻璃及管道天然气业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光伏玻璃",
   "name": "安彩高科",
   "primary_source": "legacy",
   "sector": "光伏设备/光热发电/建筑节能/储能",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-08 17:21:26",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光伏玻璃"
  },
  "600208": {
   "business_summary": "主营房地产业",
@@ -60663,18 +60687,22 @@
   "business_summary": "主营卫生",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "医药",
-  "jiuyan_concept": "医疗服务",
+  "jiuyan_category": "医药|大消费",
+  "jiuyan_concept": "医疗服务|大消费_百货零售",
   "name": "大东方",
   "primary_source": "legacy",
   "sector": "卫生",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 01:00:00",
+  "updated_at": "2026-11-08 17:21:26",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
    "医疗服务": "大东方：百货零售为主，医疗服务只是参股"
-  }
+  },
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医疗服务",
+  "jiuyan_category2": "大消费",
+  "jiuyan_concept2": "大消费_百货零售"
  },
  "600328": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -71602,17 +71630,21 @@
   "business_summary": "主营道路运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "冰雪经济",
-  "jiuyan_concept": "旅游消费",
+  "jiuyan_category": "冰雪经济|大消费",
+  "jiuyan_concept": "旅游消费|大消费_冰雪经济",
   "name": "龙江交通",
   "primary_source": "legacy",
   "sector": "道路运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 16:29:51",
+  "updated_at": "2026-11-08 17:21:26",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
    "旅游消费": "冰雪经济：主业哈大高速（哈尔滨—大庆）是冰雪旅游季主要客流通道，公司披露哈尔滨旅游热对哈大高速车流量、子公司龙运现代出租车平均运单额有正向拉动，冬季承担保通保畅与运力保障；但公司明确与冰雪大世界无直接合作业务 ⇒ 属客流受益，非直接标的。"
-  }
+  },
+  "jiuyan_category1": "冰雪经济",
+  "jiuyan_concept1": "旅游消费",
+  "jiuyan_category2": "大消费",
+  "jiuyan_concept2": "大消费_冰雪经济"
  },
  "601198": {
   "business_summary": "主营资本市场服务",
@@ -80350,13 +80382,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光储充",
   "name": "日出东方",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-08 17:21:26",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光储充"
  },
  "603367": {
   "business_summary": "主营医药制造业",
@@ -82594,10 +82628,8 @@
   "primary_source": "legacy",
   "sector": "家电零部件Ⅱ/家用电器/机器人概念/专精特新",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-11-08 17:21:26",
   "jiuyan_tag_source": "2026-10-26 全天涨停复盘（手动补漏）",
-  "jiuyan_category1": "物理AI",
-  "jiuyan_concept1": "物理AI_具身本体",
   "jiuyan_concept_reason": {
    "物理AI_具身本体": "清洁电器及其零部件仍是公司主营，但已取得乐享科技W1、M1机器人OEM/ODM订单，金额4326.28万元，属于家庭具身机器人的真实代工业务，并非无依据新增概念。订单证明其进入整机制造交付环节，但尚不足以构成主营核心，故去除重复标签后迁入物理AI具身本体并定为相关。"
   },
@@ -82636,7 +82668,13 @@
    "reason": "清洁电器及其零部件仍是公司主营，但已取得乐享科技W1、M1机器人OEM/ODM订单，金额4326.28万元，属于家庭具身机器人的真实代工业务，并非无依据新增概念。订单证明其进入整机制造交付环节，但尚不足以构成主营核心，故去除重复标签后迁入物理AI具身本体并定为相关。"
   },
   "jiuyan_tag_verdict": "相关",
-  "jiuyan_tag_evidence": "text"
+  "jiuyan_tag_evidence": "text",
+  "jiuyan_category1": "物理AI",
+  "jiuyan_concept1": "物理AI_具身本体",
+  "jiuyan_category2": "机器人",
+  "jiuyan_concept2": "本体及应用",
+  "jiuyan_category": "物理AI|机器人",
+  "jiuyan_concept": "物理AI_具身本体|本体及应用"
  },
  "603658": {
   "business_summary": "主营医药制造业",
@@ -108952,5 +108990,19 @@
   "jiuyan_category1": "AI应用",
   "jiuyan_concept1": "行业应用软件",
   "updated_at": "2026-10-31 14:24:59"
+ },
+ "300237": {
+  "name": "美晨科技",
+  "business_summary": "",
+  "concept_boards": [],
+  "industry_boards": [],
+  "primary_source": "manual",
+  "sector": "零部件",
+  "sector_type": "manual",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "零部件",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "零部件",
+  "updated_at": "2026-11-08 17:21:26"
  }
 }
