@@ -47606,7 +47606,7 @@
   "primary_source": "legacy",
   "sector": "专业技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-08 09:45:27",
   "jiuyan_tag_source": "2026-10-26 全天涨停复盘（手动补漏）",
   "jiuyan_dataelement_verdict": "错标",
   "jiuyan_dataelement_audited_at": "2026-10-27",
@@ -47623,7 +47623,11 @@
     "数据要素_其他行业数据"
    ],
    "reason": "灵绘、奥创和植物数据库把植物、空间指标用于内部景观生成与文旅设计提效，收入仍来自景观设计和综合文旅项目。未见对外销售数据库、数据订阅或授权运营产品，数字科技不等于数据要素。"
-  }
+  },
+  "jiuyan_category1": "冰雪经济",
+  "jiuyan_concept1": "旅游消费",
+  "jiuyan_category": "冰雪经济",
+  "jiuyan_concept": "旅游消费"
  },
  "300950": {
   "business_summary": "主营专用设备制造业",
