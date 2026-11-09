@@ -66,3 +66,24 @@ def test_前端点击接线():
     assert "onclick=\"showBreadthMembers('${_kind}','${esc(r.name)}','${esc(d)}',event)\"" in _JS
     assert 'renderBreadthTable(themes, dates, { name: "主题", kind: "theme" })' in _JS
     assert 'renderBreadthTable(ai, dates, { name: "分支", kind: "branch" })' in _JS
+
+
+def test_单元格只有一个style且可点击():
+    """2026-11-09 修复：td 里写了两遍 style ⇒ 浏览器只认第一个，底色/字号丢失，
+    看着像"点了没反应"；现在合并成一个 style，onclick 与 cursor 一起给。"""
+    assert 'class="num"${_on} style="text-align:center' in _JS
+    assert 'cursor:${_ok ? "pointer" : "default"};' in _JS
+    assert "style=\"cursor:pointer\" \" + `onclick" not in _JS
+
+
+def test_今日列也可点():
+    assert 'const _todayOn = (_li >= 0 && Number(vals[_li]))' in _JS
+    assert '<td class="num"${_todayOn}><b>' in _JS
+
+
+def test_appjs版本号已刷新():
+    """改 app.js 必须同步 bump index.html 的 ?v=，否则 WebView2 命中旧缓存，
+    新功能"看不见"（本次点击无反应的真凶之一）。"""
+    html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    assert "app.js?v=20261109a" in html
+    assert "app.js?v=20261104b" not in html

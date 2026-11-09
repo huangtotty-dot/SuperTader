@@ -11523,14 +11523,26 @@ function renderBreadthTable(rows, dates, opts) {
       const v = has ? Number(raw) : null;
       const s = has ? _breadthShade(v, vmax) : { bg: "", fg: "" };
       // 2026-11-09 owner：点数字 → 弹层显示当天该主题/分支/板块的涨停个股
-      const _click = has && v ? ` style="cursor:pointer" title="点击查看当天涨停个股" `
-        + `onclick="showBreadthMembers('${_kind}','${esc(r.name)}','${esc(d)}',event)"` : "";
-      return `<td class="num"${_click} style="text-align:center;font-size:11px;min-width:26px;`
+      // ⚠️ 属性只能写一次 style：之前 `_click` 里带一个 style、模板里再带一个，
+      //    浏览器只认第一个 ⇒ 底色/字号全丢（且看着像"点了没反应"）。
+      const _ok = has && v;
+      const _on = _ok ? ` onclick="showBreadthMembers('${_kind}','${esc(r.name)}','${esc(d)}',event)"`
+        + ` title="点击查看当天涨停个股"` : "";
+      return `<td class="num"${_on} style="text-align:center;font-size:11px;min-width:26px;`
+        + `cursor:${_ok ? "pointer" : "default"};`
         + `${s.bg ? `background:${s.bg};` : ""}color:${s.fg}">${has ? (v || "") : ""}</td>`;
     }).join("");
     const d3 = Number(r.delta3) || 0;
+    let _li = -1;
+    for (let i = vals.length - 1; i >= 0; i--) {
+      if (vals[i] !== null && vals[i] !== undefined && vals[i] !== "") { _li = i; break; }
+    }
+    const _todayOn = (_li >= 0 && Number(vals[_li]))
+      ? ` onclick="showBreadthMembers('${_kind}','${esc(r.name)}','${esc(dates[_li])}',event)"`
+        + ` title="点击查看涨停个股" style="cursor:pointer"`
+      : "";
     return `<tr><td style="font-weight:600;white-space:nowrap">${esc(r.name)}</td>${cells}`
-      + `<td class="num"><b>${Number(r.count) || 0}</b></td><td>${_phaseChip(r.phase)}</td>`
+      + `<td class="num"${_todayOn}><b>${Number(r.count) || 0}</b></td><td>${_phaseChip(r.phase)}</td>`
       + `<td class="num cell-dim">${d3 >= 0 ? "+" : ""}${d3}</td>`
       + `<td class="num cell-dim">${Number(r.peak5) || 0}</td></tr>`;
   }).join("");
