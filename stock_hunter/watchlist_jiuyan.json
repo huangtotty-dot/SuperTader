@@ -1248,20 +1248,21 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "发电设备（整机与辅机）",
   "name": "潍柴动力",
   "primary_source": "legacy",
   "sector": "汽车零部件/汽车电子/数据中心/同花顺出海50",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'SOFC|中军-SOFC/燃料电池布局' → 'SOFC'",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "发电设备": "潍柴动力：动力总成主业，燃料电池/SOFC 为新能源板块"
+   "发电设备（整机与辅机）": "潍柴动力：动力总成主业，燃料电池/SOFC 为新能源板块"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：SOFC → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：SOFC → 发电设备"
+  "jiuyan_concept1": "发电设备（整机与辅机）",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 发电设备（整机与辅机）"
  },
  "000400": {
   "business_summary": "为国民经济和社会发展提供能源电力高端技术装备，为清洁能源生产、传输、配送以及高效使用提供全面的技术、产品和服务支撑。",
@@ -2111,12 +2112,12 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "燃机与发电材料零部件",
   "name": "万泽股份",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'燃气轮机|龙头-高温合金叶片' → '燃气轮机'",
   "jiuyan_concept_desc": {
    "燃气轮机": "燃气轮机及配套，发电与舰船动力"
@@ -2124,11 +2125,12 @@
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "发电设备": "万泽股份：高温合金（万泽航空）+微生态"
+   "燃机与发电材料零部件": "万泽股份：高温合金（万泽航空）+微生态"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_concept1": "燃机与发电材料零部件",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "000536": {
   "business_summary": "显示面板、显示模组的研发、生产及销售。",
@@ -9913,20 +9915,21 @@
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "发电设备": "精工科技：碳纤维装备，燃机依赖弱",
-   "碳纤维": "精工科技：碳纤维装备，燃机依赖弱"
+   "碳纤维": "精工科技：碳纤维装备，燃机依赖弱",
+   "燃机与发电材料零部件": "精工科技：碳纤维装备，燃机依赖弱"
   },
+  "jiuyan_category": "电力|低空经济",
+  "jiuyan_concept": "燃机与发电材料零部件|碳纤维",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "燃机与发电材料零部件",
   "jiuyan_category2": "低空经济",
   "jiuyan_concept2": "碳纤维",
-  "jiuyan_category": "电力|低空经济",
-  "jiuyan_concept": "发电设备|碳纤维",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "002007": {
   "business_summary": "主营医药制造业",
@@ -16866,24 +16869,25 @@
   "primary_source": "legacy",
   "sector": "专用设备/核电/海工装备/数据中心",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'燃气轮机|中军-油气装备+燃机' → '燃气轮机'",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "发电设备": "杰瑞股份：油服装备为主，燃气轮机发电为延伸",
-   "油气设备": "杰瑞股份：油服装备龙头（压裂/钻完井）"
+   "油气设备": "杰瑞股份：油服装备龙头（压裂/钻完井）",
+   "燃机与发电材料零部件": "杰瑞股份：油服装备为主，燃气轮机发电为延伸"
   },
   "jiuyan_concept_desc": {
    "石油": "石油产业链：上游勘探开采 → 油服工程 → 装备制造 → 炼化销售，赚钱看油价与资本开支",
    "油气设备": "压裂、采油树、多相计量、分离器等油气专用设备"
   },
+  "jiuyan_category": "电力|石油",
+  "jiuyan_concept": "燃机与发电材料零部件|油气设备",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "燃机与发电材料零部件",
   "jiuyan_category2": "石油",
   "jiuyan_concept2": "油气设备",
-  "jiuyan_category": "电力|石油",
-  "jiuyan_concept": "发电设备|油气设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "002354": {
   "business_summary": "以天星大模型为技术底座，依托数据流量优势，聚焦智能营销、智慧能源、空间智能等领域，构建了AI营销、AI应用分发、AI售电、空间智能MaaS等业务平台，并同步拓展全球化布局，形成以AI能力为核心的业务架构。",
@@ -19818,23 +19822,24 @@
   "primary_source": "legacy",
   "sector": "金属制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "发电设备": "常宝股份：电站锅炉用特种管材",
-   "油气设备": "常宝股份：油井管为一块业务"
+   "油气设备": "常宝股份：油井管为一块业务",
+   "燃机与发电材料零部件": "常宝股份：电站锅炉用特种管材"
   },
   "jiuyan_concept_desc": {
    "石油": "石油产业链：上游勘探开采 → 油服工程 → 装备制造 → 炼化销售，赚钱看油价与资本开支",
    "油气设备": "压裂、采油树、多相计量、分离器等油气专用设备"
   },
+  "jiuyan_category": "电力|石油",
+  "jiuyan_concept": "燃机与发电材料零部件|油气设备",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "燃机与发电材料零部件",
   "jiuyan_category2": "石油",
   "jiuyan_concept2": "油气设备",
-  "jiuyan_category": "电力|石油",
-  "jiuyan_concept": "发电设备|油气设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "002479": {
   "business_summary": "主营电力、热力生产和供应业",
@@ -21841,21 +21846,22 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "燃机与发电材料零部件",
   "name": "豪迈科技",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'燃气轮机|龙头-燃机零部件' → '燃气轮机'",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
-   "发电设备": "豪迈科技：轮胎模具为主"
+   "燃机与发电材料零部件": "豪迈科技：轮胎模具为主"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_concept1": "燃机与发电材料零部件",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "002596": {
   "business_summary": "主营非金属矿物制品业",
@@ -23864,21 +23870,22 @@
   "business_summary": "化学电源、新能源储能、燃料电池、钠离子电池的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_category": "电池",
+  "jiuyan_concept": "锂电池",
   "name": "雄韬股份",
   "primary_source": "legacy",
   "sector": "电池/钠离子电池/动力电池回收/固态电池",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'SOFC|龙头-燃料电池/SOFC' → 'SOFC'",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "发电设备": "雄韬股份：氢燃料电池/电堆，SOFC 同类技术路线"
+   "锂电池": "雄韬股份：氢燃料电池/电堆，SOFC 同类技术路线"
   },
-  "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：SOFC → 发电设备"
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：SOFC → 发电设备",
+  "jiuyan_category1": "电池",
+  "jiuyan_concept1": "锂电池",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 电池/锂电池"
  },
  "002734": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -31506,19 +31513,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "发电设备（整机与辅机）",
   "name": "龙源技术",
   "primary_source": "legacy",
   "sector": "环保设备Ⅱ/雄安新区/碳中和/固废处理",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "发电设备": "龙源技术：低氮燃烧与火电节能改造"
+   "发电设备（整机与辅机）": "龙源技术：低氮燃烧与火电节能改造"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备"
+  "jiuyan_concept1": "发电设备（整机与辅机）",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 发电设备（整机与辅机）"
  },
  "300106": {
   "business_summary": "主营食品制造业",
@@ -44745,14 +44753,14 @@
   "primary_source": "legacy",
   "sector": "铁路、船舶、航空航天和其他运输设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "发电设备": "三角防务：航空锻件",
    "空军": "三角防务：航空锻件",
    "航空结构件与锻铸件": "公司大型模锻件和自由锻件直接用于新一代战斗机、运输机、直升机机身关键结构及国产航空发动机盘件，并进入各大主机厂供应体系；年报明确产品大部分为军用航空锻件，少部分为民用大型锻件，军工产品和主机厂配套均有实证。2025年特种合金锻压收入15.4112亿元、占97.0160%，模锻件14.6334亿元、自由锻件0.7778亿元，其他收入0.4740亿元、占2.9840%，军品未独立拆分但年报明确占大部分。军用航空锻件是绝对核心产品，故维持核心；旧“航空装备-航空锻件”方向正确但仍需产品化，细化为航空结构件与锻铸件并补充航空发动机与燃气轮机。",
-   "航空发动机与燃气轮机": "公司大型模锻件和自由锻件直接用于新一代战斗机、运输机、直升机机身关键结构及国产航空发动机盘件，并进入各大主机厂供应体系；年报明确产品大部分为军用航空锻件，少部分为民用大型锻件，军工产品和主机厂配套均有实证。2025年特种合金锻压收入15.4112亿元、占97.0160%，模锻件14.6334亿元、自由锻件0.7778亿元，其他收入0.4740亿元、占2.9840%，军品未独立拆分但年报明确占大部分。军用航空锻件是绝对核心产品，故维持核心；旧“航空装备-航空锻件”方向正确但仍需产品化，细化为航空结构件与锻铸件并补充航空发动机与燃气轮机。"
+   "航空发动机与燃气轮机": "公司大型模锻件和自由锻件直接用于新一代战斗机、运输机、直升机机身关键结构及国产航空发动机盘件，并进入各大主机厂供应体系；年报明确产品大部分为军用航空锻件，少部分为民用大型锻件，军工产品和主机厂配套均有实证。2025年特种合金锻压收入15.4112亿元、占97.0160%，模锻件14.6334亿元、自由锻件0.7778亿元，其他收入0.4740亿元、占2.9840%，军品未独立拆分但年报明确占大部分。军用航空锻件是绝对核心产品，故维持核心；旧“航空装备-航空锻件”方向正确但仍需产品化，细化为航空结构件与锻铸件并补充航空发动机与燃气轮机。",
+   "燃机与发电材料零部件": "三角防务：航空锻件"
   },
   "jiuyan_concept_desc": {
    "航空结构件与锻铸件": "飞机和航空发动机用结构件、锻铸件、环形件及增材制造复杂零部件。",
@@ -44794,13 +44802,14 @@
    "verdict": "核心",
    "reason": "公司大型模锻件和自由锻件直接用于新一代战斗机、运输机、直升机机身关键结构及国产航空发动机盘件，并进入各大主机厂供应体系；年报明确产品大部分为军用航空锻件，少部分为民用大型锻件，军工产品和主机厂配套均有实证。2025年特种合金锻压收入15.4112亿元、占97.0160%，模锻件14.6334亿元、自由锻件0.7778亿元，其他收入0.4740亿元、占2.9840%，军品未独立拆分但年报明确占大部分。军用航空锻件是绝对核心产品，故维持核心；旧“航空装备-航空锻件”方向正确但仍需产品化，细化为航空结构件与锻铸件并补充航空发动机与燃气轮机。"
   },
+  "jiuyan_category": "电力|军工",
+  "jiuyan_concept": "燃机与发电材料零部件|航空结构件与锻铸件|航空发动机与燃气轮机",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "燃机与发电材料零部件",
   "jiuyan_category2": "军工",
   "jiuyan_concept2": "航空结构件与锻铸件|航空发动机与燃气轮机",
-  "jiuyan_category": "电力|军工",
-  "jiuyan_concept": "发电设备|航空结构件与锻铸件|航空发动机与燃气轮机",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "300776": {
   "business_summary": "激光精密微纳加工解决方案的设计及其配套设备的研发、生产和销售。",
@@ -46811,20 +46820,21 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "燃机与发电材料零部件",
   "name": "盛德鑫泰",
   "primary_source": "legacy",
   "sector": "金属制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "发电设备": "盛德鑫泰：电站用无缝钢管"
+   "燃机与发电材料零部件": "盛德鑫泰：电站用无缝钢管"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备"
+  "jiuyan_concept1": "燃机与发电材料零部件",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "300882": {
   "business_summary": "主营仪器仪表制造业",
@@ -52222,20 +52232,21 @@
   "primary_source": "legacy",
   "sector": "风电设备/航空发动机/大飞机/商业航天",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "发电设备": "飞沃科技：高强度紧固件（风电）",
-   "风电设备": "飞沃科技：高强度紧固件（风电）"
+   "风电设备": "飞沃科技：高强度紧固件（风电）",
+   "燃机与发电材料零部件": "飞沃科技：高强度紧固件（风电）"
   },
   "jiuyan_category": "电力|商业航天",
-  "jiuyan_concept": "发电设备|航天紧固件",
+  "jiuyan_concept": "燃机与发电材料零部件|航天紧固件",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "燃机与发电材料零部件",
   "jiuyan_category2": "商业航天",
   "jiuyan_concept2": "航天紧固件",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "301233": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -59490,16 +59501,17 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:40:21",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "发电设备（整机与辅机）",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "电力设备": "哈空调：电站空冷器"
   },
+  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力/发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_split_20261108": "2026-11-08 19:40:21 电力设备拆分/归位 → 电力/发电设备"
+  "jiuyan_concept1": "发电设备（整机与辅机）",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 发电设备（整机与辅机）"
  },
  "600203": {
   "business_summary": "智能终端产品业务、LED光电业务。",
@@ -69183,22 +69195,23 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "发电设备": "东方电气：能源装备（含火电改造）",
    "加热系统": "东方电气：能源装备（含火电改造）",
    "检测设备": "东方电气：能源装备（含火电改造）",
-   "聚变更新": "东方电气：能源装备（含火电改造）"
+   "聚变更新": "东方电气：能源装备（含火电改造）",
+   "发电设备（整机与辅机）": "东方电气：能源装备（含火电改造）"
   },
+  "jiuyan_category": "电力|可控核聚变",
+  "jiuyan_concept": "发电设备（整机与辅机）|加热系统",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "发电设备（整机与辅机）",
   "jiuyan_category2": "可控核聚变",
   "jiuyan_concept2": "加热系统",
-  "jiuyan_category": "电力|可控核聚变",
-  "jiuyan_concept": "发电设备|加热系统",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 发电设备（整机与辅机）"
  },
  "600876": {
   "business_summary": "主营非金属矿物制品业",
@@ -72172,20 +72185,21 @@
   "primary_source": "legacy",
   "sector": "专业技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
-   "发电设备": "华电科工：物料输送系统工程",
-   "冷却塔": "华电科工：物料输送系统工程"
+   "冷却塔": "华电科工：物料输送系统工程",
+   "发电设备（整机与辅机）": "华电科工：物料输送系统工程"
   },
+  "jiuyan_category": "液冷|电力",
+  "jiuyan_concept": "冷却塔|发电设备（整机与辅机）",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备",
   "jiuyan_category1": "液冷",
   "jiuyan_concept1": "冷却塔",
   "jiuyan_category2": "电力",
-  "jiuyan_concept2": "发电设备",
-  "jiuyan_category": "液冷|电力",
-  "jiuyan_concept": "冷却塔|发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备"
+  "jiuyan_concept2": "发电设备（整机与辅机）",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 发电设备（整机与辅机）"
  },
  "601228": {
   "business_summary": "主营水上运输业",
@@ -75920,20 +75934,21 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "基础化工",
   "name": "振华股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
-   "发电设备": "振华股份：铬盐主业，SOFC 连接体用铬是潜在应用"
+   "基础化工": "振华股份：铬盐主业，SOFC 连接体用铬是潜在应用"
   },
-  "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：SOFC → 发电设备"
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：SOFC → 发电设备",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "基础化工",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 化工/基础化工"
  },
  "603068": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -79830,7 +79845,7 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
@@ -79839,17 +79854,18 @@
    "真空室": "应流股份：高温合金铸件（燃机/航发）",
    "零部件": "应流股份：高温合金铸件（燃机/航发）",
    "动力系统": "应流股份：高温合金铸件（燃机/航发）",
-   "发电设备": "应流股份：高温合金铸件（燃机/航发）"
+   "燃机与发电材料零部件": "应流股份：高温合金铸件（燃机/航发）"
   },
+  "jiuyan_category": "电力|可控核聚变|低空经济",
+  "jiuyan_concept": "燃机与发电材料零部件|超导磁体|零部件",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "燃机与发电材料零部件",
   "jiuyan_category2": "可控核聚变",
   "jiuyan_concept2": "超导磁体",
   "jiuyan_category3": "低空经济",
   "jiuyan_concept3": "零部件",
-  "jiuyan_category": "电力|可控核聚变|低空经济",
-  "jiuyan_concept": "发电设备|超导磁体|零部件",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "603309": {
   "business_summary": "主营专用设备制造业",
@@ -79921,19 +79937,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "燃机与发电材料零部件",
   "name": "福鞍股份",
   "primary_source": "legacy",
   "sector": "生态保护和环境治理业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "发电设备": "福鞍股份：铸锻件，燃气轮机配套"
+   "燃机与发电材料零部件": "福鞍股份：铸锻件，燃气轮机配套"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_concept1": "燃机与发电材料零部件",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "603316": {
   "business_summary": "主营土木工程建筑业",
@@ -87037,20 +87054,21 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "压缩机": "联德股份：精密机械零部件（燃机）",
-   "发电设备": "联德股份：精密机械零部件（燃机）"
+   "燃机与发电材料零部件": "联德股份：精密机械零部件（燃机）"
   },
+  "jiuyan_category": "电力|液冷",
+  "jiuyan_concept": "燃机与发电材料零部件|压缩机",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "燃机与发电材料零部件",
   "jiuyan_category2": "液冷",
   "jiuyan_concept2": "压缩机",
-  "jiuyan_category": "电力|液冷",
-  "jiuyan_concept": "发电设备|压缩机",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "605066": {
   "business_summary": "主营电气机械和器材制造业",
@@ -93798,21 +93816,22 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "燃机与发电材料零部件",
   "name": "隆达股份",
   "primary_source": "legacy",
   "sector": "有色金属冶炼和压延加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'燃气轮机|龙头-高温合金' → '燃气轮机'",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "发电设备": "隆达股份：高温合金"
+   "燃机与发电材料零部件": "隆达股份：高温合金"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_concept1": "燃机与发电材料零部件",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "688232": {
   "business_summary": "主营软件和信息技术服务业",
@@ -93961,14 +93980,14 @@
   "primary_source": "legacy",
   "sector": "铁路、船舶、航空航天和其他运输设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "发电设备": "航宇科技：高端锻件（燃机/航发）",
    "航空装备-环形锻件": "航宇科技：高端锻件（燃机/航发）",
    "航空结构件与锻铸件": "公司专门制造航空难变形金属材料环形锻件，产品用于军用航空发动机机匣、涡轮和连接环等关键部位，也覆盖航天与燃气轮机装备，已进入国内外航空发动机及主机配套链，属于真实批量零部件而非普通金属加工可军用。2025年航空锻件收入14.8109亿元、约占总收入72.83%，燃气轮机锻件2.7812亿元、航天锻件1.1289亿元，锻造行业收入18.9562亿元、占93.2131%；航空产品是绝对主体和重要收入，虽军民航空未独立拆分，规模化核心产品及军工配套明确，故判核心。旧“航空发动机”只描述下游场景，容易误解为公司制造整机发动机，现以航空结构件与锻铸件为产品主标签，并保留航空发动机与燃气轮机作为实际应用分类。",
-   "航空发动机与燃气轮机": "公司专门制造航空难变形金属材料环形锻件，产品用于军用航空发动机机匣、涡轮和连接环等关键部位，也覆盖航天与燃气轮机装备，已进入国内外航空发动机及主机配套链，属于真实批量零部件而非普通金属加工可军用。2025年航空锻件收入14.8109亿元、约占总收入72.83%，燃气轮机锻件2.7812亿元、航天锻件1.1289亿元，锻造行业收入18.9562亿元、占93.2131%；航空产品是绝对主体和重要收入，虽军民航空未独立拆分，规模化核心产品及军工配套明确，故判核心。旧“航空发动机”只描述下游场景，容易误解为公司制造整机发动机，现以航空结构件与锻铸件为产品主标签，并保留航空发动机与燃气轮机作为实际应用分类。"
+   "航空发动机与燃气轮机": "公司专门制造航空难变形金属材料环形锻件，产品用于军用航空发动机机匣、涡轮和连接环等关键部位，也覆盖航天与燃气轮机装备，已进入国内外航空发动机及主机配套链，属于真实批量零部件而非普通金属加工可军用。2025年航空锻件收入14.8109亿元、约占总收入72.83%，燃气轮机锻件2.7812亿元、航天锻件1.1289亿元，锻造行业收入18.9562亿元、占93.2131%；航空产品是绝对主体和重要收入，虽军民航空未独立拆分，规模化核心产品及军工配套明确，故判核心。旧“航空发动机”只描述下游场景，容易误解为公司制造整机发动机，现以航空结构件与锻铸件为产品主标签，并保留航空发动机与燃气轮机作为实际应用分类。",
+   "燃机与发电材料零部件": "航宇科技：高端锻件（燃机/航发）"
   },
   "jiuyan_concept_desc": {
    "航空结构件与锻铸件": "飞机和航空发动机用结构件、锻铸件、环形件及增材制造复杂零部件。",
@@ -94011,14 +94030,15 @@
    "reason": "公司专门制造航空难变形金属材料环形锻件，产品用于军用航空发动机机匣、涡轮和连接环等关键部位，也覆盖航天与燃气轮机装备，已进入国内外航空发动机及主机配套链，属于真实批量零部件而非普通金属加工可军用。2025年航空锻件收入14.8109亿元、约占总收入72.83%，燃气轮机锻件2.7812亿元、航天锻件1.1289亿元，锻造行业收入18.9562亿元、占93.2131%；航空产品是绝对主体和重要收入，虽军民航空未独立拆分，规模化核心产品及军工配套明确，故判核心。旧“航空发动机”只描述下游场景，容易误解为公司制造整机发动机，现以航空结构件与锻铸件为产品主标签，并保留航空发动机与燃气轮机作为实际应用分类。"
   },
   "jiuyan_category": "电力|军工|商业航天",
-  "jiuyan_concept": "发电设备|航空结构件与锻铸件|航空发动机与燃气轮机|火箭环形锻件",
+  "jiuyan_concept": "燃机与发电材料零部件|航空结构件与锻铸件|航空发动机与燃气轮机|火箭环形锻件",
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
+  "jiuyan_concept1": "燃机与发电材料零部件",
   "jiuyan_category2": "军工",
   "jiuyan_concept2": "航空结构件与锻铸件|航空发动机与燃气轮机",
   "jiuyan_category3": "商业航天",
   "jiuyan_concept3": "火箭环形锻件",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "688244": {
   "business_summary": "主营软件和信息技术服务业",
@@ -98422,19 +98442,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "发电设备（整机与辅机）",
   "name": "青达环保",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "发电设备": "青达环保：炉渣处理与火电灵活性改造"
+   "发电设备（整机与辅机）": "青达环保：炉渣处理与火电灵活性改造"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：火电灵活性改造 → 发电设备"
+  "jiuyan_concept1": "发电设备（整机与辅机）",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 发电设备（整机与辅机）"
  },
  "688502": {
   "business_summary": "精密光学器件、光学镜头和光学系统的研发、设计、制造及销售。",
@@ -98616,21 +98637,22 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "电力",
-  "jiuyan_concept": "发电设备",
+  "jiuyan_concept": "燃机与发电材料零部件",
   "name": "航亚科技",
   "primary_source": "legacy",
   "sector": "铁路、船舶、航空航天和其他运输设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-09 08:28:59",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'燃气轮机|龙头-精锻叶片' → '燃气轮机'",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "发电设备": "航亚科技：航空发动机与燃机叶片"
+   "燃机与发电材料零部件": "航亚科技：航空发动机与燃机叶片"
   },
+  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备",
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "发电设备",
-  "jiuyan_power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：燃气轮机 → 发电设备"
+  "jiuyan_concept1": "燃机与发电材料零部件",
+  "jiuyan_power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 燃机与发电材料零部件"
  },
  "688511": {
   "business_summary": "国内为数不多的具备军用灭火抑爆系统自主研发能力并实现量产的公司之一",
