@@ -12595,7 +12595,7 @@ function _mwBuildCells() {
       + extra;
     return `<div class="mw-cell">
       <div class="mw-head">
-        <select class="mw-sel" title="大盘指数，或「持仓 30 分钟风险体检」里的股票"
+        <select class="mw-sel" title="大盘指数，或「持仓股」里的股票"
                 onchange="mwPick(${i}, this.value)">${opts}</select>
         <span class="mw-px" id="mwPx${i}"></span>
       </div>

@@ -199,7 +199,7 @@
       <div id="klResults"></div>
     </div>
     <div class="section" id="ob-analysis">
-      <h2>持仓 30 分钟风险体检（30min 顶部特征 → 减仓/避坑提醒）
+      <h2>持仓股
         <button class="mini-btn" id="obRefreshBtn" onclick="refreshOBNow()"
                 title="只重新拉取最新行情/状态并就地重绘（秒级）；不做任何重算">🔄 刷新</button>
         <!-- 2026-10-21 owner：3×2 的看盘大框，每格一只票的 5 分 K，实时刷新 -->
@@ -614,7 +614,7 @@
         · 10 分就是由它<b>两两配对合成</b>的，所以两档的量能逐根对得上</div>
       <div class="help-sec"><b>【10 分钟】</b>
         · 由 <b>5 分钟两两配对合成</b>（tushare 无原生 10 分钟）：每日 24 根，桶边界 09:40 / 09:50 … 15:00<br>
-        · 与建仓表/持仓体检的「仓位结构」列<b>同一个合成函数</b>（剔除 09:30 竞价棒），10min 阶段与止损口径一致</div>
+        · 与建仓表/持仓股的「仓位结构」列<b>同一个合成函数</b>（剔除 09:30 竞价棒），10min 阶段与止损口径一致</div>
       <div class="help-sec"><b class="warn">【鼠标悬停 / 点击一根 K 线，各字段怎么读】</b>
         · <b>开·高·低·收·涨跌</b>：这一根自己的四个价，涨跌是相对<b>上一根收盘</b><br>
         · <b>成交</b>：这一根的手数（1 手 = 100 股）<br>
@@ -727,6 +727,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261109a"></script>
+<script src="app.js?v=20261109b"></script>
 </body>
 </html>
