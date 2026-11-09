@@ -2206,6 +2206,37 @@ def _focus_save(d: dict) -> None:
         pass
 
 
+# ---- 选股猎手「手动标红加粗」标记（2026-11-09 owner）：t_io/state/hunter_red_marks.json ----
+# 与 focus_stocks.json 同构但**独立文件**：前端猎手每行的「标红」按钮，点一下变红加粗、
+# 再点取消。只影响显示，不参与判定/排序/推送。
+# ⚠️ 落后端而不是只存 localStorage（owner 2026-11-09 实报「标记过，下次扫描后标红消失」）：
+# 猎手扫描可能伴随页面重载 / GUI 重启，localStorage 在 WebView2 下不保证跨会话存活。
+_REDMARK_FP = BASE / "t_io" / "state" / "hunter_red_marks.json"
+_REDMARK_LOCK = threading.Lock()
+
+
+def _redmark_load() -> dict:
+    """读标红表；损坏/缺失 → 空表（绝不抛）。"""
+    try:
+        d = json.loads(_REDMARK_FP.read_text(encoding="utf-8"))
+        if isinstance(d, dict) and isinstance(d.get("codes"), list):
+            return d
+    except Exception:
+        pass
+    return {"codes": []}
+
+
+def _redmark_save(d: dict) -> None:
+    """原子写（tmp + replace）；失败静默（标记丢一次不影响交易）。"""
+    try:
+        _REDMARK_FP.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _REDMARK_FP.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, _REDMARK_FP)
+    except Exception:
+        pass
+
+
 # ---- 周线 MACD 柱子翻红 → 自动标重点关注（2026-10-31 owner）----
 # 「轮巡所有板块一遍」：遍历韭研池（watchlist 里有 jiuyan_category 的票），对每只算
 # **周线 MACD(12,26,9)**；若**上一周柱子 ≤0 且本周 >0**（翻红）⇒ 自动写进 focus_stocks.json。
@@ -13116,6 +13147,36 @@ class Api:
             d["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             _focus_save(d)
         return _clean({"code": c, "on": on, "codes": sorted(codes.keys())})
+
+    # ---------- 选股猎手「手动标红加粗」（2026-11-09 owner）----------
+    # 猎手每行一个「标红」按钮：点一下该股代码+名称变红加粗、再点取消。
+    # 与紫色★独立；只影响显示。落 `t_io/state/hunter_red_marks.json` ⇒
+    # 猎手重跑 / 页面重载 / GUI 重启后仍在（localStorage 只当首屏缓存）。
+    def load_red_marks(self):
+        """标红代码表（前端启动时拉一次）→ {codes: [...]}。"""
+        with _REDMARK_LOCK:
+            d = _redmark_load()
+        return _clean({"codes": sorted(str(c) for c in (d.get("codes") or [])),
+                       "updated_at": d.get("updated_at") or ""})
+
+    def toggle_red_mark(self, code):
+        """切换某只票的标红状态 → {code, on, codes}。幂等、线程安全、原子落盘。"""
+        c = str(code).split("_")[0][:6]
+        if not c:
+            return _clean({"error": "empty code"})
+        with _REDMARK_LOCK:
+            d = _redmark_load()
+            codes = {str(x) for x in (d.get("codes") or [])}
+            if c in codes:
+                codes.discard(c)
+                on = False
+            else:
+                codes.add(c)
+                on = True
+            d["codes"] = sorted(codes)
+            d["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            _redmark_save(d)
+        return _clean({"code": c, "on": on, "codes": sorted(codes)})
 
     # ---------- 周线 MACD 翻红 · 全池轮巡（2026-10-31 owner）----------
     def start_weekly_macd_scan(self, codes=None, mode="red"):

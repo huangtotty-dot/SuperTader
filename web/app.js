@@ -467,6 +467,88 @@ async function toggleFocus(btn) {
   }
 }
 
+/* ===== 选股猎手「手动标红加粗」（2026-11-09 owner）=====
+   「在选股猎手中可以手动点击按钮后 个股的字体标红加粗」：每行一个「标红」小按钮，
+   点一下该股（代码 + 名称）**变红加粗**，再点取消。只影响显示，不参与任何判定 /
+   排序 / 推送；与紫色 ★ 重点关注互不干扰。
+   状态**落后端**（`t_io/state/hunter_red_marks.json`，见下方 loadRedMarks），
+   localStorage 只当首屏缓存 ⇒ 猎手重跑 / 页面重载 / 重启 GUI 后仍在。 */
+const REDMARK_LS_KEY = "hunterRedMarkCodes";
+let REDMARK_SET = new Set();
+try {
+  const _rmSaved = JSON.parse(localStorage.getItem(REDMARK_LS_KEY) || "[]");
+  if (Array.isArray(_rmSaved)) REDMARK_SET = new Set(_rmSaved.map(x => String(x)));
+} catch (e) { /* localStorage 不可用：退化为本次会话内存 */ }
+function isRedMarked(code) { return REDMARK_SET.has(String(code || "").split("_")[0]); }
+function _saveRedMarks() {
+  try { localStorage.setItem(REDMARK_LS_KEY, JSON.stringify(Array.from(REDMARK_SET))); } catch (e) {}
+}
+function redMarkHtml(code) {
+  const c = String(code || "").split("_")[0];
+  const on = REDMARK_SET.has(c);
+  return `<button class="mini-btn markred-btn${on ? " on" : ""}" data-redmark-code="${esc(c)}"`
+    + ` onclick="event.stopPropagation();toggleRedMark(this)"`
+    + ` ondblclick="event.stopPropagation()"`
+    + ` title="${on ? "已标红加粗（再点此按钮取消）" : "手动标红加粗该股（只影响显示，不参与判定）"}">${on ? "取消" : "标红"}</button>`;
+}
+function syncRedMarks() {
+  document.querySelectorAll("button.markred-btn[data-redmark-code]").forEach(btn => {
+    const c = btn.getAttribute("data-redmark-code");
+    const on = REDMARK_SET.has(c);
+    btn.classList.toggle("on", on);
+    btn.textContent = on ? "取消" : "标红";
+    btn.title = on ? "已标红加粗（再点此按钮取消）" : "手动标红加粗该股（只影响显示，不参与判定）";
+    const tr = btn.closest("tr");
+    if (tr) tr.classList.toggle("mark-red", on);
+  });
+}
+/* 后端持久化（2026-11-09）：owner 实报「标记过，下次扫描后标红消失」——
+   猎手扫描可能伴随页面重载 / GUI 重启，localStorage 在 WebView2 下不保证跨会话存活。
+   改为后端 `load_red_marks / toggle_red_mark` 落 `t_io/state/hunter_red_marks.json`，
+   localStorage 只当**首屏缓存**（桥未就绪时先用它把颜色画出来，再以后端为准）。 */
+async function loadRedMarks() {
+  try {
+    const r = await apiCall("load_red_marks");
+    if (!r || !Array.isArray(r.codes)) return;
+    const server = new Set(r.codes.map(String));
+    if (!r.updated_at && REDMARK_SET.size) {
+      // 后端还没有标红文件（本次升级后首次）⇒ 把 localStorage 里的旧标记补写过去
+      for (const c of Array.from(REDMARK_SET)) {
+        if (!server.has(c)) {
+          try { const rr = await apiCall("toggle_red_mark", c); if (rr && Array.isArray(rr.codes)) rr.codes.forEach(x => server.add(String(x))); } catch (e) {}
+        }
+      }
+    }
+    REDMARK_SET = server;
+    _saveRedMarks();
+    syncRedMarks();
+  } catch (e) { /* 旧后端没有 load_red_marks：沿用 localStorage 缓存 */ }
+}
+async function toggleRedMark(btn) {
+  const c = btn && btn.getAttribute("data-redmark-code");
+  if (!c) return;
+  const was = REDMARK_SET.has(c);
+  // 先乐观更新（点击立刻变红/取消），后端失败再回滚
+  if (was) REDMARK_SET.delete(c); else REDMARK_SET.add(c);
+  _saveRedMarks();
+  syncRedMarks();
+  try {
+    const r = await apiCall("toggle_red_mark", c);
+    if (r && Array.isArray(r.codes)) {
+      REDMARK_SET = new Set(r.codes.map(String));
+      _saveRedMarks();
+      syncRedMarks();
+    } else if (r && r.error) {
+      throw new Error(r.error);
+    }
+  } catch (e) {
+    if (was) REDMARK_SET.add(c); else REDMARK_SET.delete(c);
+    _saveRedMarks();
+    syncRedMarks();
+    statusEl("标红标记失败：" + (e && e.message || e), true);
+  }
+}
+
 function todayStr() {
   const d = new Date();
   const p = n => String(n).padStart(2, "0");
@@ -10414,16 +10496,16 @@ function renderHunter(h) {
       const _stageTxt = dayStageBadgeHtml(s.build_stage) || '<span class="cell-dim">—</span>';
       const _stageSlope = (s.build_stage_slope20 == null || isNaN(Number(s.build_stage_slope20)))
         ? "" : ` MA60 20日变化 ${Number(s.build_stage_slope20) > 0 ? "+" : ""}${Number(s.build_stage_slope20).toFixed(2)}%。`;
-      return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
+      return `<tr class="h-expand-row${isRedMarked(s.code) ? " mark-red" : ""}" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
-        <td title="双击看技术分析">${focusStarHtml(s.code)}${esc(s.name)}${(() => {
+        <td title="双击看技术分析">${focusStarHtml(s.code)}<span class="stock-name">${esc(s.name)}</span>${(() => {
           const tv = tagVerdicts[s.code];
           if (!tv) return "";
           const tip = `标签相关度：${tv[0]}${tv[1] ? "｜" + tv[1] : ""}`;
           return `<span class="h-verdict v-${esc(tv[0])}" title="${esc(tip)}">${esc(tv[0])}</span>`;
         })()} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
-          title="加入建仓股池监控买点">+股池</button>${powerTypeBadge(s.power_type)}</td>
+          title="加入建仓股池监控买点">+股池</button>${redMarkHtml(s.code)}${powerTypeBadge(s.power_type)}</td>
         <!-- 2026-10-22 owner：市值挪到名称右边（放在「价」旁边太靠右，注意不到） -->
         <td class="num h-mktcap" data-hcode="${esc(s.code)}" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。随行情 10s 刷新">${hunterMktcapHtml(null)}</td>
         <td style="text-align:center;white-space:nowrap">${tierBadge(s.tier, s.tier_static, s.tier_reason)}</td>
@@ -11885,6 +11967,7 @@ async function init() {
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
+  loadRedMarks();          // 2026-11-09：猎手「标红」标记（后端持久化，跨重载/重启）
   loadWeeklyMacdLastStatus();
   _vpSyncButtons();   // 密集成交区按钮按 localStorage 里的持久状态显示（默认关）
   dateSelect = document.getElementById("dateSelect");

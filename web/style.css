@@ -789,6 +789,16 @@ body.twin-winmode #turnoverWinTitle { cursor: default; }
 .focus-star.on .focus-ago { font-size: 9px; margin-left: 1px; opacity: .92; font-weight: 600; }
 tr.focus-row td:first-child { box-shadow: inset 3px 0 0 var(--focus-c, #8250df); }
 
+/* ===== 选股猎手「手动标红加粗」（2026-11-09 owner）=====
+   每行一个「标红」小按钮：点一下该股（代码 + 名称）变红加粗，再点取消。
+   只改显示，不参与判定/排序/推送；状态落后端
+   （`t_io/state/hunter_red_marks.json`，localStorage 仅首屏缓存）⇒ 猎手重跑、
+   页面重载、重启 GUI 后仍在。 */
+.markred-btn { font-size: 10px; padding: 0 5px; margin-left: 2px; }
+.markred-btn.on { color: var(--red); border-color: var(--red); background: var(--red-bg); font-weight: 700; }
+tr.mark-red .stock-name { color: var(--red); font-weight: 700; }
+tr.mark-red td:first-child { color: var(--red); font-weight: 700; }
+
 /* 风向标「周线 MACD」标记（2026-10-31 owner）：红柱=紫色色块（深浅同重点关注色带），
    绿柱=灰块。9px 小字，贴在股票名右侧，不占列。 */
 .wm-chip { display: inline-block; font-size: 9px; line-height: 14px; padding: 0 4px;
