@@ -336,6 +336,48 @@ AI_CHAIN_ROWS = [
 ]
 
 
+def members_of(kind: str, label: str, date: str, store: dict | None = None) -> dict:
+    """某主题/分支/原始板块在**某一天**的涨停成员（广度表点数字看个股用，2026-11-09）。
+
+    kind: theme（THEMES 主题）| branch（AI_CHAIN_ROWS 分支）| section（复盘原始分段）
+    同一只票出现在多个分段时按代码去重，board 取最大值，sections 记归属。
+    """
+    store = store if store is not None else load_store()
+    # ⚠️ 复盘库的 days 键是 **YYYY-MM-DD**（带横线），不要再去掉横线
+    ymd = str(date or "").strip()
+    days = store.get("days") or {}
+    if ymd not in days:
+        return {"available": False, "error": f"{date} 没有复盘数据", "members": [], "count": 0}
+    if kind == "branch":
+        secs = next((list(ss) for lb, ss, _ in AI_CHAIN_ROWS if lb == label), None)
+        if secs is None:
+            secs = [label]
+    elif kind == "theme":
+        secs = []
+        for c in THEMES.get(label, []):
+            secs.extend(CATEGORY_SECTIONS.get(c, [c]))
+    else:
+        secs = [label]
+    got: dict = {}
+    for sec in secs:
+        v = (days[ymd].get("sections") or {}).get(sec) or {}
+        for m in (v.get("members") or []):
+            code = str((m or {}).get("code") or "")
+            if not code:
+                continue
+            d = got.setdefault(code, {"code": code, "name": str((m or {}).get("name") or code),
+                                      "board": 0, "sections": []})
+            try:
+                d["board"] = max(d["board"], int((m or {}).get("board") or 0))
+            except Exception:
+                pass
+            if sec not in d["sections"]:
+                d["sections"].append(sec)
+    out = sorted(got.values(), key=lambda x: (-x["board"], x["name"]))
+    return {"available": True, "kind": kind, "label": label, "date": ymd,
+            "sections": secs, "members": out, "count": len(out)}
+
+
 def snapshot(asof: str | None = None, max_days: int = 25) -> dict:
     """给 GUI 用：真实交易日横轴 + 各主题广度/阶段 + 各分类阶段 + AI链内部分支。
 

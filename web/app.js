@@ -11471,7 +11471,46 @@ function _phaseChip(ph) {
   return `<span class="h-stage-badge ${cls}" style="font-size:11px;white-space:nowrap">${esc(ph || "—")}</span>`;
 }
 
+/* 2026-11-09 owner：点广度表的数字 → 弹层列出当天该主题/分支/板块的涨停个股。
+   复用星轨图的浮层节点（_ensureStarPop/_placeStarPop）；关闭走 hideStarContribPop。 */
+async function showBreadthMembers(kind, label, date, ev) {
+  const el = _ensureStarPop();
+  const x = (ev && ev.clientX) || 160;
+  const y = (ev && ev.clientY) || 160;
+  const head = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">`
+    + `<b>${esc(label)}</b><span class="cell-dim" style="font-size:11px">${esc(date)} 涨停</span>`
+    + `<span style="margin-left:auto;cursor:pointer;color:#6b7280;font-size:14px;line-height:1"`
+    + ` onclick="hideStarContribPop()" title="关闭">×</span></div>`;
+  el.innerHTML = head + `<div class="cell-dim" style="font-size:11px">加载中…</div>`;
+  _placeStarPop(x, y);
+  try {
+    const r = await apiCall("get_theme_members", kind, label, date);
+    if (!r || !r.available) {
+      el.innerHTML = head + `<div class="cell-dim" style="font-size:11px">${esc((r && r.error) || "无数据")}</div>`;
+      _placeStarPop(x, y);
+      return;
+    }
+    const rows = (r.members || []).map(m => {
+      const b = Number(m.board) || 0;
+      const secs = (m.sections || []).length > 1
+        ? ` <span class="cell-dim" style="font-size:10px">(${esc(m.sections.join("/"))})</span>` : "";
+      return `<div style="margin:2px 0">· <b>${esc(m.name)}</b> `
+        + `<span class="cell-dim">${esc(m.code)}</span>`
+        + (b > 1 ? ` <span class="up" style="font-size:11px">${b}板</span>` : "") + secs + `</div>`;
+    }).join("");
+    el.innerHTML = head + `<div style="max-height:320px;overflow:auto;font-size:12px">`
+      + (rows || `<div class="cell-dim">当天该${kind === "theme" ? "主题" : (kind === "branch" ? "分支" : "板块")}没有录入成员</div>`)
+      + `</div>`
+      + `<div class="cell-dim" style="font-size:10px;margin-top:4px">共 ${Number(r.count) || 0} 只 · 板块：${esc((r.sections || []).join(" / "))}</div>`;
+    _placeStarPop(x, y);
+  } catch (e) {
+    el.innerHTML = head + `<span class="down" style="font-size:11px">取数失败：${esc(e.message || e)}</span>`;
+    _placeStarPop(x, y);
+  }
+}
+
 function renderBreadthTable(rows, dates, opts) {
+  const _kind = (opts && opts.kind) || "section";
   const vmax = Math.max(1, ...rows.flatMap(r => (r.series || []).map(v => Number(v) || 0)));
   const head = `<tr><th style="text-align:left">${esc((opts && opts.name) || "板块")}</th>`
     + dates.map(d => `<th class="num" style="font-size:10px;font-weight:400">${esc(d.slice(5))}</th>`).join("")
@@ -11483,7 +11522,10 @@ function renderBreadthTable(rows, dates, opts) {
       const has = raw !== null && raw !== undefined && raw !== "";
       const v = has ? Number(raw) : null;
       const s = has ? _breadthShade(v, vmax) : { bg: "", fg: "" };
-      return `<td class="num" style="text-align:center;font-size:11px;min-width:26px;`
+      // 2026-11-09 owner：点数字 → 弹层显示当天该主题/分支/板块的涨停个股
+      const _click = has && v ? ` style="cursor:pointer" title="点击查看当天涨停个股" `
+        + `onclick="showBreadthMembers('${_kind}','${esc(r.name)}','${esc(d)}',event)"` : "";
+      return `<td class="num"${_click} style="text-align:center;font-size:11px;min-width:26px;`
         + `${s.bg ? `background:${s.bg};` : ""}color:${s.fg}">${has ? (v || "") : ""}</td>`;
     }).join("");
     const d3 = Number(r.delta3) || 0;
@@ -11524,11 +11566,11 @@ async function loadReviewBreadth(date) {
     body.innerHTML = `
       <div class="cell-dim" style="font-size:10px;margin-bottom:4px">← 横向滚动查看更早的交易日 →</div>
       <div class="cell-dim" style="font-size:11px;margin-bottom:4px">主题聚合（跨分类）</div>
-      ${renderBreadthTable(themes, dates, { name: "主题" })}
+      ${renderBreadthTable(themes, dates, { name: "主题", kind: "theme" })}
       <div class="cell-dim" style="font-size:11px;margin:10px 0 4px">AI链内部分支</div>
-      ${renderBreadthTable(ai, dates, { name: "分支" })}
+      ${renderBreadthTable(ai, dates, { name: "分支", kind: "branch" })}
       ${others.length ? `<div class="cell-dim" style="font-size:11px;margin:10px 0 4px">其他板块（按窗口总量前12）</div>
-        ${renderBreadthTable(others, dates, { name: "板块" })}` : ""}
+        ${renderBreadthTable(others, dates, { name: "板块", kind: "section" })}` : ""}
       <div class="cell-dim" style="font-size:10px;margin-top:6px">
         数字=当日该板块涨停家数；<b>空白=该交易日未录入复盘图（不是0）</b>；
         阶段＝首现/发酵/高潮/退潮/扩散（口径见 <code>modules/sector_phase.py</code>）。

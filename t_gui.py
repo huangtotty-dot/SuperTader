@@ -11584,6 +11584,14 @@ class Api:
             return {"error": str(e), "asof": "", "dates": [], "themes": [],
                     "ai_chain": [], "categories": {}}
 
+    def get_theme_members(self, kind="theme", label="", date=""):
+        """广度表点数字 → 当天该主题/分支/板块的涨停个股（2026-11-09 owner）。"""
+        try:
+            from modules.sector_phase import members_of
+            return members_of(str(kind or "theme"), str(label or ""), str(date or ""))
+        except Exception as e:
+            return {"available": False, "error": str(e), "members": [], "count": 0}
+
     def get_margin_balance(self, days=30):
         """近 N 日两融余额（融资融券余额），供每日复盘两融面板（2026-08-29）。"""
         try:

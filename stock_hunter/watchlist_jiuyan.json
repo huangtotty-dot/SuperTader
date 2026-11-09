@@ -273,13 +273,15 @@
   "business_summary": "主营饰品",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "减速器",
   "name": "飞亚达",
   "primary_source": "legacy",
   "sector": "饰品/减速器/央企国企改革",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-09 15:40:38",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "减速器"
  },
  "000027": {
   "business_summary": "主营电力",
@@ -8990,15 +8992,17 @@
   "business_summary": "主营批发业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "低空经济",
-  "jiuyan_concept": "制造链",
+  "jiuyan_category": "低空经济|商业航天",
+  "jiuyan_concept": "制造链|航天材料与增材制造",
   "name": "润贝航科",
   "primary_source": "legacy",
   "sector": "批发业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 17:21:26",
+  "updated_at": "2026-11-09 15:40:38",
   "jiuyan_category1": "低空经济",
-  "jiuyan_concept1": "制造链"
+  "jiuyan_concept1": "制造链",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "航天材料与增材制造"
  },
  "001317": {
   "business_summary": "主营多式联运和运输代理业",
@@ -9183,7 +9187,7 @@
   "primary_source": "legacy",
   "sector": "燃气生产和供应业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-11-09 15:40:38",
   "jiuyan_tag_source": "2026-10-26 全天涨停复盘（手动补漏）",
   "jiuyan_robot_physicalai_verdicts": {},
   "jiuyan_robot_physicalai_audited_at": "2026-10-27",
@@ -9206,7 +9210,11 @@
    "verdict": "摘除",
    "category_verdicts": {},
    "reason": "上市主体现阶段仍从事LNG采购、运输、销售及运输服务，没有机器人本体或应用产品。七腾机器人通过协议转让和要约收购成为控股股东，仅代表控制权变化，不代表机器人资产或业务已经注入；公司亦明确提示不涉及机器人业务，故摘除并消除重复标签。"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "本体及应用",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用"
  },
  "001332": {
   "business_summary": "主营金属制品业",
@@ -9536,7 +9544,7 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 12:23:00",
+  "updated_at": "2026-11-09 15:40:38",
   "jiuyan_commercial_space_audited_at": "2026-10-27",
   "jiuyan_commercial_space_evidence": {
    "title": "腾达科技：关于航空航天领域合作的互动答复",
@@ -9556,7 +9564,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司实际产品是不锈钢螺栓、螺母、螺杆、垫圈等通用紧固件，主要面向通用工业和民用市场。2025年紧固件行业收入18.6918亿元，螺栓、螺母和螺杆分别为10.8206亿元、3.5936亿元和1.8476亿元，未披露商业航天或火箭收入，也没有独立可辨认的航天客户收入。公司在互动答复中明确表示暂未直接与航空航天领域客户开展合作，这直接否定了把潜在用途当成现实供应关系的做法。不锈钢紧固件在物理上可能用于火箭，并不等于公司已经进入火箭供应链，更不存在可核验的型号配套、订单或批量交付。因此旧“火箭、相关”属于通用产品可上天的推断，必须摘除，不能以未来潜在客户或行业想象空间保留。"
-  }
+  },
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "火箭结构与紧固件",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "火箭结构与紧固件"
  },
  "001380": {
   "business_summary": "主营通用设备制造业",
@@ -19975,13 +19987,15 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "轮毂",
   "name": "金固股份",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-09 15:40:38",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "轮毂"
  },
  "002489": {
   "business_summary": "主营家具制造业",
@@ -22563,13 +22577,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "勤上股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-09 15:40:38",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED"
  },
  "002639": {
   "business_summary": "主营通用设备制造业",
@@ -27223,7 +27239,7 @@
   "primary_source": "legacy",
   "sector": "通用设备/长安汽车概念/机器人概念/新能源汽车",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-11-09 15:40:38",
   "jiuyan_robot_physicalai_verdicts": {},
   "jiuyan_robot_physicalai_audited_at": "2026-10-27",
   "jiuyan_robot_physicalai_evidence": {
@@ -27245,7 +27261,11 @@
    "verdict": "摘除",
    "category_verdicts": {},
    "reason": "优必选控股不等于上市公司已形成机器人业务。2026年上半年新锋龙尚未注资经营，8100万元关联销售预案虽聚焦机电组件和结构件，但报告期未形成收入；公司缺少可核验的机器人产品交付、量产和销售，原泛零部件标签依据不足，故摘除。"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件"
  },
  "002933": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -52119,7 +52139,7 @@
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-11-09 15:40:38",
   "jiuyan_semiconductor_audited_at": "2026-10-27",
   "jiuyan_semiconductor_evidence": {
    "title": "常州祥明智能动力股份有限公司2025年年度报告",
@@ -52139,7 +52159,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司真实主营是微特电机、风机及智能化组件的研发、生产和销售，产品包括交流异步电机、直流有刷及无刷电机、离心风机、横流风机和轴流风机，主要属于通用电气机械与器材，不是半导体工艺设备、测试设备或设备专用核心零部件。2025年总收入5.0796亿元，其中风机收入2.6395亿元，占51.96%；交流异步电机1.3506亿元、直流无刷电机0.5750亿元、直流有刷电机0.2785亿元，收入结构进一步证明主业为通用电机风机。年报未披露半导体设备客户、订单、专用产品或相应收入，不能仅凭电机、风机理论上可用于厂房通风或设备散热就建立半导体暴露。按通用业务和潜在用途不计入的规则，本次摘除旧“半导体设备”标签，不保留任何半导体概念。"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "电机",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "电机"
  },
  "301227": {
   "business_summary": "主营木材加工和木、竹、藤、棕、草制品业",
@@ -67919,13 +67943,15 @@
   "business_summary": "信息通信、金融科技、智能制造、资产经营业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "卫星通信终端与天线",
   "name": "东方通信",
   "primary_source": "legacy",
   "sector": "通信设备/卫星导航/商业航天",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-09 15:40:38",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "卫星通信终端与天线"
  },
  "600777": {
   "business_summary": "",
@@ -83097,13 +83123,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI视觉",
   "name": "苏州科达",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-09 15:40:38",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI视觉"
  },
  "603661": {
   "business_summary": "主营其他",
@@ -83546,18 +83574,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "化工",
-  "jiuyan_concept": "薄膜材料",
+  "jiuyan_category": "化工|机器人",
+  "jiuyan_concept": "薄膜材料|材料",
   "name": "晶华新材",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-09 15:40:38",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "薄膜材料": "主营：胶粘功能性材料；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "薄膜材料",
+  "jiuyan_category2": "机器人",
+  "jiuyan_concept2": "材料"
  },
  "603685": {
   "business_summary": "主营电气机械和器材制造业",
@@ -83824,13 +83856,15 @@
   "business_summary": "主营燃气生产和供应业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电力运营",
   "name": "东方环宇",
   "primary_source": "legacy",
   "sector": "燃气生产和供应业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-09 15:40:38",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电力运营"
  },
  "603707": {
   "business_summary": "主营医药制造业",
@@ -100159,7 +100193,7 @@
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-11-09 15:40:38",
   "jiuyan_concept_note": "智元机器人控股63.62%，'启元'品牌消费级机器人2026年9月发售，2025年A股涨幅冠军，智元链最正宗A股标的",
   "jiuyan_robot_physicalai_verdicts": {},
   "jiuyan_robot_physicalai_audited_at": "2026-10-27",
@@ -100182,7 +100216,11 @@
    "verdict": "摘除",
    "category_verdicts": {},
    "reason": "公司2025年组建消费级具身机器人团队并形成小型人形样机，2026年推出启元Q1、T1，说明并非完全无产品证据。但机器人仍处研发阶段，尚未量产，也未形成收入和利润，新材料主业未改变，按研发预期和边缘标签应摘除的规则取消分类。"
-  }
+  },
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "改性材料",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "改性材料"
  },
  "688586": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -109023,15 +109061,17 @@
  },
  "301718": {
   "name": "N通则",
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "卫星通信终端与天线",
   "concept_boards": [],
   "industry_boards": [],
   "business_summary": "",
   "sector": "",
   "sector_type": "manual_add",
   "primary_source": "manual_add",
-  "updated_at": "2026-10-22 00:00:00"
+  "updated_at": "2026-11-09 15:40:38",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "卫星通信终端与天线"
  },
  "603517": {
   "name": "绝味食品",
