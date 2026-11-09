@@ -1403,19 +1403,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
+  "jiuyan_concept": "智能装备与机床",
   "name": "沈阳机床",
   "primary_source": "legacy",
   "sector": "通用设备/工业母机/高端装备/工业互联网",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_concept_reason": {
-   "设备与集成": "沈阳机床：加工设备（设备与集成）"
+   "智能装备与机床": "沈阳机床：加工设备（设备与集成）"
   },
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "000411": {
   "business_summary": "主营医药商业",
@@ -11285,18 +11286,19 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
+  "jiuyan_concept": "智能装备与机床",
   "name": "软控股份",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_concept_reason": {
-   "设备与集成": "软控股份：专用设备（设备与集成）"
+   "智能装备与机床": "软控股份：专用设备（设备与集成）"
   },
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "002074": {
   "business_summary": "主营电池",
@@ -20566,12 +20568,12 @@
   "primary_source": "legacy",
   "sector": "通用设备/减速器/工业母机/航空发动机",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "零部件": "日发精机：高端数控机床，丝杠/轴承加工设备",
-   "设备与集成": "日发精机：丝杠设备（设备与集成）"
+   "智能装备与机床": "日发精机：丝杠设备（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "丝杠设备": "用于丝杠及螺母螺纹、滚道精密加工的车磨专用装备，属于上游制造设备。"
@@ -20607,13 +20609,14 @@
    },
    "reason": "主营数字化智能机床、柔性产线及航空航天智能装备，SK76系列数控内螺纹磨床等用于行星滚柱丝杠副精密加工，直接对应机器人传动零件制造装备；首台丝杠加工设备已于2025年8月交付，具有实际交付证据，但机器人相关装备仍属机床业务一角，故定相关。"
   },
+  "jiuyan_category": "低空经济|机器人",
+  "jiuyan_concept": "零部件|智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
   "jiuyan_category1": "低空经济",
   "jiuyan_concept1": "零部件",
   "jiuyan_category2": "机器人",
-  "jiuyan_concept2": "设备与集成",
-  "jiuyan_category": "低空经济|机器人",
-  "jiuyan_concept": "零部件|设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept2": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "002521": {
   "business_summary": "主营造纸和纸制品业",
@@ -20683,19 +20686,20 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
+  "jiuyan_concept": "智能装备与机床",
   "name": "山东矿机",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_concept_reason": {
-   "设备与集成": "山东矿机：自动化集成（设备与集成）"
+   "智能装备与机床": "山东矿机：自动化集成（设备与集成）"
   },
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "002527": {
   "business_summary": "海尔集团旗下，电梯控制器、SCARA机器人市占率国内领先",
@@ -35207,11 +35211,11 @@
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "设备与集成": "慈星股份：自动化集成（设备与集成）"
+   "智能装备与机床": "慈星股份：自动化集成（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "自动化集成": "以机器人、控制系统和物流/制造装备完成产线或系统方案设计、集成、调试和验收，不等同机器人本体制造。"
@@ -35247,11 +35251,12 @@
    },
    "reason": "2025年自动化设备与项目集成收入2659.87万元、占1.37%，说明相关业务已有真实销售，但电脑针织横机收入仍占89.88%。公司披露的业务实质是自动化设备及项目集成，并非机器人本体制造，旧本体口径过宽；业务已商业化但占比较低，故纠错为自动化集成并判相关。"
   },
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "300308": {
   "business_summary": "全球领先的光模块解决方案提供商，2024年光模块厂商排名全球第一",
@@ -39191,11 +39196,11 @@
   "primary_source": "legacy",
   "sector": "金属制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "设备与集成": "恒锋工具：加工刀具（设备与集成）"
+   "智能装备与机床": "恒锋工具：加工刀具（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "加工刀具": "用于丝杠、减速器等机器人零件加工的专用刀具和量检具，属于制造耗材而非机器人零件。"
@@ -39231,11 +39236,12 @@
    },
    "reason": "公司主营精密复杂刃量具，机器人关联产品是丝杠、减速器零部件加工所需刀具及量检具，属于上游制造耗材而非机器人零件本体；2025年已有小部分产品小批量供货，2026年披露相关订单约2000万元，但相对整体营收仍较小，具备真实业务基础而不足以定核心。"
   },
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "300489": {
   "business_summary": "红外光学器件、高性能铝合金材料研发、生产和销售。",
@@ -45768,13 +45774,13 @@
   "primary_source": "legacy",
   "sector": "通用设备/工业母机/人形机器人",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'丝杠设备|龙头-丝杠磨床设备' → '丝杠设备'",
   "jiuyan_role": "龙头",
   "jiuyan_role_reason": "丝杠磨床'卖铲人'：国内轧辊磨床市占第一（全球前三），P0级丝杠磨床打破海外垄断，2025年3月获福立旺100台订单约1.8亿元（2025年东吴/浙商/华创研报）",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "设备与集成": "华辰装备：丝杠设备（设备与集成）"
+   "智能装备与机床": "华辰装备：丝杠设备（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "丝杠设备": "用于丝杠及螺母螺纹、滚道精密加工的车磨专用装备，属于上游制造设备。"
@@ -45811,11 +45817,12 @@
    "reason": "公司主营高端磨削装备，机器人关联产品为精密内外螺纹磨床，直接用于行星滚柱丝杠等零件的螺纹加工，本身是制造设备而非丝杠；已与福立旺签订100台设备订单，具有明确商业订单和交付基础，但属于新拓展的上游设备业务，占公司整体业务仍有限，故保留相关。"
   },
   "jiuyan_tag_evidence": "text",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "300810": {
   "business_summary": "主营软件和信息技术服务业",
@@ -50235,18 +50242,19 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
+  "jiuyan_concept": "智能装备与机床",
   "name": "邵阳液压",
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_concept_reason": {
-   "设备与集成": "邵阳液压：工程机械液压件（设备与集成）"
+   "智能装备与机床": "邵阳液压：工程机械液压件（设备与集成）"
   },
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "301080": {
   "business_summary": "主营研究和试验发展",
@@ -51943,11 +51951,11 @@
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "设备与集成": "迈赫股份：自动化集成（设备与集成）"
+   "智能装备与机床": "迈赫股份：自动化集成（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "自动化集成": "以机器人、控制系统和物流/制造装备完成产线或系统方案设计、集成、调试和验收，不等同机器人本体制造。"
@@ -51983,11 +51991,12 @@
    },
    "reason": "公司专业从事基于机器人和物联网技术的高端智能装备系统，向汽车等客户提供焊装、涂装等定制系统，完成设计、制造集成、安装调试和终验交付；2025年智能装备系统及动力能源供应系统收入占96.31%，系统集成为明确主营，但其并非人形机器人本体厂，故纠正概念并定核心。"
   },
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "301200": {
   "business_summary": "PCB专用设备的研发、生产和销售。",
@@ -60072,11 +60081,11 @@
   "primary_source": "legacy",
   "sector": "自动化设备/数字经济/装配式建筑/人工智能",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "设备与集成": "派斯林：自动化集成（设备与集成）"
+   "智能装备与机床": "派斯林：自动化集成（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "自动化集成": "以机器人、控制系统和物流/制造装备完成产线或系统方案设计、集成、调试和验收，不等同机器人本体制造。"
@@ -60112,11 +60121,12 @@
    },
    "reason": "公司主营汽车焊装、智能仓储等工业自动化产线的规划、设计、制造、安装调试及售后，业务包含机器人模拟仿真和系统集成，自动化项目交付即公司主业。其直接价值在机器人自动化产线集成，而非制造机器人本体，故将本体及应用纠正为自动化集成，并由相关上调为核心。"
   },
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "600216": {
   "business_summary": "主营医药制造业",
@@ -73987,18 +73997,19 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
+  "jiuyan_concept": "智能装备与机床",
   "name": "中创智领",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_concept_reason": {
-   "设备与集成": "中创智领：重型装备（设备与集成）"
+   "智能装备与机床": "中创智领：重型装备（设备与集成）"
   },
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "601727": {
   "business_summary": "主营其他电源设备Ⅱ",
@@ -76757,11 +76768,11 @@
   "primary_source": "legacy",
   "sector": "通用设备/新型工业化/数字孪生/智能物流",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "设备与集成": "北自科技：自动化集成（设备与集成）"
+   "智能装备与机床": "北自科技：自动化集成（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "自动化集成": "以机器人、控制系统和物流/制造装备完成产线或系统方案设计、集成、调试和验收，不等同机器人本体制造。"
@@ -76797,11 +76808,12 @@
    },
    "reason": "公司主营以自动化立体仓库为核心的智能物流系统研发、设计、制造与集成，交付堆垛机、穿梭车、输送分拣等系统，自动化集成属于明确主业。AGV子系统存在外购嵌入，不能据此写成自研机器人本体，故将本体及应用纠正为自动化集成，核心判词保持不变。"
   },
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "603083": {
   "business_summary": "高速光模块、电信宽带、无线网络与边缘计算",
@@ -80967,18 +80979,19 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
+  "jiuyan_concept": "智能装备与机床",
   "name": "浙江鼎力",
   "primary_source": "legacy",
   "sector": "工程机械/人民币贬值受益/一带一路/机器人概念",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_concept_reason": {
-   "设备与集成": "浙江鼎力：工程机械（设备与集成）"
+   "智能装备与机床": "浙江鼎力：工程机械（设备与集成）"
   },
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "603339": {
   "business_summary": "主营金属制品业",
@@ -90347,12 +90360,12 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'加工刀具|龙头-超硬刀具龙头' → '加工刀具'",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "设备与集成": "沃尔德：加工刀具（设备与集成）"
+   "智能装备与机床": "沃尔德：加工刀具（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "加工刀具": "用于丝杠、减速器等机器人零件加工的专用刀具和量检具，属于制造耗材而非机器人零件。"
@@ -90388,11 +90401,12 @@
    },
    "reason": "超硬刀具是公司主营，已开发行星滚柱丝杠的丝杆、滚柱、螺母旋铣刀具及RV减速器加工方案，2026年上半年继续拓展谐波减速齿和丝杠加工应用。产品直接服务机器人零部件制造，但并非机器人零部件或本体，且机器人应用仅是超硬刀具的一块下游业务，故保留加工刀具标签及相关判词。"
   },
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "688029": {
   "business_summary": "主营专用设备制造业",
@@ -94143,11 +94157,11 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "设备与集成": "江苏北人：自动化集成（设备与集成）"
+   "智能装备与机床": "江苏北人：自动化集成（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "自动化集成": "以机器人、控制系统和物流/制造装备完成产线或系统方案设计、集成、调试和验收，不等同机器人本体制造。"
@@ -94183,11 +94197,12 @@
    },
    "reason": "公司按订单提供机器人焊接、装配产线及数字化车间，完成方案设计、集成、调试和验收交付，主业实质是自动化系统集成而非通用机器人本体制造。具身智能焊接机器人仅处小批量试用阶段，尚不改变主营结构，因此纠正概念但保留核心。"
   },
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "688219": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -95948,11 +95963,11 @@
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "物理AI_具身本体": "公司已推出贾维斯2.0、精灵G2等具身机器人，2025年单列具身机器人制造收入10810657.63元，证明本体已有实际商业交付而非研发预期。但智能制造装备收入25.34亿元仍为主要收入来源，因此保留机器人自动化集成核心标签，同时新增物理AI具身本体相关，避免把全部装备收入视作具身收入。 本分类（物理AI）判词为相关。",
-   "设备与集成": "均普智能：自动化集成（设备与集成）"
+   "智能装备与机床": "均普智能：自动化集成（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "自动化集成": "以机器人、控制系统和物流/制造装备完成产线或系统方案设计、集成、调试和验收，不等同机器人本体制造。",
@@ -95996,13 +96011,14 @@
    "reason": "公司已推出贾维斯2.0、精灵G2等具身机器人，2025年单列具身机器人制造收入10810657.63元，证明本体已有实际商业交付而非研发预期。但智能制造装备收入25.34亿元仍为主要收入来源，因此保留机器人自动化集成核心标签，同时新增物理AI具身本体相关，避免把全部装备收入视作具身收入。"
   },
   "jiuyan_tag_evidence": "text",
+  "jiuyan_category": "物理AI|机器人",
+  "jiuyan_concept": "物理AI_具身本体|智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
   "jiuyan_category1": "物理AI",
   "jiuyan_concept1": "物理AI_具身本体",
   "jiuyan_category2": "机器人",
-  "jiuyan_concept2": "设备与集成",
-  "jiuyan_category": "物理AI|机器人",
-  "jiuyan_concept": "物理AI_具身本体|设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept2": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "688307": {
   "business_summary": "精密光学镜头产品的研发、生产及销售并提供相关技术开发服务。",
@@ -100704,10 +100720,10 @@
   "primary_source": "legacy",
   "sector": "工业母机/人形机器人",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "设备与集成": "浙海德曼：丝杠设备（设备与集成）"
+   "智能装备与机床": "浙海德曼：丝杠设备（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "丝杠设备": "用于丝杠及螺母螺纹、滚道精密加工的车磨专用装备，属于上游制造设备。"
@@ -100744,11 +100760,12 @@
    "reason": "数控车床仍是公司主业，但已开发反式行星滚柱丝杠螺母以车代磨专机，公开现场展示硬车加工过程，并取得机器人OEM订单，具备专用装备和实际项目依据。机器人丝杠设备仅是机床业务的一块应用，尚未构成主营，故保留相关而非摘除或升级。"
   },
   "jiuyan_tag_evidence": "text",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "688578": {
   "business_summary": "主营医药制造业",
@@ -102067,10 +102084,10 @@
   "primary_source": "legacy",
   "sector": "通用设备/阿里巴巴概念/抖音概念(字节概念)/无人驾驶",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_tag_source": "2026-10-26 全天涨停复盘（手动补漏）",
   "jiuyan_concept_reason": {
-   "设备与集成": "中邮科技：物流系统（设备与集成）"
+   "智能装备与机床": "中邮科技：物流系统（设备与集成）"
   },
   "jiuyan_concept_desc": {
    "物流系统": "智能分拣、输送、仓储及WMS/WCS等软硬件一体化物流系统，按项目交付，不单列为通用机器人本体。"
@@ -102108,11 +102125,12 @@
   },
   "jiuyan_tag_verdict": "核心",
   "jiuyan_tag_evidence": "text",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "688651": {
   "business_summary": "主营软件和信息技术服务业",
@@ -106687,17 +106705,18 @@
   "concept_boards": [],
   "industry_boards": [],
   "jiuyan_category": "机器人",
-  "jiuyan_concept": "设备与集成",
+  "jiuyan_concept": "智能装备与机床",
   "sector": "其他自动化设备/自动化设备/机械设备/河南板块/2026中报预增/2026一季报预增/专精特新/融资融券/次新股",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-11-09 18:53:14",
-  "jiuyan_category1": "机器人",
-  "jiuyan_concept1": "设备与集成",
+  "updated_at": "2026-11-09 19:00:21",
   "jiuyan_concept_reason": {
-   "设备与集成": "海昌智能：自动化设备（设备与集成）"
+   "智能装备与机床": "海昌智能：自动化设备（设备与集成）"
   },
-  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成"
+  "jiuyan_robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
  },
  "920158": {
   "name": "长江能科",
