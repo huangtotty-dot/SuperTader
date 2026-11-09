@@ -4248,12 +4248,38 @@ async function loadAbnormalPool(force) {
   } finally { _abnInflight = false; }
 }
 
+/* 2026-11-09 owner：「异常监控池增加一个搜索框 搜索某只股之后只显示该股这一行」。
+   纯前端按行过滤（代码/名称，部分匹配）；不改后端、不改 `_abnRows`，15s/60s 重绘后
+   仍按输入框里的关键字过滤（renderAbnormalPool 末尾会再调一次）。Esc / 清空 = 恢复全部。 */
+function applyAbnFilter() {
+  const body = document.getElementById("abnormalPoolBody");
+  if (!body) return;
+  const inp = document.getElementById("abnFilter");
+  const q = ((inp && inp.value) || "").trim().toLowerCase();
+  let shown = 0, total = 0;
+  body.querySelectorAll("tbody tr[data-abnrow]").forEach(tr => {
+    total++;
+    const hit = !q
+      || String(tr.getAttribute("data-abnrow") || "").toLowerCase().includes(q)
+      || String(tr.getAttribute("data-abnname") || "").toLowerCase().includes(q);
+    tr.style.display = hit ? "" : "none";
+    if (hit) shown++;
+  });
+  const info = document.getElementById("abnFilterInfo");
+  if (info) {
+    info.textContent = q
+      ? (shown ? `筛选「${q}」：显示 ${shown} / 共 ${total} 只` : `筛选「${q}」：没有匹配的股票`)
+      : "";
+  }
+}
+
 function renderAbnormalPool(d) {
   const el = document.getElementById("abnormalPoolBody");
   if (!el) return;
   const rows = d.rows || [];
   if (!rows.length) {
     el.innerHTML = '<div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div>';
+    applyAbnFilter();
     return;
   }
   const labels = d.cond_labels || {};
@@ -4276,7 +4302,7 @@ function renderAbnormalPool(d) {
     const _above5 = (typeof _mr5 === "boolean") ? _mr5 : (r.timing_features || {}).above_ma5;
     const rowBg = (_above5 === true) ? "background:rgba(63,185,80,.10);"
       : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
-    return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
+    return `<tr data-abnrow="${esc(r.code)}" data-abnname="${esc(r.name)}" ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
         title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
       <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>${limitBoardBadge(r.limit_board, r.limit_date)}</td>
       <td>${verdictBadge(r.verdict)}</td>
@@ -4325,6 +4351,8 @@ function renderAbnormalPool(d) {
           : " · 涨停时间已齐") : ""
     } · 双击行看K线 ·
       判定/得分/时机条件与「建仓信号扫描」同源；本地日线缓存不足的票显示 —</div>`;
+  // 重绘后沿用搜索框里的关键字（15s 行情刷新 / 60s 整行刷新都不会把筛选重置）
+  applyAbnFilter();
 }
 
 /* 价/市值：与猎手同一条链（`load_quotes_for` 一次覆盖全部行），就地补单元格。 */

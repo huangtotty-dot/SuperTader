@@ -312,6 +312,15 @@
            例如"通达信 1 分钟线只到 10-14、所选日期算不出来"必须醒目地留在表上方。 -->
       <div id="abnLimitNotice" class="cell-dim"
            style="display:none;font-size:11px;line-height:1.6;margin:0 0 6px;color:#d29922"></div>
+      <!-- 2026-11-09 owner：「增加一个搜索框 搜索某只股之后只显示该股这一行」 -->
+      <div style="display:flex;align-items:center;gap:6px;margin:0 0 6px">
+        <input type="text" id="abnFilter" class="mini-input" style="width:260px"
+               placeholder="🔍 筛选：输入代码或名称，只显示匹配的行"
+               title="输入代码或名称（支持部分匹配）→ 只显示匹配的行；按 Esc 或清空恢复全部"
+               oninput="applyAbnFilter()"
+               onkeydown="if(event.key==='Escape'){this.value='';applyAbnFilter();}">
+        <span id="abnFilterInfo" class="cell-dim" style="font-size:11px"></span>
+      </div>
       <div id="abnormalPoolBody"><div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div></div>
     </div>
 
@@ -727,6 +736,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261109e"></script>
+<script src="app.js?v=20261109f"></script>
 </body>
 </html>
