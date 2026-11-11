@@ -796,12 +796,31 @@ def should_poll(now: datetime, last: datetime = None,
     return True
 
 
+def _heartbeat_enabled() -> bool:
+    """config.json 的 feishu.notify_on_hunter_poll_heartbeat（默认 True）。
+
+    2026-11-10 owner：「飞书提醒只提醒我画框的突破」——30 分钟心跳属于常规播报，关掉；
+    **异常卡不受影响**（数据/扫描故障仍要发，owner 2026-10-11 的硬要求）。
+    """
+    try:
+        from config import load_runtime_config
+        cfg = load_runtime_config()
+        f = cfg.get("feishu", {}) if isinstance(cfg, dict) else {}
+        if not bool(f.get("enabled", True)):
+            return False
+        return bool(f.get("notify_on_hunter_poll_heartbeat", True))
+    except Exception:
+        return True
+
+
 def run_and_alert(date_str: str = None) -> dict:
     """轮询 + 推送一步到位（供 main.py 调度线程调用）。**不抛**。
 
     **每轮恰好一条消息**（owner 2026-10-12 定）：
       · 本轮出现**新异常** ⇒ 发异常卡（精简、可执行）；
       · 其余（一切正常 / 异常持续中）⇒ 发**心跳摘要卡**（持续异常会在心跳里标 ⚠️ 置顶）。
+    2026-11-10：心跳可用 `feishu.notify_on_hunter_poll_heartbeat=false` 单独关闭，
+    异常卡照发（owner：「飞书提醒只提醒我画框的突破」）。
     """
     res = poll_once(date_str)
     sent = False
@@ -816,9 +835,12 @@ def run_and_alert(date_str: str = None) -> dict:
         except Exception as e:
             log.error(f"❌ 猎手轮询告警推送链路异常: {type(e).__name__}: {e}")
     if not sent:
-        try:
-            sent = push_summary(res, date_str)        # 心跳：每轮都发
-        except Exception as e:
-            log.error(f"❌ 猎手轮询心跳推送链路异常: {type(e).__name__}: {e}")
+        if _heartbeat_enabled():
+            try:
+                sent = push_summary(res, date_str)    # 心跳：每轮都发
+            except Exception as e:
+                log.error(f"❌ 猎手轮询心跳推送链路异常: {type(e).__name__}: {e}")
+        else:
+            log.info("猎手轮询心跳已在配置中关闭（feishu.notify_on_hunter_poll_heartbeat）")
     res["pushed"] = bool(sent)
     return res
