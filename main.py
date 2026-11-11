@@ -1171,6 +1171,10 @@ def _maybe_run_chart_prefetch(now: datetime) -> None:
             "from core.chart_cache import run_prefetch\n"
             "res = run_prefetch()\n"
             "print('prefetch:', res, flush=True)\n"
+            "# 锁被占（GUI 小池预取/另一个进程）不是成功：退非 0 ⇒ main 的 watcher 600s 后重试。\n"
+            "# 旧逻辑 rc=0 被当成跑完，当天全池日线再也不会补（2026-11-11 实测 full 标记一直缺）。\n"
+            "if isinstance(res, dict) and res.get('skipped') == 'locked':\n"
+            "    sys.exit(3)\n"
         )
         out_fp = open(log_fp, "a", encoding="utf-8")
         try:

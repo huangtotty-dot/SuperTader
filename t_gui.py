@@ -14670,19 +14670,30 @@ class Api:
 def start_chart_prefetch_scheduler(api):
     """盘后 K线预下载调度（2026-10-04）：交易日 15:10 后触发一次 `chart_cache.run_prefetch`。
 
-    小池日线+分钟+payload → 全池日线兜底。幂等由 `run_prefetch` 的跨进程锁 + 当日标记保证
-    （本循环可反复调用，已跑过即空转）。守护线程，失败静默。仅 __main__ 显式启动。"""
+    只做**小池**（日线+分钟+payload）；**全池日线不放在 GUI 进程里**（2026-11-11 卡死修复）：
+      · 全池 = watchlist 全部 5405 只 × 800 天，GM `history` 的 DataFrame 构造会在进程内
+        长时间占 GIL；pywebview 的 js_api 是在 UI 线程上 `Thread.start()` 的，GIL 被
+        pandas/GM 长段占用时 `_started.wait()` 迟迟不返回 ⇒ 连 `ping` 都要 18s、界面卡死。
+        实测 15:53 快照：Thread-2(_loop) 47% + gm-call_0 14%，心跳停 37s。
+      · 全池日线由 **main.py 的独立子进程**（`_maybe_run_chart_prefetch`）负责，CPU 与 GIL
+        都在另一个进程，GUI 不再被它拖死。
+    另加**启动 60s 宽限**：刚起 GUI 时首屏/标签批算已很忙，别立刻再加预取。
+    幂等由 `run_prefetch` 的跨进程锁 + 当日标记保证。守护线程，失败静默。"""
     if _CHART_PREFETCH_STATE.get("started"):
         return
     _CHART_PREFETCH_STATE["started"] = True
+    _t0 = _time_mod.time()
 
     def _loop():
         while True:
             try:
                 import core.chart_cache as _cc
                 now = datetime.now()
-                if now.weekday() < 5 and now.strftime("%H:%M") >= "15:10":
-                    _cc.run_prefetch(payload_builder=lambda codes: api._build_and_save_payloads(codes))
+                if (_time_mod.time() - _t0 >= 60
+                        and now.weekday() < 5 and now.strftime("%H:%M") >= "15:10"):
+                    _cc.run_prefetch(
+                        full=False,
+                        payload_builder=lambda codes: api._build_and_save_payloads(codes))
             except Exception:
                 pass
             _time_mod.sleep(300)

@@ -764,8 +764,25 @@ def prefetch_minute(codes, freqs=("30min", "60min"), sleep_s=0.35) -> dict:
 
 
 # ---- 跨进程锁 + 当日幂等 ----
+def _lock_owner_alive() -> bool:
+    """锁文件里的 pid 还活着吗？读不到/判不了 ⇒ 视为活着（保守，宁可不抢跑）。
+
+    2026-11-11：GUI 卡死被 Kill 时不会走 `finally` 释放锁；旧逻辑只能等 30 分钟 TTL，
+    期间 main.py 的预下载子进程全被 "skipped: locked" 挡住。按 pid 存活判断即可立即回收。
+    """
+    try:
+        pid = int((_LOCK_FP.read_text(encoding="utf-8").strip().split() or ["0"])[0])
+        if pid <= 0:
+            return True
+        import psutil
+        return bool(psutil.pid_exists(pid))
+    except Exception:
+        return True
+
+
 def _acquire_lock(ttl=1800) -> bool:
-    """O_CREAT|O_EXCL 原子建锁；已存在且 mtime 超 ttl 视为残留、抢占。失败 fail-open（返回 True）。"""
+    """O_CREAT|O_EXCL 原子建锁；mtime 超 ttl **或持有者进程已死** ⇒ 视为残留、抢占。
+    失败 fail-open（返回 True）。"""
     try:
         _STATE_DIR.mkdir(parents=True, exist_ok=True)
         fd = os.open(str(_LOCK_FP), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -774,7 +791,7 @@ def _acquire_lock(ttl=1800) -> bool:
         return True
     except FileExistsError:
         try:
-            if time.time() - os.path.getmtime(_LOCK_FP) > ttl:
+            if time.time() - os.path.getmtime(_LOCK_FP) > ttl or not _lock_owner_alive():
                 os.remove(_LOCK_FP)
                 return _acquire_lock(ttl)
         except Exception:
