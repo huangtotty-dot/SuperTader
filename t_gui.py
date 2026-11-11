@@ -12306,12 +12306,57 @@ class Api:
         d = _load_json(TRADE_HISTORY_LEDGER, None)
         if not isinstance(d, dict) or not d.get("stocks"):
             return {"imported": False}
-        d.pop("trades", None)                  # 原始成交行只留在磁盘里
         try:
             self._ledger_append_today(d)
         except Exception:
             pass
+        try:
+            self._ledger_mtd_reduction(d)       # 逐股「本月减亏额度」（2026-11-11 owner）
+        except Exception:
+            pass
+        d.pop("trades", None)                  # 原始成交行只留在磁盘里
         return _clean(d)
+
+    @staticmethod
+    def _ledger_mtd_reduction(d) -> None:
+        """给每只票加 `mtd_reduction` = 当前合计盈亏 − **上月末最后一个交易日**的合计盈亏。
+
+        2026-11-11 owner：「逐股明细中增加一列：本月减亏额度」。
+        口径：合计 = 已实现 + 浮动（与表内「合计」同源）；正 = 本月减亏/改善，负 = 本月增亏/恶化。
+        上月末的逐股盈亏用同一套 `build_ledger` 重放（同一移动加权成本口径）：
+          · 只取 baseline 日（含）之前的成交；
+          · 浮动用该股 baseline 日收盘价（`daily_close_on`，零网络）。
+        当天值来自 `stocks[].total_pnl`（`_ledger_append_today` 已把它刷到最新收盘）。
+        """
+        trades = d.get("trades") or []
+        if not trades:
+            return
+        from core.trade_history import build_ledger, daily_close_on
+        from core.position_builder import _DAILY_CACHE_DIR
+
+        # 上一个月末的**交易日**：用 000001 日线缓存当交易日历（排除周末/节假日）
+        now = datetime.now()
+        cur_y, cur_m = now.year, now.month
+        prev_y, prev_m = (cur_y - 1, 12) if cur_m == 1 else (cur_y, cur_m - 1)
+        prev_end = f"{prev_y:04d}-{prev_m:02d}-31"
+        try:
+            rows = json.loads((_DAILY_CACHE_DIR / "000001.json").read_text(encoding="utf-8")).get("rows") or []
+            cal = sorted({str(r.get("date"))[:10] for r in rows if r.get("date")})
+        except Exception:
+            cal = []
+        base = max((x for x in cal if x <= prev_end), default="")
+        if not base:
+            return
+
+        sub = [t for t in trades if str(t.get("date") or "")[:10] <= base]
+        led0 = build_ledger(sub, price_fn=lambda c: daily_close_on(c, base))
+        base_map = {(s.get("account") or "", s.get("code")): float(s.get("total_pnl") or 0.0)
+                    for s in (led0.get("stocks") or [])}
+        for s in d.get("stocks") or []:
+            key = (s.get("account") or "", s.get("code"))
+            cur = float(s.get("total_pnl") or 0.0)
+            s["mtd_reduction"] = round(cur - base_map.get(key, 0.0), 2)
+            s["mtd_base"] = base
 
     @staticmethod
     def _ledger_append_today(d, now=None):

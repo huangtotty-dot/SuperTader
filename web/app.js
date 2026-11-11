@@ -1622,6 +1622,7 @@ function renderTradeHistory(d) {
       <td class="num ${clsOf(s.realized)}">${f(s.realized)}</td>
       <td class="num ${clsOf(s.unrealized || 0)}">${s.unrealized ? f(s.unrealized) : "—"}</td>
       <td class="num ${clsOf(s.total_pnl || 0)}"><b>${f(s.total_pnl || 0)}</b></td>
+      <td class="num ${clsOf(s.mtd_reduction)}">${s.mtd_reduction == null ? "—" : f(s.mtd_reduction)}</td>
       <td class="num ${t ? clsOf(t.pnl) : ""}">${t ? f(t.pnl) : "—"}</td>
       <td class="num cell-dim">${t ? t.n_pairs : "—"}</td>
       <td class="num">${s.pnl_pct >= 0 ? "+" : ""}${fmt(s.pnl_pct, 2)}%</td>
@@ -1635,7 +1636,7 @@ function renderTradeHistory(d) {
   }).join("");
   body.innerHTML = `<div class="card-title">逐股明细（已实现降序，共 ${stocks.length} 只）</div>
     <table><thead><tr><th>股票</th><th class="num">已实现</th><th class="num">浮动</th>
-    <th class="num">合计</th><th class="num">做T收益</th>
+    <th class="num">合计</th><th class="num" title="本月减亏额度 = 当前合计盈亏 − 上月末最后一个交易日的合计盈亏（已实现+浮动，同「合计」口径）。正=本月减亏/改善，负=本月增亏/恶化">本月减亏<br><span style="font-size:9px;opacity:.6">较上月末</span></th><th class="num">做T收益</th>
     <th class="num">做T日</th><th class="num">收益率</th>
     <th class="num">买入额</th><th class="num">卖出额</th><th class="num">费用</th>
     <th class="num">笔数</th><th class="num">仍持有</th><th>区间</th></tr></thead>
