@@ -5492,6 +5492,10 @@ class Api:
                 s["ma_reclaim"] = self._ma_reclaim_get(_base, kick=False)
             except Exception:
                 s["ma_reclaim"] = {"pending": True}
+            try:                                  # 2026-11-11：站上5日线天数（替代 30min判定 列）
+                s["ma5_streak"] = self._ma5_streak(_base)
+            except Exception:
+                s["ma5_streak"] = None
             if isinstance(s.get("ma_reclaim"), dict) and s["ma_reclaim"].get("pending"):
                 out["ma_reclaim_pending"] = True
         if _struct_pending:
@@ -9191,6 +9195,7 @@ class Api:
                 m.update((rows or {}).get(m["code"]) or {})
                 m["structure"] = self._pb_struct_get(m["code"])
                 m["m30_verdict"] = self._m30_verdict_pb(m["code"])
+                # ma5_streak 由后台 `_beacon_enrich` 一并算好（288 只，别在主线程读 288 个日线文件）
                 m["tags"] = (_tags_map.get(m["code"]) or {}).get("tags") or []
         try:
             self._kick_pb_m30_warm(all_codes)      # 每 30min 时段节流一次
@@ -9312,6 +9317,8 @@ class Api:
                 "build_above_ma20": g.get("above_ma20"), "build_stage": g.get("stage"),
                 "build_stage_slope20": g.get("stage_slope20"),
                 "build_price": g.get("price"),
+                # 2026-11-11：站上5日线天数（替代 30min判定 列）；后台算，主线程只读
+                "ma5_streak": self._ma5_streak(c, date),
                 # 2026-10-31 owner：「市场风向也要显示周线 MACD 是否翻红」——
                 # 后台 enrich 时顺带算好（零网络、按缓存 mtime 记忆），主线程只读。
                 "wm": _wm_state_of_code(c),
@@ -9580,6 +9587,10 @@ class Api:
                 r["ma_reclaim"] = self._ma_reclaim_get(r["code"], date, kick=False)
             except Exception:
                 r["ma_reclaim"] = {"pending": True}
+            try:                                  # 2026-11-11：站上5日线天数（异常监控池/避风港湾等）
+                r["ma5_streak"] = self._ma5_streak(r["code"], date)
+            except Exception:
+                r["ma5_streak"] = None
 
     def _pb_struct_hist(self, code, date, compute=False):
         """历史日「仓位结构」：**纯磁盘、零网络**、截到该日（`load_structure(allow_network=False)`）。
@@ -10420,6 +10431,13 @@ class Api:
             # 结构层走**独立键** `struct`：若塞进 tags 条目里，前端「标签是否取齐」的判据
             # （`tagsMap[code]` 是否存在）会把"只有结构、没有标签"误判成取齐。
             out = dict(payload or {})
+            # 2026-11-11：站上5日线天数**独立键**下发（猎手行用；按可见 code ≤50，mtime 缓存）。
+            # 不塞进 tags 条目：前端「标签是否取齐」按 `tagsMap[code]` 存在判，塞进去会把
+            # 「只有天数、标签还没算」误判成取齐（与 struct 同理）。
+            try:
+                out["ma5_streak"] = {str(c): self._ma5_streak(c, date) for c in codes}
+            except Exception:
+                pass
             out["struct"] = {str(c): (_struct.get(str(c)) or {"pending": True}) for c in codes}
             return _clean(out)
 
@@ -14251,6 +14269,59 @@ class Api:
     # （4月8日那天 49 行全是 None）⇒ 不着色。这里按**该日期**的本地日线补齐，带 (码,日期,mtime) 缓存。
     _PB_TF_CACHE: dict = {}
 
+    # 2026-11-11 owner：「把 30min判定 列换成站上5日线的天数（从第一次站上算起，用醒目 logo）」。
+    # 全表共用：持仓股 / 建仓信号扫描 / 市场风向标 三张表都挂这个字段。
+    _MA5_STREAK_CACHE: dict = {}
+
+    @staticmethod
+    def _norm_ymd(date=None) -> str:
+        s = str(date or "").strip()
+        if len(s) >= 10 and s[4] == "-":
+            return s[:10]
+        if len(s) == 8 and s.isdigit():
+            return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+        return datetime.now().strftime("%Y-%m-%d")
+
+    @classmethod
+    def _ma5_streak(cls, code, date=None):
+        """当前**连续站上 5 日线**的天数（含截至 date 的最后一个交易日）。
+
+        口径：从最近一根日线往前回溯，`收盘 > 当日 MA5(含当日)` 连续成立的天数；
+        **从这一轮的第一次站上开始算**，跌破即归零。今天收盘在 MA5 下方 → 0。
+        只读本地日线缓存；按 (码,日期,mtime_ns) 记忆。无缓存/不足 5 根 → None。
+        """
+        base = str(code or "").split("_")[0]
+        if len(base) != 6 or not base.isdigit():
+            return None
+        d = cls._norm_ymd(date)
+        try:
+            fp = _DAILY_KLINE_DIR / f"{base}.json"
+            mt = fp.stat().st_mtime_ns
+            ck = (base, d, mt)
+            hit = cls._MA5_STREAK_CACHE.get(ck)
+            if hit is not None:
+                return hit
+            rows = json.loads(fp.read_text(encoding="utf-8")).get("rows") or []
+            closes = [float(r.get("close") or 0.0)
+                      for r in rows if str(r.get("date"))[:10] <= d]
+            n = len(closes)
+            if n < 5:
+                return None
+            streak, i = 0, n - 1
+            while i >= 4:
+                ma5 = sum(closes[i - 4:i + 1]) / 5.0
+                if closes[i] > ma5:
+                    streak += 1
+                    i -= 1
+                else:
+                    break
+            if len(cls._MA5_STREAK_CACHE) > 8000:
+                cls._MA5_STREAK_CACHE.clear()
+            cls._MA5_STREAK_CACHE[ck] = streak
+            return streak
+        except Exception:
+            return None
+
     @classmethod
     def _backfill_timing_features(cls, rows, date):
         """给缺 `above_ma5` 的行补上（用 ≤ 该日的本地日线收盘算 MA5/MA20）。"""
@@ -14524,6 +14595,7 @@ class Api:
                     continue
                 _v = self._m30_verdict_pb(r["code"])
                 r["m30_verdict"] = _v
+                r["ma5_streak"] = self._ma5_streak(r["code"], date)
                 if _v.get("level") == "pending":
                     _pb_m30_pending = True
             if _pb_m30_pending and _codes:
@@ -14535,6 +14607,7 @@ class Api:
                 _v = self._pb_m30_hist_verdict(r["code"], date, compute=False)
                 if _v:
                     r["m30_verdict"] = _v
+                r["ma5_streak"] = self._ma5_streak(r["code"], date)
 
         # 建仓表「仓位结构」列（2026-10-11）：30min/10min 结构参考（止损位/阻力/补仓档/阶段），
         # 供**仓位管理**用。与 30min 判定列同纪律：主线程只读缓存；未热 → 后台预热整池。

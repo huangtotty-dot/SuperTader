@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261109a">
+<link rel="stylesheet" href="style.css?v=20261111a">
 </head>
 <body>
 <header class="topbar">
@@ -567,6 +567,8 @@
       <div class="stock-toggles">
         <label class="toggle-item"><input type="checkbox" id="tgLevels" onchange="renderStockChart()"> 支撑压力</label>
         <label class="toggle-item"><input type="checkbox" id="tgBoxes" onchange="renderStockChart()"> 箱体</label>
+        <label class="toggle-item" title="显示/隐藏买卖点：券商真实成交 ▲买入 / ▼卖出（与图上三角形同源）"><input type="checkbox" id="tgTrades" checked onchange="chartToggleChanged()"> 买卖点</label>
+        <label class="toggle-item" title="显示/隐藏跳空缺口色块（真缺口 + 跳空开盘；多窗口同步）"><input type="checkbox" id="tgGaps" checked onchange="chartToggleChanged()"> 缺口</label>
         <label class="toggle-item"><input type="checkbox" id="tgChannel" onchange="renderStockChart()"> 通道</label>
         <label class="toggle-item"><input type="checkbox" id="tgMA" onchange="renderStockChart()"> 均线</label>
         <label class="toggle-item" title="非日线周期上叠的**日线** MA5/10/20/30/60 水平虚线（5/10/20/30/60 个交易日）。与「均线」开关不同：那个是当前周期自己的均线（分钟图的 MA5 = 5 根该周期 K 线）。日线周期不显示这组参考线"><input type="checkbox" id="tgDailyMA" checked onchange="renderStockChart()"> 日线均线</label>
@@ -736,6 +738,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261111a"></script>
+<script src="app.js?v=20261111c"></script>
 </body>
 </html>

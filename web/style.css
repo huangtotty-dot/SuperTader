@@ -789,6 +789,18 @@ body.twin-winmode #turnoverWinTitle { cursor: default; }
 .focus-star.on .focus-ago { font-size: 9px; margin-left: 1px; opacity: .92; font-weight: 600; }
 tr.focus-row td:first-child { box-shadow: inset 3px 0 0 var(--focus-c, #8250df); }
 
+/* ===== 站上5日线天数徽标（2026-11-11 owner）=====
+   三张表（持仓股/建仓信号扫描/市场风向标）共用：🔥 + 天数，连续越久颜色越深。 */
+.ma5-streak { display: inline-flex; align-items: center; gap: 2px; padding: 1px 7px;
+  border-radius: 10px; background: rgba(34,150,82,.14); color: var(--green);
+  font-weight: 700; font-size: 12px; line-height: 18px; white-space: nowrap; }
+.ma5-streak b { font-size: 13px; }
+.ma5-streak i { font-style: normal; font-size: 10px; opacity: .8; }
+.ma5-streak.s-warm { background: rgba(201,126,0,.16); color: var(--yellow); }
+.ma5-streak.s-hot { background: rgba(232,83,31,.18); color: var(--red); }
+.ma5-streak.s-fire { background: rgba(232,83,31,.28); color: var(--red);
+  box-shadow: 0 0 0 1px rgba(232,83,31,.35) inset; }
+
 /* ===== 选股猎手「手动标红加粗」（2026-11-09 owner）=====
    每行一个「标红」小按钮：点一下该股（代码 + 名称）变红加粗，再点取消。
    只改显示，不参与判定/排序/推送；状态落后端

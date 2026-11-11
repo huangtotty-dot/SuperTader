@@ -88,6 +88,18 @@ function verdictBadge(v) {
   }
   return `<span class="badge ${map[v] || 'weak'}">${esc(label)}</span>`;
 }
+/* 2026-11-11 owner：「把 30min判定 列换成站上5日线的天数，用醒目的 logo 提示；
+   注意是第一次站上5日线开始算起」。三张表（持仓股/建仓信号扫描/市场风向标）共用。
+   口径由后端 `_ma5_streak` 计算：从这一轮第一次站上那天的**连续天数**，跌破即归零。 */
+function ma5StreakHtml(n) {
+  const d = Number(n);
+  if (n === null || n === undefined || isNaN(d) || d <= 0) {
+    return '<span class="cell-dim" title="截至最新收盘未站上 5 日线（或日线缓存不足）">—</span>';
+  }
+  const cls = d >= 10 ? " s-fire" : d >= 6 ? " s-hot" : d >= 3 ? " s-warm" : "";
+  const tip = `连续站上 5 日线第 ${d} 天（从第一次站上那天开始算；跌破 5 日线即归零）`;
+  return `<span class="ma5-streak${cls}" title="${tip}">🔥<b>${d}</b><i>天</i></span>`;
+}
 function wrCell(w) {
   if (!w) return `<span class="cell-dim">—</span>`;
   const color = (w.wr === null || w.wr === undefined) ? "neutral"
@@ -859,7 +871,7 @@ function beaconRowHtml(s, labels) {
     <td class="num h-price" data-hcode="${esc(s.code)}" title="实时价/涨幅（10s 刷新）；未取到显示 ⏳ 而不是 0.00%">${hunterPriceHtml(null)}</td>
     <td class="h-tags" style="max-width:200px;line-height:1.7">${tagsTxt}</td>
     ${condCellHtml(s.build_conds, labels, s.build_verdict === "insufficient_data", s.build_veto)}
-    <td style="text-align:center" title="${esc(_mv.reason || "")}">${m30Txt}</td>
+    <td style="text-align:center">${ma5StreakHtml(s.ma5_streak)}</td>
     ${structCellHtml(s.structure)}
     ${ma5CellHtml(s.structure)}
   </tr>`;
@@ -894,7 +906,7 @@ function renderMarketBeacon(d) {
     <th>股票</th><th class="num" title="总市值（亿元，腾讯实时快照，与「价」同一轮 10s 刷新；悬停看流通市值）。取不到显示 ⏳">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
     <th>梯队</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
     <th>日线阶段</th><th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 得分里的 −70 扣分走的是 5 日线口径，与本列无关 ⇒ 本列不显示 −70">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th><th class="num">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
-    <th>技术标签</th><th>时机条件</th><th>30min判定</th><th>仓位结构</th><th>30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
+    <th>技术标签</th><th>时机条件</th><th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th><th>仓位结构</th><th>30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
   </tr></thead>`;
   // 板块名自带信息：龙头名字直接写在标题行 ⇒ **不展开也能一眼看到"谁在场"**
   // 2026-10-18 owner：「市场风向标使用方格显示」—— 每个板块一张**方格卡**（grid），
@@ -4315,6 +4327,7 @@ function renderAbnormalPool(d) {
       <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
       <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
       ${maReclaimCellHtml(r.ma_reclaim)}
+      <td class="num" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起；跌破即归零）">${ma5StreakHtml(r.ma5_streak)}</td>
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
       ${up30CellHtml(r.up30, r.up30_prev, r.build_reason || "")}
       ${bias5CellHtml(r.bias5, r.build_reason || "")}
@@ -4338,6 +4351,7 @@ function renderAbnormalPool(d) {
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
       <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
       <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
+      <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
       <th>时机条件</th>${UP30_TH}<th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
       <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       <th title="上方 🕘 = **涨停时间**（通达信本地 1 分钟线里**首次触及涨停价**的分钟；封=收盘仍封板）。下方是**手动**记录的涨停原因（一句话，最多 120 字），只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">时间 · 手动</span></th>
@@ -4636,6 +4650,7 @@ function renderShelterPool(d) {
       <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
       <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
       ${maReclaimCellHtml(r.ma_reclaim)}
+      <td class="num" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起；跌破即归零）">${ma5StreakHtml(r.ma5_streak)}</td>
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
       ${up30CellHtml(r.up30, r.up30_prev, r.build_reason || "")}
       ${bias5CellHtml(r.bias5, r.build_reason || "")}
@@ -4651,6 +4666,7 @@ function renderShelterPool(d) {
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
       <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
       <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
+      <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
       <th>时机条件</th>${UP30_TH}<th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
       <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       <th></th>
@@ -4861,14 +4877,9 @@ function renderPB(pb) {
     const monitorBadge = (!r.in_holdings && r.verdict !== "signal" && r.verdict !== "archived")
       ? `<span class="badge monitor" title="在建仓股池中监控，等待触发买点">追踪中</span>`
       : "";
-    // 30min 判定（2026-10-09）：与「持仓 30min 风险体检」**同口径**（m30_features.verdict_from_features）。
-    // 读后端 `r.m30_verdict`（主线程零计算；未热=⏳计算中，10s 轮询自动补）。原 30/60min 背离列已由本列取代。
-    const _M30VCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
-    const mv = r.m30_verdict || {};
-    const mvCls = _M30VCLS[mv.level];
-    const mvCell = `<td style="text-align:center" title="${esc(mv.reason || "30min 判定不可用")}">${
-      mvCls ? `<span class="${mvCls}">${esc(mv.label || "")}</span>`
-            : `<span class="cell-dim">${esc(mv.label || "—")}</span>`}</td>`;
+    // 2026-11-11 owner：本列由「30min判定」改为「站上5日线天数」（火焰徽标）。
+    // 后端 `r.ma5_streak` 从这一轮第一次站上 5 日线开始连续计数，跌破即归零。
+    const mvCell = `<td style="text-align:center">${ma5StreakHtml(r.ma5_streak)}</td>`;
     // 仓位结构（2026-10-11）：读后端 `r.structure`（主线程零计算；未热=⏳，10s 轮询自动补）。
     // 渲染与持仓体检/猎手板块**共用** `structCellHtml`（同一真源、同一外观）。
     const stCell = structCellHtml(r.structure);
@@ -4925,10 +4936,10 @@ function renderPB(pb) {
           <th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 行底色才是 5 日线口径（站上=绿、其它=红，得分 −70 悬崖同源）；本列只看 20 日线。">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
           <th title="突破箱体=第一优先级">突破</th>
-          <th title="通道/箱体/背离等技术形态。背离标签已**自带周期**（如「日线顶背离」），与右侧『30min判定』的 30 分钟口径不同源 —— 悬停标签可见确认日期">技术标签</th>
+          <th title="通道/箱体/背离等技术形态。背离标签已**自带周期**（如「日线顶背离」），与 30 分钟口径不同源（『站上5日线』是天数口径）—— 悬停标签可见确认日期">技术标签</th>
           <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（该日 5min bar 里第一次收盘价站上该均线）。口径：昨收 < 昨MA(p) 且 现价 > 今MA(p)；只看今天，历史日期无当日分钟数据所以是 —">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
-          <th title="30分钟综合判定（与『持仓 30min 风险体检』同口径）：🔴减仓/避高=30min 顶背离(T1/T2)；🟠盯紧=T3顶分型+T4均线压制同现；🟢偏好=无顶信号且有新鲜底背离(≤16根)；⚪中性=其余。依据 981只×540日 离线验证；T3/T4 无前瞻区分度、单个不报警">30min判定</th>
+          <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破 5 日线即归零）。🔥 颜色越深=连续越久，数据来自本地日线缓存">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
           <th title="仓位结构（30min/10min，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段(①蓄势/②抬升/③派发/④下跌)；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给出三档下档支撑挂单价与5日成交率估计。⚠️ 是**结构参考、不是买卖信号**——机械按阶段加减仓经实测无正贡献(纯择时-1.4~+2.7pp不显著)，「破前低就清仓」-30pp强有害；唯一有证据的是破位后在下档支撑挂限价补仓(改善成本结构、不提高期望)。悬停看明细">仓位结构</th>
           <th title="30min MA5 状态（**纯展示**）：现价相对 5×30min 均线 站上/跌破，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（状态/跃迁 × 站上/跌破 四口径，同日同bar-of-day对照 |diff|≤0.03pp、|t|≤2.4）⇒ 仅供参考，不参与任何判定。朴素对照的 −0.343pp(t=−25.5) 是日内时段伪影">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
           ${UP30_TH}
@@ -7020,6 +7031,11 @@ function _mwWindowOpen() {
   const w = document.getElementById("multiWatchWin");
   return !!(w && w.style.display !== "none");
 }
+/* 2026-11-11：「缺口 / 买卖点」勾选框变化 → 单图 + 多窗口一起重绘（多窗口跟随同一开关） */
+function chartToggleChanged() {
+  try { if (stockChartInst && stockChartData) renderStockChart(false); } catch (e) { /* 忽略 */ }
+  try { _mwKickTick(); } catch (e) { /* 忽略 */ }
+}
 function _vpSyncButtons() {
   ["vpBtn", "mwVpBtn"].forEach(id => {
     const b = document.getElementById(id);
@@ -8074,10 +8090,10 @@ function renderStockChart(applyZoom = true) {
   const showChannel = (document.getElementById("tgChannel") || {}).checked !== false;
   const showMA = (document.getElementById("tgMA") || {}).checked !== false;
   const showFib = (document.getElementById("tgFib") || {}).checked !== false;
-  // 2026-10-17 owner：缺口**取消开关、默认显示**（工具栏不再有该勾选项）。
-  // 仍保留这个常量而不是硬编码 true：将来若要再挂回开关，只需加回 checkbox 即可自动生效
-  // （元素不存在时 `|| {}` 使 `checked !== false` 恒真）。
+  // 2026-11-11 owner：「K线图中的买卖点以及缺口的显示需要按钮控制」⇒ 工具栏恢复
+  // 「缺口」「买卖点」两个开关（默认开）。元素不存在时 `|| {}` 使 `checked !== false` 恒真。
   const showGaps = (document.getElementById("tgGaps") || {}).checked !== false;
+  const showTrades = (document.getElementById("tgTrades") || {}).checked !== false;
   // 背离标注（2026-10-19 owner）：后端按周期算好顶/底背离事件，前端直接画在对应 K 线上。
   const showDiv = (document.getElementById("tgDiv") || {}).checked !== false;
   /* 日线均线参考线开关（2026-10-22 owner）：非日线周期上叠的 日线 MA5/10/20/30/60 五条
@@ -8484,7 +8500,7 @@ function renderStockChart(applyZoom = true) {
      成交按 (bar_t - period分钟, bar_t] 归桶（14:55:27 ⇒ 15:00 那根）；
      日线按日期精确落；周/月落进 (上一根日期, 本根日期] 区间。
      序列范围外的成交不画；time 为空的老行（ts 只带日期）分钟图跳过。 */
-  const _trades = Array.isArray(data.trades) ? data.trades : [];
+  const _trades = (showTrades && Array.isArray(data.trades)) ? data.trades : [];
   const _pMin = ({ min5: 5, min10: 10, min30: 30, min60: 60 })[stockChartPeriod] || 0;
   const tradeByIndex = {};   // "barIndex|B"/"barIndex|S" → {side, qty, amt, count, accounts}
   if (_trades.length) {
@@ -9247,7 +9263,7 @@ const TAG_DESC = {
   "筑底中": "近20日横盘、价格靠近箱体下沿，筑底进行中（尚未缩量确认）",
   "筑顶": "近20日横盘、价格靠近箱体上沿，可能筑顶，警惕回落",
   "日线顶背离": "【日线】MACD：价格创新高但 DIF 走弱，上涨动能衰减，警惕回调（背离≠立刻反转）。"
-    + "⚠️ 标签带「日线」是要和右边「30min判定」的 30 分钟口径区分开；日线单次背离本身未验证，只作参考",
+    + "⚠️ 标签带「日线」是要和 30 分钟口径区分开；日线单次背离本身未验证，只作参考",
   "日线底背离": "【日线】MACD：价格创新低但 DIF 走强，下跌动能衰减，可能反弹（背离≠立刻反转）。"
     + "⚠️ 与 30 分钟口径不同源；日线单次背离本身未验证，只作参考",
   "超买": "RSI(14)>70，短期涨幅过大，追高风险高，等回踩",
@@ -9325,6 +9341,9 @@ function hunterPage(category, dir) {
 // 展开状态/标签缓存模块级保存——分页重渲染后自动恢复展开，避免跳页收起
 const hunterOpenSectors = new Set();
 const hunterTagsCache = {};
+/* 2026-11-11：选股猎手「站上5日线天数」独立缓存（随标签批一起回来，但**不塞进 tags**，
+   否则「标签取齐」判据会被只有天数的条目骗过）。 */
+const hunterStreakCache = {};
 
 const hunterTagsRetry = {};      // 空结果重试计数（防死循环）
 /* 猎手展开行的**实时**行情缓存（2026-10-12）。
@@ -9362,9 +9381,10 @@ async function loadSectorTags(category) {
   const want = _renderedCodesFor(category);
   if (!want.length) return {};
   const have = hunterTagsCache[category] || {};
-  const codes = want.filter(c => !(c in have));
+  const haveS = hunterStreakCache[category] || {};
+  const codes = want.filter(c => !(c in have) || !(c in haveS));
   if (!codes.length) return have;
-  const _ask = codes.length ? codes : want;
+  const _ask = codes;
   try {
     // offline=true（2026-10-11）：猎手是**批量视图**，标签走"本地日线缓存"零网络路径
     //（原来逐只 GM 取日线，而 GM 池 max_workers=1 ⇒ 全串行，实测 150 只 44s → 9s）。
@@ -9377,12 +9397,18 @@ async function loadSectorTags(category) {
     if (Object.keys(tagsMap).length) {
       hunterTagsCache[category] = Object.assign(have, tagsMap);   // 增量并入（翻页不丢已取的）
     }
+    // 2026-11-11：站上5日线天数（独立键，不参与「标签取齐」判定）
+    const streakMap = (r && r.ma5_streak) || {};
+    if (Object.keys(streakMap).length) {
+      hunterStreakCache[category] = Object.assign(haveS, streakMap);
+    }
     // 2026-10-23（owner：「技术标签更新实在太慢」）：后端改成了**增量交付**（算完一只给一只），
     // 所以这里要「**只要还有缺的码就继续问**」——原来只在"整张 map 为空"时重试 8 次，
     // 拿到第一批就不再问，剩下的永远空着。
     {
       const _hv = hunterTagsCache[category] || {};
-      const _miss = want.filter(c => !_hv[c]);
+      const _hs = hunterStreakCache[category] || {};
+      const _miss = want.filter(c => !_hv[c] || !(c in _hs));
       if (!_miss.length) {
         hunterTagsRetry[category] = 0;
       } else if ((hunterTagsRetry[category] || 0) < 40) {
@@ -9537,6 +9563,7 @@ function applySectorTags(tbody, category) {
   const stageEl = (card && card.querySelector(".h-stage-badge"))
     || tbody.querySelector(".h-stage-badge");
   const tagsMap = hunterTagsCache[category] || {};
+  const streakMap = hunterStreakCache[category] || {};
   if (!wrap) return;
   // 状态条：仅当**本次渲染出来的行全部拿到标签**才撤（增量取数下"有任意一条"不等于取完）
   const _rows = Array.from(wrap.querySelectorAll(".h-expand-row"));
@@ -9572,6 +9599,9 @@ function applySectorTags(tbody, category) {
         _u30Td.title = up30Tip(info.up30, info.up30_prev);
       }
     }
+    // 2026-11-11：站上5日线天数独立回填（🔥 徽标；不等标签取齐）
+    const _msTd = row.querySelector("td.h-ma5streak");
+    if (_msTd && streakMap[code] !== undefined) _msTd.innerHTML = ma5StreakHtml(streakMap[code]);
   });
   // 板块阶段判定（用 trend）
   // 2026-10-24：若后端已下发韭研广度阶段（data-breadth=1），**不要**用个股趋势覆盖它——
@@ -10555,6 +10585,7 @@ function renderHunter(h) {
         <td style="text-align:center" title="${esc("日线阶段。" + _stageSlope + " " + DAY_STAGE_TIP)}">${_stageTxt}</td>
                         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
+        <td class="num h-ma5streak" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起）">${ma5StreakHtml((hunterStreakCache[category] || {})[s.code])}</td>
                 <td class="num h-up30" style="text-align:center"
             title="${esc(up30Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30, (hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30_prev, s.build_reason || ""))}">${up30InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30, (hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30_prev)}</td>
         <td class="num h-bias5" style="text-align:center"
@@ -10633,13 +10664,13 @@ function renderHunter(h) {
       const _withWhy = _members.filter(m => m[1]).length;
       const _noteId = ("hnote-" + category + "-" + gk).replace(/[^\w一-龥-]/g, "_");
       const _gTip = [_gDesc ? `${gk}：${_gDesc}` : ""].filter(Boolean).join("");
-      const head = `<tr class="h-subgroup-head"><td colspan="13">
+      const head = `<tr class="h-subgroup-head"><td colspan="14">
         <span class="h-subgroup-name"${_gTip ? ` title="${esc(_gTip)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
         ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(_gTip)}">${esc(_gDesc)}</span>` : ""}
         <button class="mini-btn h-note-btn" onclick="hunterToggleNote('${_noteId}', this)">▸ 说明 · 个股理由</button>
       </td></tr>
-      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="13">
+      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="14">
         <div class="h-note-desc">${esc(_gDesc || "（该细分概念暂无解释）")}</div>
         <div class="h-note-hint cell-dim">本组 ${gs.length} 只，其中 ${_withWhy} 只有入选理由；再点一次按钮收起</div>
         <ul class="h-note-list">${_members.slice(0, 80).map(([n, r, v]) =>
@@ -10765,6 +10796,7 @@ function renderHunter(h) {
             <th title="日线三态（描述状态，紧挨得分/通过便于对照）：多头=MA60 近20个交易日上涨>3%；空头=MA60 近20日下跌>3%；震荡=其余（60日线走平）。⚠️ 实测(977只×2017-2026/156万股票·日)：分布 多头31%/震荡39%/空头30%；未来20日超额 多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)，H=5/10/20 排序一致。仅作状态描述，不是买卖信号。⚠️ 得分里的阶段项**仍是旧四阶段口径**（三态映射会让得分 IC 变负）">日线阶段</th>
                                     <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
+            <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
                                     ${UP30_TH}
             <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
             <th title="(现价 − 365 日均线) / 365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。原来这列是「理由」，已挪到本格 tooltip">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
@@ -10985,7 +11017,7 @@ function renderOB(ob) {
         s.ma20_daily ? `MA20=${s.ma20_daily}，现价=${s.price}` : "")}
       <td style="max-width:200px;line-height:1.7">${(s.tags || []).map(t => tagBadge(t)).join(" ") || '<span class="cell-dim">—</span>'}</td>
       ${maReclaimCellHtml(s.ma_reclaim)}
-      <td title="${esc("30min 综合判定（趋势+顶部/底背离特征）\n" + _asofTxt + "\n" + tfTip + "\n" + dvTip)}">${vCell}${_asofStale ? ` <span class="warn" title="判定所依据的 30min bar 比此刻应有的最新根（${_expAsOf}）更旧">⚠旧</span>` : ""}</td>
+      <td style="text-align:center">${ma5StreakHtml(s.ma5_streak)}</td>
       ${structCellHtml(s.structure)}
       ${ma5CellHtml(s.structure)}
       ${up30CellHtml(s.up30, s.up30_prev, vd.reason || "")}
@@ -10996,10 +11028,9 @@ function renderOB(ob) {
   el.innerHTML = `
     <div class="card" style="overflow-x:auto">
       <div style="font-size:11px;line-height:1.9;margin-bottom:6px" class="cell-dim">
-        <b>30min 判定</b>（只看这一列）：<span class="badge signal">🔴 减仓/避高</span>＝出现 <b>T1顶背离</b> 或 <b>T2量价背离</b>（981只×540日验证：H=4 下跌占比 +29/+32pp） ·
-        <span class="badge approach">🟠 盯紧</span>＝T3顶分型 与 T4均线压制 <b>同现</b>（弱信号） ·
-        <span class="badge bear">🟢 偏好</span>＝无顶信号且<u>有</u>新鲜底背离(≤16根/2日) ·
-        <span class="cell-dim">⚪ 中性</span>＝其余（<b>单个</b> T3/T4 不报警：实测无前瞻区分度）
+        <b>站上5日线</b>（只看这一列）：🔥 徽标里的数字 = <b>连续站上 5 日线的天数</b>，
+        <b>从这一轮第一次站上那天开始算</b>（收盘 &gt; 当日 MA5）；跌破 5 日线即归零、显示「—」。
+        颜色：绿 1~2 天 · 橙 3~5 天 · 红 6~9 天 · 深红 ≥10 天。数据=本地日线缓存，非 30 分钟口径。
       </div>
       <table><thead><tr>
         <th>股票</th><th class="num">现价</th>
@@ -11009,7 +11040,7 @@ function renderOB(ob) {
         <th title="是否站上 20 日线（观察列，不驱动判定）。口径与「建仓信号扫描」/「选股猎手」同款：收盘价 > 20 日简单均线。⚠️ 本表不做 −70 悬崖扣分（那是建仓表 5 日线的口径），本列纯展示">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
         <th title="与建仓扫描同口径（通道/箱体/筑底顶/背离/超买/破均线）">技术标签</th>
         <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「异常监控池」同源同渲染）。持仓票若刚回站 MA20/MA60，常是「趋势修复」的第一根证据">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
-        <th title="30min 趋势+顶部/底背离特征 → 重视程度（读一列即可）">30min判定</th>
+        <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破 5 日线即归零）。🔥 颜色越深=连续越久">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
         <th title="仓位结构（30min/10min，与建仓信号扫描**同一真源**，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给三档下档支撑挂单价与5日成交率。⚠️ 是**结构参考、不是买卖信号**。悬停看明细">仓位结构</th>
         <th title="30min MA5 状态（**纯展示**）：站上/跌破 5×30min 均线，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（同日同bar-of-day对照 |diff|≤0.03pp）⇒ 仅供参考，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
         ${UP30_TH}
@@ -12836,7 +12867,10 @@ function _mwBoxMarkAreas(code, dates) {
 }
 
 function _mwOption(s, dma, levels, trades, zoom, code) {
-  const gaps = buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8);   // 最近 15 自然日的缺口，一格最多 8 块
+  // 2026-11-11：跟随工具栏「缺口 / 买卖点」开关（同上下文 multip窗口共用；独立窗口默认开）
+  const _mwShowGaps = (document.getElementById("tgGaps") || {}).checked !== false;
+  const _mwShowTrades = (document.getElementById("tgTrades") || {}).checked !== false;
+  const gaps = _mwShowGaps ? buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8) : [];   // 最近 15 自然日的缺口，一格最多 8 块
   // 2026-10-28 owner：主图画框提醒也要进多窗口（蓝实线框，与缺口的红绿虚线区分）
   const _mwBoxes2 = _mwBoxMarkAreas(code, s.dates);
   /* 2026-11-04 owner：「多窗口里 5 日均线要相比其它线更显眼」→ 随后又改口
@@ -12967,7 +13001,7 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
      与单图**同一归桶口径**：K 线时间是右端，成交落进 (bar_t - 5min, bar_t]；
      买=红 ▲ 托在该根 low 下方、卖=绿 ▼ 压在该根 high 上方（与单图同色同形）。 */
   const _tm = {};
-  if (Array.isArray(trades) && trades.length && dates.length) {
+  if (_mwShowTrades && Array.isArray(trades) && trades.length && dates.length) {
     const _bd = dates.map(x => String(x).slice(0, 10));
     const _be = dates.map(x => Number(String(x).slice(11, 13)) * 60 + Number(String(x).slice(14, 16)));
     let bi = 0;                                   // 双指针：trades 与 bar 同为升序
