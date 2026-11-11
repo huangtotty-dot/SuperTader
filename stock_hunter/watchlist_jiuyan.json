@@ -2865,13 +2865,19 @@
   "business_summary": "主营废弃资源综合利用业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "房地产开发",
   "name": "粤宏远A",
   "primary_source": "legacy",
   "sector": "废弃资源综合利用业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "房地产开发",
+  "jiuyan_concept_reason": {
+   "房地产开发": "粤宏远A：房地产（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 地产/房地产开发"
  },
  "000576": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -3088,13 +3094,19 @@
   "business_summary": "主营燃气生产和供应业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "天然气",
   "name": "德龙汇能",
   "primary_source": "legacy",
   "sector": "燃气生产和供应业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "天然气",
+  "jiuyan_concept_reason": {
+   "天然气": "德龙汇能：城市燃气（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/天然气"
  },
  "000595": {
   "business_summary": "",
@@ -5155,13 +5167,19 @@
   "business_summary": "主营化学纤维制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "化学纤维",
   "name": "恒申新材",
   "primary_source": "legacy",
   "sector": "化学纤维制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "化学纤维",
+  "jiuyan_concept_reason": {
+   "化学纤维": "恒申新材：化学纤维（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/化学纤维"
  },
  "000783": {
   "business_summary": "主营证券Ⅱ",
@@ -8154,13 +8172,19 @@
   "business_summary": "工程机械零部件及总成研发、设计、生产、销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件与材料",
   "name": "拓山重工",
   "primary_source": "legacy",
   "sector": "工程机械/专精特新",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件与材料",
+  "jiuyan_concept_reason": {
+   "结构件与材料": "拓山重工：工程机械零部件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/结构件与材料"
  },
  "001227": {
   "business_summary": "主营货币金融服务",
@@ -8273,13 +8297,19 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "PCB",
+  "jiuyan_concept": "PCB设计与SMT服务",
   "name": "嘉立创",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "PCB",
+  "jiuyan_concept1": "PCB设计与SMT服务",
+  "jiuyan_concept_reason": {
+   "PCB设计与SMT服务": "嘉立创：PCB打样/PCBA（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → PCB/PCB设计与SMT服务"
  },
  "001233": {
   "business_summary": "主营其他",
@@ -9161,13 +9191,19 @@
   "business_summary": "中、大功率LED照明产品研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "联域股份",
   "primary_source": "legacy",
   "sector": "照明设备Ⅱ/物联网/智能家居",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_concept_reason": {
+   "LED": "联域股份：LED照明（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/LED"
  },
  "001328": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -10169,13 +10205,19 @@
   "business_summary": "主营造纸和纸制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "被动元件",
   "name": "凯恩股份",
   "primary_source": "legacy",
   "sector": "造纸和纸制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "被动元件",
+  "jiuyan_concept_reason": {
+   "被动元件": "凯恩股份：电解电容器纸（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/被动元件"
  },
  "002014": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -10261,13 +10303,19 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能装备与机床",
   "name": "中捷资源",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_concept_reason": {
+   "智能装备与机床": "中捷资源：缝纫机（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/智能装备与机床"
  },
  "002022": {
   "business_summary": "主营医药制造业",
@@ -11170,13 +11218,19 @@
   "business_summary": "主营土木工程建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "地产基建",
   "name": "宏润建设",
   "primary_source": "legacy",
   "sector": "土木工程建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "地产基建",
+  "jiuyan_concept_reason": {
+   "地产基建": "宏润建设：市政/轨交施工（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 地产/地产基建"
  },
  "002063": {
   "business_summary": "主营软件和信息技术服务业",
@@ -13332,13 +13386,19 @@
   "business_summary": "主营有色金属冶炼和压延加工业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "有色金属",
+  "jiuyan_concept": "铝",
   "name": "常铝股份",
   "primary_source": "legacy",
   "sector": "有色金属冶炼和压延加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "有色金属",
+  "jiuyan_concept1": "铝",
+  "jiuyan_concept_reason": {
+   "铝": "常铝股份：铝加工（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 有色金属/铝"
  },
  "002161": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -14330,13 +14390,19 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能装备与机床",
   "name": "达意隆",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_concept_reason": {
+   "智能装备与机床": "达意隆：包装机械（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/智能装备与机床"
  },
  "002210": {
   "business_summary": "主营商务服务业",
@@ -16453,13 +16519,19 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "改性材料",
   "name": "普利特",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:33:35"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "改性材料",
+  "jiuyan_concept_reason": {
+   "改性材料": "普利特：改性塑料（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/改性材料"
  },
  "002326": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -16807,7 +16879,7 @@
   "primary_source": "legacy",
   "sector": "广播、电视、电影和录音制作业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_role": "龙头",
   "jiuyan_role_reason": "10/8-15五连板AI漫剧高度龙；与阶跃星辰共建AI实验室",
   "jiuyan_aiapp_verdicts": {},
@@ -16834,7 +16906,15 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主营影视IP投资制作发行及游戏渠道，普通微短剧不能直接等同于AI影视。公告明确短剧业务规模较小且2025年亏损，AIGC平台尚未形成收入，无法证明AI影视产品已经商业化或成为主营。因此原“短剧+AI影视短剧”标签存在重复且核心定级依据不足，应整只摘除而非继续保留概念标签。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧",
+  "jiuyan_concept_reason": {
+   "AI影视短剧": "慈文传媒：影视院线（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI影视短剧"
  },
  "002344": {
   "business_summary": "主营商务服务业",
@@ -18841,13 +18921,19 @@
   "business_summary": "主营互联网和相关服务",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI游戏",
   "name": "凯撒文化",
   "primary_source": "legacy",
   "sector": "互联网和相关服务",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI游戏",
+  "jiuyan_concept_reason": {
+   "AI游戏": "凯撒文化：游戏（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI游戏"
  },
  "002426": {
   "business_summary": "消费电子产品业务以及汽车零部件业务。",
@@ -22391,13 +22477,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_个护电器",
   "name": "奥佳华",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_个护电器",
+  "jiuyan_concept_reason": {
+   "大消费_个护电器": "奥佳华：按摩器具（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 大消费/大消费_个护电器"
  },
  "002615": {
   "business_summary": "主营金属制品业",
@@ -22699,13 +22791,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "安洁科技",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "安洁科技：消费电子功能件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "002636": {
   "business_summary": "电子行业基础材料覆铜板的研发、生产和销售。",
@@ -23196,13 +23294,19 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "零部件",
   "name": "信质集团",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "零部件",
+  "jiuyan_concept_reason": {
+   "零部件": "信质集团：电机定转子（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 汽车/零部件"
  },
  "002666": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -23997,13 +24101,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "小崧股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_concept_reason": {
+   "LED": "小崧股份：LED照明/小家电（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/LED"
  },
  "002724": {
   "business_summary": "主营电气机械和器材制造业",
@@ -24073,13 +24183,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电力电子与配套",
   "name": "好利科技",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电力电子与配套",
+  "jiuyan_concept_reason": {
+   "电力电子与配套": "好利科技：熔断器（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 电力/电力电子与配套"
  },
  "002730": {
   "business_summary": "智慧矿山业务、防爆电气业务、电力设备业务、驱动设备业务、算力服务业务。",
@@ -25465,13 +25581,19 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "塑料制品",
   "name": "纳尔股份",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "塑料制品",
+  "jiuyan_concept_reason": {
+   "塑料制品": "纳尔股份：塑料/数码喷印（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/塑料制品"
  },
  "002826": {
   "business_summary": "主营医药制造业",
@@ -26118,13 +26240,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "瀛通通讯",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "瀛通通讯：声学/线材（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "002862": {
   "business_summary": "主营文教、工美、体育和娱乐用品制造业",
@@ -26321,7 +26449,7 @@
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_dataelement_verdict": "边缘",
   "jiuyan_dataelement_audited_at": "2026-10-27",
   "jiuyan_dataelement_evidence": {
@@ -26337,19 +26465,33 @@
     "数据要素_交通数据"
    ],
    "reason": "OBU、RSU、RFID及全息路口采集车辆身份、收费和路况数据，主要以智能终端、路侧设备及边端系统项目销售。未核到独立交通数据产品收费，属于上游感知和项目交付，严格口径下移出数据要素。"
-  }
+  },
+  "jiuyan_category1": "数据要素",
+  "jiuyan_concept1": "数据要素_交通数据",
+  "jiuyan_category": "数据要素",
+  "jiuyan_concept": "数据要素_交通数据",
+  "jiuyan_concept_reason": {
+   "数据要素_交通数据": "金溢科技：ETC/V2X（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 数据要素/数据要素_交通数据"
  },
  "002870": {
   "business_summary": "主营芯片概念",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "零部件",
   "name": "香山股份",
   "primary_source": "legacy",
   "sector": "芯片概念/智能座舱",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "零部件",
+  "jiuyan_concept_reason": {
+   "零部件": "香山股份：汽车零部件/智能座舱（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 汽车/零部件"
  },
  "002871": {
   "business_summary": "主营通用设备制造业",
@@ -26391,13 +26533,19 @@
   "business_summary": "主营纺织服装、服饰业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_服装",
   "name": "安奈儿",
   "primary_source": "legacy",
   "sector": "纺织服装、服饰业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_服装",
+  "jiuyan_concept_reason": {
+   "大消费_服装": "安奈儿：童装（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 大消费/大消费_服装"
  },
  "002876": {
   "business_summary": "偏光片产品的研发、生产和销售。",
@@ -26898,13 +27046,19 @@
   "business_summary": "主营广播、电视、电影和录音制作业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧",
   "name": "金逸影视",
   "primary_source": "legacy",
   "sector": "广播、电视、电影和录音制作业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_concept_reason": {
+   "AI影视短剧": "金逸影视：影视院线（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI影视短剧"
  },
  "002906": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -27891,13 +28045,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电缆",
   "name": "日丰股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_concept_reason": {
+   "电缆": "日丰股份：电缆（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 电力/电缆"
  },
  "002955": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -28020,13 +28180,19 @@
   "business_summary": "主营建筑装饰、装修和其他建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "地产基建",
   "name": "豪尔赛",
   "primary_source": "legacy",
   "sector": "建筑装饰、装修和其他建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "地产基建",
+  "jiuyan_concept_reason": {
+   "地产基建": "豪尔赛：照明工程（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 地产/地产基建"
  },
  "002965": {
   "business_summary": "精密冲压模具和金属结构件一体化解决方案提供商",
@@ -30716,13 +30882,19 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "电池与组件",
   "name": "琏升科技",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "电池与组件",
+  "jiuyan_concept_reason": {
+   "电池与组件": "琏升科技：HJT电池（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 光伏/电池与组件"
  },
  "300052": {
   "business_summary": "云计算业务、网络游戏业务、数字孪生与文旅业务。",
@@ -31172,13 +31344,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "绝缘子",
   "name": "金利华电",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "绝缘子",
+  "jiuyan_concept_reason": {
+   "绝缘子": "金利华电：绝缘子（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 电力/绝缘子"
  },
  "300070": {
   "business_summary": "主营生态保护和环境治理业",
@@ -32603,13 +32781,19 @@
   "business_summary": "主营通用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能装备与机床",
   "name": "瑞凌股份",
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_concept_reason": {
+   "智能装备与机床": "瑞凌股份：焊接设备（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/智能装备与机床"
  },
  "300155": {
   "business_summary": "主营物业管理",
@@ -32959,13 +33143,19 @@
   "business_summary": "主营军工电子Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "低空经济",
+  "jiuyan_concept": "无人机",
   "name": "中海达",
   "primary_source": "legacy",
   "sector": "军工电子Ⅱ/时空大数据/卫星导航/无人机",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "低空经济",
+  "jiuyan_concept1": "无人机",
+  "jiuyan_concept_reason": {
+   "无人机": "中海达：卫星导航/无人机（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 低空经济/无人机"
  },
  "300179": {
   "business_summary": "超硬材料及其相关制品的研发、生产和销售。",
@@ -34226,13 +34416,19 @@
   "business_summary": "主营广播、电视、电影和录音制作业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧",
   "name": "光线传媒",
   "primary_source": "legacy",
   "sector": "广播、电视、电影和录音制作业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_concept_reason": {
+   "AI影视短剧": "光线传媒：影视院线（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI影视短剧"
  },
  "300252": {
   "business_summary": "通信电缆及光纤光缆、通信组件及连接器、PCB系列、卫星及无线通讯产品的研发、生产和销售。",
@@ -34477,13 +34673,19 @@
   "business_summary": "大视频端到端整体解决方案的研发与推广。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI视觉",
   "name": "佳创视讯",
   "primary_source": "legacy",
   "sector": "IT服务Ⅱ/Web3.0/在线教育/空间计算",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI视觉",
+  "jiuyan_concept_reason": {
+   "AI视觉": "佳创视讯：IT服务/大视频解决方案（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI视觉"
  },
  "300265": {
   "business_summary": "主营电气机械和器材制造业",
@@ -34587,13 +34789,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "联建光电",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_concept_reason": {
+   "LED": "联建光电：LED显示（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/LED"
  },
  "300270": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -34951,7 +35159,7 @@
   "primary_source": "legacy",
   "sector": "广播、电视、电影和录音制作业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_aiapp_verdicts": {},
   "jiuyan_aiapp_audited_at": "2026-10-27",
   "jiuyan_aiapp_evidence": {
@@ -34972,7 +35180,15 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主营电影、剧集、动漫、文旅和营销，已披露项目主要是传统影视剧、动画电影及真人互动影游。半年报虽提出围绕互动加战略构建涵盖影视、游戏、AIGC的内容生态，但这属于合作方向和战略表述，未对应公司自有AI产品、明确AI影视作品、客户合同或收入，合作方采用AIGC也不能直接归作百纳千成的AI能力。原核心判断主要由影视内容推断，证据不足，故直接摘除。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧",
+  "jiuyan_concept_reason": {
+   "AI影视短剧": "百纳千成：影视院线（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI影视短剧"
  },
  "300292": {
   "business_summary": "企业移动信息化服务业务。",
@@ -35142,13 +35358,19 @@
   "business_summary": "主营互联网和相关服务",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI游戏",
   "name": "富春股份",
   "primary_source": "legacy",
   "sector": "互联网和相关服务",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI游戏",
+  "jiuyan_concept_reason": {
+   "AI游戏": "富春股份：游戏/互联网（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI游戏"
  },
  "300300": {
   "business_summary": "主营软件和信息技术服务业",
@@ -35739,13 +35961,19 @@
   "business_summary": "LED芯片、LED外延片、蓝宝石衬底及第三代半导体化合物GaN电力电子器件的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "华灿光电",
   "primary_source": "legacy",
   "sector": "光学光电子/MicroLED概念/MiniLED/第三代半导体",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_concept_reason": {
+   "LED": "华灿光电：LED芯片/外延片（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/LED"
  },
  "300324": {
   "business_summary": "主营软件和信息技术服务业",
@@ -35799,13 +36027,19 @@
   "business_summary": "微纳光学产品的设计、开发与制造服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光通信",
+  "jiuyan_concept": "光通信材料-光学与晶体",
   "name": "苏大维格",
   "primary_source": "legacy",
   "sector": "光学光电子/光刻机/中芯国际概念/OLED",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "光通信",
+  "jiuyan_concept1": "光通信材料-光学与晶体",
+  "jiuyan_concept_reason": {
+   "光通信材料-光学与晶体": "苏大维格：微纳光学（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 光通信/光通信材料-光学与晶体"
  },
  "300332": {
   "business_summary": "主营燃气生产和供应业",
@@ -36789,13 +37023,19 @@
   "business_summary": "高速易拉盖、易拉罐等金属包装制品生产设备的研发、设计、生产、装配调试，相关精密模具、智能检测设备、零备件的研发、加工制造等业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能装备与机床",
   "name": "斯莱克",
   "primary_source": "legacy",
   "sector": "专用设备/C2M概念/专精特新/人形机器人",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_concept_reason": {
+   "智能装备与机床": "斯莱克：金属包装设备/机器人零部件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/智能装备与机床"
  },
  "300383": {
   "business_summary": "主营通信服务",
@@ -38744,13 +38984,19 @@
   "business_summary": "主营零售业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_百货零售",
   "name": "星徽股份",
   "primary_source": "legacy",
   "sector": "零售业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_百货零售",
+  "jiuyan_concept_reason": {
+   "大消费_百货零售": "星徽股份：跨境电商/零售（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 大消费/大消费_百货零售"
  },
  "300465": {
   "business_summary": "主营软件开发",
@@ -38780,13 +39026,19 @@
   "business_summary": "主营互联网和相关服务",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI游戏",
   "name": "迅游科技",
   "primary_source": "legacy",
   "sector": "互联网和相关服务",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI游戏",
+  "jiuyan_concept_reason": {
+   "AI游戏": "迅游科技：游戏/互联网（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI游戏"
  },
  "300468": {
   "business_summary": "主营软件和信息技术服务业",
@@ -39442,13 +39694,19 @@
   "business_summary": "主营游戏Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI游戏",
   "name": "盛天网络",
   "primary_source": "legacy",
   "sector": "游戏Ⅱ/AI视频/电子竞技/AIGC概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI游戏",
+  "jiuyan_concept_reason": {
+   "AI游戏": "盛天网络：游戏（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI游戏"
  },
  "300496": {
   "business_summary": "智能操作系统产品和技术提供。",
@@ -39753,13 +40011,19 @@
   "business_summary": "研发、生产和销售工业运动控制系统、伺服驱动系统和工业物联网。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "电机电控与感知",
   "name": "维宏股份",
   "primary_source": "legacy",
   "sector": "计算机设备/工业母机/人形机器人/新型工业化",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "电机电控与感知",
+  "jiuyan_concept_reason": {
+   "电机电控与感知": "维宏股份：运动控制/伺服（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/电机电控与感知"
  },
  "300509": {
   "business_summary": "主营通用设备制造业",
@@ -40381,13 +40645,19 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件与材料",
   "name": "优德精密",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件与材料",
+  "jiuyan_concept_reason": {
+   "结构件与材料": "优德精密：精密模具/零部件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/结构件与材料"
  },
  "300550": {
   "business_summary": "主营软件和信息技术服务业",
@@ -40439,7 +40709,7 @@
   "primary_source": "legacy",
   "sector": "星闪概念/车联网",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_dataelement_verdict": "边缘",
   "jiuyan_dataelement_audited_at": "2026-10-27",
   "jiuyan_dataelement_evidence": {
@@ -40455,7 +40725,15 @@
     "数据要素_交通数据"
    ],
    "reason": "ETC、激光雷达、动态称重和V2X路侧设备采集车辆重量、轮廓、轨迹及路况数据，收入来自智能交通设备和系统项目。未核到独立交通数据产品收费，属于上游感知端。"
-  }
+  },
+  "jiuyan_category1": "数据要素",
+  "jiuyan_concept1": "数据要素_交通数据",
+  "jiuyan_category": "数据要素",
+  "jiuyan_concept": "数据要素_交通数据",
+  "jiuyan_concept_reason": {
+   "数据要素_交通数据": "万集科技：ETC/车联网（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 数据要素/数据要素_交通数据"
  },
  "300553": {
   "business_summary": "公司掌握了全自动平衡机的核心技术，具有较高的市场影响力",
@@ -40569,13 +40847,19 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI教育",
   "name": "佳发教育",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI教育",
+  "jiuyan_concept_reason": {
+   "AI教育": "佳发教育：教育信息化软件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI教育"
  },
  "300560": {
   "business_summary": "通信服务业务、信息化软件服务业务、数字营销业务、边缘计算业务、渠道销售业务。",
@@ -41479,13 +41763,19 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "塑料制品",
   "name": "雄塑科技",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "塑料制品",
+  "jiuyan_concept_reason": {
+   "塑料制品": "雄塑科技：塑料管材（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/塑料制品"
  },
  "300600": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -41712,13 +42002,19 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "云计算",
+  "jiuyan_concept": "PaaS-应用开发与运维",
   "name": "思特奇",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "云计算",
+  "jiuyan_concept1": "PaaS-应用开发与运维",
+  "jiuyan_concept_reason": {
+   "PaaS-应用开发与运维": "思特奇：电信软件/云（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 云计算/PaaS-应用开发与运维"
  },
  "300609": {
   "business_summary": "为客户提供行业数字化解决方案。",
@@ -42297,13 +42593,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "光莆股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_concept_reason": {
+   "LED": "光莆股份：LED/UV（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/LED"
  },
  "300633": {
   "business_summary": "主营专用设备制造业",
@@ -42994,13 +43296,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "智能电网",
   "name": "大烨智能",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "智能电网",
+  "jiuyan_concept_reason": {
+   "智能电网": "大烨智能：电网设备（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 电力/智能电网"
  },
  "300671": {
   "business_summary": "主营软件和信息技术服务业",
@@ -43848,13 +44156,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光通信",
+  "jiuyan_concept": "光传输与接入设备",
   "name": "万隆光电",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "光通信",
+  "jiuyan_concept1": "光传输与接入设备",
+  "jiuyan_concept_reason": {
+   "光传输与接入设备": "万隆光电：广电传输设备（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 光通信/光传输与接入设备"
  },
  "300711": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -44447,13 +44761,19 @@
   "business_summary": "主营专业技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI设计",
   "name": "汉嘉数智",
   "primary_source": "legacy",
   "sector": "专业技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI设计",
+  "jiuyan_concept_reason": {
+   "AI设计": "汉嘉数智：IT服务/专业技术服务（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI设计"
  },
  "300747": {
   "business_summary": "主营自动化设备",
@@ -44559,25 +44879,37 @@
   "business_summary": "提供整体背光显示模组解决方案。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "光学显示",
   "name": "隆利科技",
   "primary_source": "legacy",
   "sector": "光学光电子/MicroLED概念/MiniLED/AI眼镜",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学显示",
+  "jiuyan_concept_reason": {
+   "光学显示": "隆利科技：背光显示模组（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/光学显示"
  },
  "300753": {
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "医疗器械",
   "name": "爱朋医疗",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医疗器械",
+  "jiuyan_concept_reason": {
+   "医疗器械": "爱朋医疗：医疗器械（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 医药/医疗器械"
  },
  "300755": {
   "business_summary": "主营批发业",
@@ -45539,13 +45871,19 @@
   "business_summary": "光学镜头等产品设计、研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "AI眼镜",
   "name": "宇瞳光学",
   "primary_source": "legacy",
   "sector": "计算机设备/AI眼镜/消费电子概念/汽车电子",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "AI眼镜",
+  "jiuyan_concept_reason": {
+   "AI眼镜": "宇瞳光学：光学镜头/AI眼镜（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/AI眼镜"
  },
  "300791": {
   "business_summary": "主营食品制造业",
@@ -45833,13 +46171,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "久量股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_concept_reason": {
+   "LED": "久量股份：LED照明（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/LED"
  },
  "300809": {
   "business_summary": "高端精密磨削装备研发、制造与服务。",
@@ -45964,13 +46308,19 @@
   "business_summary": "主营金属新材料",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电力电子与配套",
   "name": "铂科新材",
   "primary_source": "legacy",
   "sector": "金属新材料/共封装光学(CPO)/存储芯片/芯片概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电力电子与配套",
+  "jiuyan_concept_reason": {
+   "电力电子与配套": "铂科新材：金属软磁粉芯（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 电力/电力电子与配套"
  },
  "300812": {
   "business_summary": "主营消费电子",
@@ -46069,13 +46419,19 @@
   "business_summary": "主营生态保护和环境治理业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "零部件",
   "name": "艾可蓝",
   "primary_source": "legacy",
   "sector": "生态保护和环境治理业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "零部件",
+  "jiuyan_concept_reason": {
+   "零部件": "艾可蓝：尾气后处理（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 汽车/零部件"
  },
  "300817": {
   "business_summary": "滑动轴承、滑动轴承用复合材料及铜粉的研发、生产及销售，为各工业领域提供滑动轴承解决方案，并致力于滑动轴承材料的研发及其在新领域的推广与应用。",
@@ -46219,13 +46575,19 @@
   "business_summary": "整车及整车平台全流程研发、新能源智能化平台开发、核心零部件研发制造。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "整车",
   "name": "阿尔特",
   "primary_source": "legacy",
   "sector": "汽车服务/汽车芯片/智谱AI/数字孪生",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "整车",
+  "jiuyan_concept_reason": {
+   "整车": "阿尔特：整车及平台研发（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 汽车/整车"
  },
  "300826": {
   "business_summary": "主营专业技术服务业",
@@ -47285,13 +47647,19 @@
   "business_summary": "主营金属制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件与材料",
   "name": "海昌新材",
   "primary_source": "legacy",
   "sector": "金属制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件与材料",
+  "jiuyan_concept_reason": {
+   "结构件与材料": "海昌新材：粉末冶金零件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/结构件与材料"
  },
  "300886": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -47722,13 +48090,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_小家电",
   "name": "亿田智能",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_小家电",
+  "jiuyan_concept_reason": {
+   "大消费_小家电": "亿田智能：集成灶（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 大消费/大消费_小家电"
  },
  "300912": {
   "business_summary": "主营生态保护和环境治理业",
@@ -47873,13 +48247,19 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "塑料制品",
   "name": "润阳科技",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "塑料制品",
+  "jiuyan_concept_reason": {
+   "塑料制品": "润阳科技：泡沫塑料（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/塑料制品"
  },
  "300921": {
   "business_summary": "主营互联网和相关服务",
@@ -48292,13 +48672,19 @@
   "business_summary": "精密功能件、智能自动化装备的设计、研发、生产和销售。公司具备多次套位、叠加组合后产品尺寸精密度仍能控制在±0.05mm范围的技术能力",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "博硕科技",
   "primary_source": "legacy",
   "sector": "消费电子/富士康概念/苹果概念/消费电子概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "博硕科技：精密功能件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "300952": {
   "business_summary": "主营纺织业",
@@ -48677,13 +49063,19 @@
   "business_summary": "为消费电子产品及其组件的生产商提供功能性器件的国家高新技术企业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "达瑞电子",
   "primary_source": "legacy",
   "sector": "消费电子/智能穿戴/消费电子概念/小米概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "达瑞电子：消费电子功能件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "300977": {
   "business_summary": "主营专业技术服务业",
@@ -49421,13 +49813,19 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "零部件",
   "name": "密封科技",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "零部件",
+  "jiuyan_concept_reason": {
+   "零部件": "密封科技：密封件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 汽车/零部件"
  },
  "301021": {
   "business_summary": "激光器和激光解决方案的研发、生产和销售。",
@@ -49784,13 +50182,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "光学显示",
   "name": "天禄科技",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学显示",
+  "jiuyan_concept_reason": {
+   "光学显示": "天禄科技：导光板（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/光学显示"
  },
  "301046": {
   "business_summary": "主营土木工程建筑业",
@@ -50026,13 +50430,19 @@
   "business_summary": "主营化学纤维制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "化学纤维",
   "name": "汇隆新材",
   "primary_source": "legacy",
   "sector": "化学纤维制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "化学纤维",
+  "jiuyan_concept_reason": {
+   "化学纤维": "汇隆新材：化学纤维（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/化学纤维"
  },
  "301058": {
   "business_summary": "主营专业技术服务业",
@@ -50132,25 +50542,37 @@
   "business_summary": "主营纺织服装、服饰业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_服装",
   "name": "万事利",
   "primary_source": "legacy",
   "sector": "纺织服装、服饰业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_服装",
+  "jiuyan_concept_reason": {
+   "大消费_服装": "万事利：丝绸纺织（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 大消费/大消费_服装"
  },
  "301067": {
   "business_summary": "信号转换器、信号拓展坞、电源适配器、智能充电器等移动终端智能配件产品研发、生产、销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "显盈科技",
   "primary_source": "legacy",
   "sector": "消费电子/铜缆高速连接/消费电子概念/无线充电",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "显盈科技：信号转换/拓展坞（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "301068": {
   "business_summary": "主营废弃资源综合利用业",
@@ -50262,13 +50684,19 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "化学制药",
   "name": "多瑞医药",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "化学制药",
+  "jiuyan_concept_reason": {
+   "化学制药": "多瑞医药：化学制药（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 医药/化学制药"
  },
  "301076": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -50409,13 +50837,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "鸿富瀚",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "鸿富瀚：消费电子散热/功能件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "301087": {
   "business_summary": "主营专用设备制造业",
@@ -52543,13 +52977,19 @@
   "business_summary": "主营汽车热管理",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "零部件",
   "name": "恒勃股份",
   "primary_source": "legacy",
   "sector": "汽车热管理/PEEK材料",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "零部件",
+  "jiuyan_concept_reason": {
+   "零部件": "恒勃股份：汽车热管理（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 汽车/零部件"
  },
  "301226": {
   "business_summary": "主营电气机械和器材制造业",
@@ -52654,7 +53094,7 @@
   "primary_source": "legacy",
   "sector": "出版/AI视频/短剧游戏/文化传媒概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_dataelement_verdict": "错标",
   "jiuyan_dataelement_audited_at": "2026-10-27",
   "jiuyan_dataelement_evidence": {
@@ -52670,7 +53110,15 @@
     "数据要素_内容数据"
    ],
    "reason": "核心产品是立体书、翻翻书等少儿图书，通过策划、版权授权、印刷和发行实现销售。未核到将图书内容加工为数据库、语料包或数据接口并单独授权收费，出版版权不能直接等同内容数据产品。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI出版",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI出版",
+  "jiuyan_concept_reason": {
+   "AI出版": "荣信文化：少儿图书出版（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI出版"
  },
  "301232": {
   "business_summary": "主营风电设备",
@@ -52935,13 +53383,19 @@
   "business_summary": "主营减速器",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "核心零部件-传动",
   "name": "通力科技",
   "primary_source": "legacy",
   "sector": "减速器/机器人概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "核心零部件-传动",
+  "jiuyan_concept_reason": {
+   "核心零部件-传动": "通力科技：减速器（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/核心零部件-传动"
  },
  "301256": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -53276,13 +53730,19 @@
   "business_summary": "主营通用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能装备与机床",
   "name": "金道科技",
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_concept_reason": {
+   "智能装备与机床": "金道科技：叉车变速箱/工程机械（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/智能装备与机床"
  },
  "301280": {
   "business_summary": "电子连接器的研发、生产及销售。",
@@ -53336,13 +53796,19 @@
   "business_summary": "精密电子连接器及金属机构件的研发、生产及销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "鸿日达",
   "primary_source": "legacy",
   "sector": "消费电子/芯片概念/消费电子概念/智能穿戴",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "鸿日达：精密连接器/结构件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "301286": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -53867,13 +54333,19 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能装备与机床",
   "name": "智立方",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_concept_reason": {
+   "智能装备与机床": "智立方：自动化设备（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/智能装备与机床"
  },
  "301313": {
   "business_summary": "3D可视化产品及服务、数字一体化综合服务、AI3D数字孪生产品及解决方案。",
@@ -53907,13 +54379,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "被动元件",
   "name": "科瑞思",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "被动元件",
+  "jiuyan_concept_reason": {
+   "被动元件": "科瑞思：网络变压器/磁性元件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/被动元件"
  },
  "301315": {
   "business_summary": "主营软件和信息技术服务业",
@@ -54865,13 +55343,19 @@
   "business_summary": "耳机等智能音频产品的研发、设计与生产。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "天键股份",
   "primary_source": "legacy",
   "sector": "消费电子/智能音箱/语音技术/无线耳机",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "天键股份：耳机等智能音频（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "301386": {
   "business_summary": "主营电气机械和器材制造业",
@@ -54898,13 +55382,19 @@
   "business_summary": "消费电子防护性及功能性产品的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "光大同创",
   "primary_source": "legacy",
   "sector": "消费电子/共封装光学/MiniLED",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "光大同创：消费电子防护/功能件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "301388": {
   "business_summary": "主营电气机械和器材制造业",
@@ -55023,13 +55513,19 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "基础化工",
   "name": "仁信新材",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "基础化工",
+  "jiuyan_concept_reason": {
+   "基础化工": "仁信新材：聚苯乙烯（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/基础化工"
  },
  "301396": {
   "business_summary": "在智慧民生、城市综合管理、智慧园区领域，为遍布各行业的客户提供专业和系统的全流程解决方案。",
@@ -55204,7 +55700,7 @@
   "primary_source": "legacy",
   "sector": "通信服务/云计算/数据安全/网络安全",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_dataelement_verdict": "边缘",
   "jiuyan_dataelement_audited_at": "2026-10-27",
   "jiuyan_dataelement_evidence": {
@@ -55220,7 +55716,15 @@
     "数据要素_营销数据"
    ],
    "reason": "车后服务平台接入商户API，处理车主、优惠券、会员权益和营销触达数据，用于权益运营、客服及营销推广。按企业服务采购和运营项目收费，数据主要支撑自有服务，未核到独立营销数据库产品。"
-  }
+  },
+  "jiuyan_category1": "数据要素",
+  "jiuyan_concept1": "数据要素_交通数据",
+  "jiuyan_category": "数据要素",
+  "jiuyan_concept": "数据要素_交通数据",
+  "jiuyan_concept_reason": {
+   "数据要素_交通数据": "世纪恒通：通信服务/高速ETC（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 数据要素/数据要素_交通数据"
  },
  "301429": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -55576,7 +56080,7 @@
   "primary_source": "legacy",
   "sector": "电机Ⅱ/小米概念/机器人概念/家用电器",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_robot_physicalai_verdicts": {},
   "jiuyan_robot_physicalai_audited_at": "2026-10-27",
   "jiuyan_robot_physicalai_evidence": {
@@ -55598,7 +56102,15 @@
    "verdict": "摘除",
    "category_verdicts": {},
    "reason": "公司主营微特电机及应用产品，多款无框电机和机器人模组电机虽已完成开发并具备量产条件，但2025年报仍称推进客户对接，此前亦明确尚未应用于人形机器人，未见正式订单、交付或收入。微特电机主营不能直接外推为机器人核心，具备量产能力不等于商业化落地，原核心标签依据不足，故摘除。"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "电机电控与感知",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "电机电控与感知",
+  "jiuyan_concept_reason": {
+   "电机电控与感知": "华阳智能：微特电机（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 机器人/电机电控与感知"
  },
  "301503": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -56430,13 +56942,19 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "贝隆精密",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "贝隆精密：精密结构件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "301568": {
   "business_summary": "三维锡膏印刷检测设备（3D SPI）、三维自动光学检测设备（3D AOI）",
@@ -56490,13 +57008,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "消费电子",
   "name": "辰奕智能",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "消费电子",
+  "jiuyan_concept_reason": {
+   "消费电子": "辰奕智能：智能遥控器（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/消费电子"
  },
  "301580": {
   "business_summary": "主营专用设备制造业",
@@ -56633,13 +57157,19 @@
   "business_summary": "高性能工程塑料制品及组配件的研发、生产与销售业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "改性材料",
   "name": "肯特股份",
   "primary_source": "legacy",
   "sector": "塑料/PCB概念/PEEK材料/专精特新",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "改性材料",
+  "jiuyan_concept_reason": {
+   "改性材料": "肯特股份：工程塑料/PEEK（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 化工/改性材料"
  },
  "301592": {
   "business_summary": "主营软件和信息技术服务业",
@@ -75378,7 +75908,7 @@
   "primary_source": "legacy",
   "sector": "新闻和出版业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_dataelement_verdict": "错标",
   "jiuyan_dataelement_audited_at": "2026-10-27",
   "jiuyan_dataelement_evidence": {
@@ -75394,7 +75924,15 @@
     "数据要素_内容数据"
    ],
    "reason": "主要经营一般图书、教材教辅、纸张印刷物资和票据印刷，通过图书包销、经销及物资销售交付。未见独立数据库、内容数据接口或语料授权收费产品，不能将出版资源直接认定为内容数据业务。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI出版",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI出版",
+  "jiuyan_concept_reason": {
+   "AI出版": "出版传媒：新闻和出版业（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI出版"
  },
  "603000": {
   "business_summary": "主营其他",
@@ -78947,13 +79485,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_小家电",
   "name": "比依股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_小家电",
+  "jiuyan_concept_reason": {
+   "大消费_小家电": "比依股份：空气炸锅/小家电（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 大消费/大消费_小家电"
  },
  "603216": {
   "business_summary": "主营木材加工和木、竹、藤、棕、草制品业",
@@ -80404,13 +80948,19 @@
   "business_summary": "通用照明和车载零部件的研发、生产、销售和服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "得邦照明",
   "primary_source": "legacy",
   "sector": "照明设备Ⅱ/汽车电子/智慧灯杆/智慧城市",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_concept_reason": {
+   "LED": "得邦照明：照明设备（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/LED"
  },
  "603305": {
   "business_summary": "致力于新能源汽车和汽车轻量化领域，特斯拉、蔚来的一级供应商",
@@ -81581,13 +82131,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "芯片设计-MCU与嵌入式",
   "name": "盛景微",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "芯片设计-MCU与嵌入式",
+  "jiuyan_concept_reason": {
+   "芯片设计-MCU与嵌入式": "盛景微：电子雷管控制芯片（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 半导体/芯片设计-MCU与嵌入式"
  },
  "603376": {
   "business_summary": "主营注册制次新股",
@@ -82056,13 +82612,19 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "零部件",
   "name": "友升股份",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "零部件",
+  "jiuyan_concept_reason": {
+   "零部件": "友升股份：汽车铝材（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 汽车/零部件"
  },
  "603421": {
   "business_summary": "主营其他",
@@ -83221,13 +83783,19 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI营销",
   "name": "纵横通信",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI营销",
+  "jiuyan_concept_reason": {
+   "AI营销": "纵横通信：文化传媒/数字营销（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI营销"
  },
  "603605": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -83276,13 +83844,19 @@
   "business_summary": "时尚鞋履及配套产品的研发、生产、分销及零售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_服装",
   "name": "天创时尚",
   "primary_source": "legacy",
   "sector": "服装家纺/C2M概念/抖音概念(字节概念)/粤港澳大湾区",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_服装",
+  "jiuyan_concept_reason": {
+   "大消费_服装": "天创时尚：时尚鞋履（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 大消费/大消费_服装"
  },
  "603609": {
   "business_summary": "主营农副食品加工业",
@@ -83593,13 +84167,19 @@
   "business_summary": "主营土木工程建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "石油",
+  "jiuyan_concept": "炼油化工",
   "name": "镇海股份",
   "primary_source": "legacy",
   "sector": "土木工程建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "石油",
+  "jiuyan_concept1": "炼油化工",
+  "jiuyan_concept_reason": {
+   "炼油化工": "镇海股份：石化工程设计（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 石油/炼油化工"
  },
  "603638": {
   "business_summary": "具有一定竞争力的高端液压系统制造产业基地",
@@ -84088,7 +84668,7 @@
   "primary_source": "legacy",
   "sector": "家用电器/空气能热泵",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-11-10 17:39:11",
   "jiuyan_robot_physicalai_verdicts": {},
   "jiuyan_robot_physicalai_audited_at": "2026-10-27",
   "jiuyan_robot_physicalai_evidence": {
@@ -84110,7 +84690,15 @@
    "verdict": "摘除",
    "category_verdicts": {},
    "reason": "公司主营业务为家电、汽车和电动工具零部件，唯一明确对应机器人的产品是工业机器人减速器钢轮。2026年5月该产品仍处小批量交样阶段，尚未量产且对公司业绩无影响，虽非完全无产品依据，但仅有早期试样和间接业务贡献，符合边缘口径；按既定清洗规则摘除机器人零部件标签。"
-  }
+  },
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_小家电",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_小家电",
+  "jiuyan_concept_reason": {
+   "大消费_小家电": "奇精机械：家电零部件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 大消费/大消费_小家电"
  },
  "603678": {
   "business_summary": "专业从事陶瓷电容器研发、生产、销售和技术支持的企业",
@@ -84311,13 +84899,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED",
   "name": "晨丰科技",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_concept_reason": {
+   "LED": "晨丰科技：LED照明结构件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 消费电子/LED"
  },
  "603686": {
   "business_summary": "主营公共设施管理业",
@@ -88665,13 +89259,19 @@
   "business_summary": "汽车用铸造再生铝合金和汽车零部件的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "有色金属",
+  "jiuyan_concept": "铝",
   "name": "永茂泰",
   "primary_source": "legacy",
   "sector": "工业金属/金属回收/长安汽车概念/新能源汽车",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "有色金属",
+  "jiuyan_concept1": "铝",
+  "jiuyan_concept_reason": {
+   "铝": "永茂泰：再生铝/汽车零部件（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 有色金属/铝"
  },
  "605218": {
   "business_summary": "主营光学光电子",
@@ -89299,13 +89899,19 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI运维",
   "name": "新炬网络",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI运维",
+  "jiuyan_concept_reason": {
+   "AI运维": "新炬网络：IT服务/运维（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → AI应用/AI运维"
  },
  "605399": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -89607,8 +90213,16 @@
   "primary_source": "legacy",
   "sector": "土木工程建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 16:00:00",
-  "jiuyan_tag_removed_20261025": "太空光伏/太空光伏组件（实际主营：岩土工程）"
+  "updated_at": "2026-11-10 17:39:11",
+  "jiuyan_tag_removed_20261025": "太空光伏/太空光伏组件（实际主营：岩土工程）",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "地面与数据应用",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "地面与数据应用",
+  "jiuyan_concept_reason": {
+   "地面与数据应用": "上海港湾：岩土工程/航天综合服务（2026-11-10 涨幅榜归类）"
+  },
+  "jiuyan_top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 商业航天/地面与数据应用"
  },
  "605599": {
   "business_summary": "主营饰品",
