@@ -96,9 +96,18 @@ function ma5StreakHtml(n) {
   if (n === null || n === undefined || isNaN(d) || d <= 0) {
     return '<span class="cell-dim" title="截至最新收盘未站上 5 日线（或日线缓存不足）">—</span>';
   }
-  const cls = d >= 10 ? " s-fire" : d >= 6 ? " s-hot" : d >= 3 ? " s-warm" : "";
-  const tip = `连续站上 5 日线第 ${d} 天（从第一次站上那天开始算；跌破 5 日线即归零）`;
-  return `<span class="ma5-streak${cls}" title="${tip}">🔥<b>${d}</b><i>天</i></span>`;
+  /* 2026-11-11 逐个实验（5498 只 / 54.2 万段，scripts/experiment/ma5_streak_break_20261111.py）：
+     平均 3.59 天破线、中位 3、75 分位 5、90 分位 7；已站上 ≥4 天 = 越过历史平均破线窗口，
+     用**红色 + ⚠** 提醒回撤风险。 */
+  const risk = d >= 4;
+  const cls = d >= 7 ? " s-fire" : risk ? " s-hot" : d >= 3 ? " s-warm" : "";
+  const tip = risk
+    ? `连续站上 5 日线第 ${d} 天（从第一次站上算起）。历史 5498 只 / 54.2 万段：平均 3.6 天破线、`
+      + `中位 3 天、75% 在 5 天内、90% 在 7 天内 ⇒ 已进入破线高发窗口，注意回撤/下杀风险`
+      + `（破线本身是节奏提醒，不是必跌信号）。`
+    : `连续站上 5 日线第 ${d} 天（从第一次站上算起；跌破即归零）。`
+      + `历史平均 3.6 天破线、中位 3 天。`;
+  return `<span class="ma5-streak${cls}" title="${tip}">${risk ? "⚠" : ""}🔥<b>${d}</b><i>天</i></span>`;
 }
 function wrCell(w) {
   if (!w) return `<span class="cell-dim">—</span>`;
@@ -11030,7 +11039,8 @@ function renderOB(ob) {
       <div style="font-size:11px;line-height:1.9;margin-bottom:6px" class="cell-dim">
         <b>站上5日线</b>（只看这一列）：🔥 徽标里的数字 = <b>连续站上 5 日线的天数</b>，
         <b>从这一轮第一次站上那天开始算</b>（收盘 &gt; 当日 MA5）；跌破 5 日线即归零、显示「—」。
-        颜色：绿 1~2 天 · 橙 3~5 天 · 红 6~9 天 · 深红 ≥10 天。数据=本地日线缓存，非 30 分钟口径。
+        颜色：绿 1~2 天 · 橙 3 天 · <b style="color:var(--red)">红 ≥4 天（⚠ 历史平均 3.6 天破线，进入高发窗口）</b> ·
+        深红 ≥7 天（90 分位）。数据=本地日线缓存，非 30 分钟口径。
       </div>
       <table><thead><tr>
         <th>股票</th><th class="num">现价</th>
