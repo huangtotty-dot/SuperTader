@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-11 14:50:08",
+  "updated_at": "2026-11-12 14:50:00",
   "open": {
     "688652": {
       "entry_date": "2026-11-05",
@@ -8,8 +8,8 @@
       "dev20": -0.196157,
       "gap": 0.1232338255603953,
       "board": "半导体",
-      "days_held": 3,
-      "last_check_date": "2026-11-11"
+      "days_held": 4,
+      "last_check_date": "2026-11-12"
     },
     "300534": {
       "entry_date": "2026-11-10",
@@ -18,28 +18,8 @@
       "dev20": -0.005353,
       "gap": 0.11056751467710368,
       "board": "医药",
-      "days_held": 1,
-      "last_check_date": "2026-11-11"
-    },
-    "002774": {
-      "entry_date": "2026-11-11",
-      "entry_price": 15.0265,
-      "qty": 6000,
-      "dev20": -0.087348,
-      "gap": 0.07510729613733891,
-      "board": "AI应用",
-      "days_held": 0,
-      "last_check_date": null
-    },
-    "600228": {
-      "entry_date": "2026-11-11",
-      "entry_price": 9.27,
-      "qty": 500,
-      "dev20": -0.021973,
-      "gap": 0.04391891891891886,
-      "board": "AI应用",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 2,
+      "last_check_date": "2026-11-12"
     }
   },
   "closed": {
@@ -116,19 +96,19 @@
       "closed_by": "fill_event"
     },
     "600228": {
-      "entry_date": "2026-10-21",
-      "entry_price": 10.22,
-      "qty": 100,
-      "dev20": -0.0785,
-      "gap": 0.06964656964656957,
+      "entry_date": "2026-11-11",
+      "entry_price": 9.27,
+      "qty": 500,
+      "dev20": -0.021973,
+      "gap": 0.04391891891891886,
       "board": "AI应用",
-      "days_held": 1,
-      "last_check_date": "2026-10-22",
-      "exit_date": "2026-10-22",
-      "exit_price": 9.34,
-      "exit_qty": 100,
-      "exit_reason": "sl5_deep",
-      "exit_fee": 5.0,
+      "days_held": 0,
+      "last_check_date": null,
+      "exit_date": "2026-11-12",
+      "exit_price": 10.09000015258789,
+      "exit_qty": 500,
+      "exit_reason": "pop_sell",
+      "exit_fee": 6.104450176701137,
       "closed_by": "fill_event"
     },
     "300857": {
@@ -593,6 +573,22 @@
       "exit_qty": 59500,
       "exit_reason": "horizon_expired",
       "exit_fee": 115.91195263221694,
+      "closed_by": "fill_event"
+    },
+    "002774": {
+      "entry_date": "2026-11-11",
+      "entry_price": 15.0265,
+      "qty": 6000,
+      "dev20": -0.087348,
+      "gap": 0.07510729613733891,
+      "board": "AI应用",
+      "days_held": 0,
+      "last_check_date": null,
+      "exit_date": "2026-11-12",
+      "exit_price": 15.503000068664551,
+      "exit_qty": 6000,
+      "exit_reason": "pop_sell",
+      "exit_fee": 112.5517820543752,
       "closed_by": "fill_event"
     }
   },
