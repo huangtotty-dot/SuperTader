@@ -14394,13 +14394,19 @@
   "business_summary": "主营非金属矿物制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "地产基建",
   "name": "国统股份",
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "地产基建",
+  "jiuyan_concept_reason": {
+   "地产基建": "国统股份：PCCP输水管道（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 地产/地产基建"
  },
  "002206": {
   "business_summary": "化学纤维、其他纺织材料、橡胶和塑料制品等的研发、生产和销售。",
@@ -22802,13 +22808,19 @@
   "business_summary": "主营土木工程建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "地产基建",
   "name": "成都路桥",
   "primary_source": "legacy",
   "sector": "土木工程建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "地产基建",
+  "jiuyan_concept_reason": {
+   "地产基建": "成都路桥：路桥施工（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 地产/地产基建"
  },
  "002629": {
   "business_summary": "主营开采专业及辅助性活动",
@@ -23133,13 +23145,19 @@
   "business_summary": "主营其他金融业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "金融",
+  "jiuyan_concept": "多元金融",
   "name": "仁东控股",
   "primary_source": "legacy",
   "sector": "其他金融业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "金融",
+  "jiuyan_concept1": "多元金融",
+  "jiuyan_concept_reason": {
+   "多元金融": "仁东控股：多元金融（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 金融/多元金融"
  },
  "002648": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -23670,8 +23688,16 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 16:00:00",
-  "jiuyan_tag_removed_20261025": "半导体/算力芯片（实际主营：集装箱装卸设备）"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_tag_removed_20261025": "半导体/算力芯片（实际主营：集装箱装卸设备）",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "智能装备与机床",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能装备与机床",
+  "jiuyan_concept_reason": {
+   "智能装备与机床": "华东重机：集装箱起重机/数控机床（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 机器人/智能装备与机床"
  },
  "002686": {
   "business_summary": "主营通用设备制造业",
@@ -23740,13 +23766,19 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "化学制药",
   "name": "双成药业",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "化学制药",
+  "jiuyan_concept_reason": {
+   "化学制药": "双成药业：多肽药物（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 医药/化学制药"
  },
  "002695": {
   "business_summary": "主营农副食品加工业",
@@ -29260,13 +29292,19 @@
   "business_summary": "主营专业技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "地产基建",
   "name": "地铁设计",
   "primary_source": "legacy",
   "sector": "专业技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "地产基建",
+  "jiuyan_concept_reason": {
+   "地产基建": "地铁设计：轨道交通设计（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 地产/地产基建"
  },
  "003015": {
   "business_summary": "主营柔性屏(折叠屏)",
@@ -35562,13 +35600,19 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI智慧城市",
   "name": "海峡创新",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI智慧城市",
+  "jiuyan_concept_reason": {
+   "AI智慧城市": "海峡创新：智慧城市/软件（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → AI应用/AI智慧城市"
  },
  "300302": {
   "business_summary": "企业级存储系统和特殊行业及工业级固态存储的研究、开发和应用。",
@@ -42781,13 +42825,19 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "军工",
+  "jiuyan_concept": "军工电子与元器件",
   "name": "新劲刚",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "军工",
+  "jiuyan_concept1": "军工电子与元器件",
+  "jiuyan_concept_reason": {
+   "军工电子与元器件": "新劲刚：军工微波电路/电子（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 军工/军工电子与元器件"
  },
  "300631": {
   "business_summary": "主营专用设备制造业",
@@ -42876,13 +42926,19 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "基础化工",
   "name": "扬帆新材",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "基础化工",
+  "jiuyan_concept_reason": {
+   "基础化工": "扬帆新材：光引发剂/精细化工（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 化工/基础化工"
  },
  "300638": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -51880,13 +51936,19 @@
   "business_summary": "主营PCB概念",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "零部件",
   "name": "金钟股份",
   "primary_source": "legacy",
   "sector": "PCB概念/5G",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "零部件",
+  "jiuyan_concept_reason": {
+   "零部件": "金钟股份：汽车零部件（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 汽车/零部件"
  },
  "301135": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -52203,13 +52265,19 @@
   "business_summary": "网络设备、网络安全产品及云桌面解决方案的研发、设计和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "超节点",
+  "jiuyan_concept": "交换机",
   "name": "锐捷网络",
   "primary_source": "legacy",
   "sector": "通信设备/中国AI 50/WiFi 6/6G概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "超节点",
+  "jiuyan_concept1": "交换机",
+  "jiuyan_concept_reason": {
+   "交换机": "锐捷网络：网络设备/交换机（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 超节点/交换机"
  },
  "301166": {
   "business_summary": "主营批发业",
@@ -55196,13 +55264,19 @@
   "business_summary": "主营其他制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "军工",
+  "jiuyan_concept": "材料与零部件",
   "name": "北方长龙",
   "primary_source": "legacy",
   "sector": "其他制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "军工",
+  "jiuyan_concept1": "材料与零部件",
+  "jiuyan_concept_reason": {
+   "材料与零部件": "北方长龙：军用车辆内饰/复合材料（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 军工/材料与零部件"
  },
  "301358": {
   "business_summary": "锂离子电池正极材料研发、生产和销售。",
@@ -57839,13 +57913,19 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "涂料颜料",
   "name": "长联科技",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "涂料颜料",
+  "jiuyan_concept_reason": {
+   "涂料颜料": "长联科技：水性印花材料/色浆（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 化工/涂料颜料"
  },
  "301622": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -58279,13 +58359,19 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "半导体材料-电子特气与湿化学品",
   "name": "超纯应材",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "半导体材料-电子特气与湿化学品",
+  "jiuyan_concept_reason": {
+   "半导体材料-电子特气与湿化学品": "超纯应材：半导体超纯材料（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 半导体/半导体材料-电子特气与湿化学品"
  },
  "302132": {
   "added_at": "2026-06-17 12:40:19",
@@ -80909,13 +80995,19 @@
   "business_summary": "船舶及高端装备的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "军工",
+  "jiuyan_concept": "舰船与海洋防务",
   "name": "松发股份",
   "primary_source": "legacy",
   "sector": "航海装备Ⅱ/海工装备/高端装备",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "军工",
+  "jiuyan_concept1": "舰船与海洋防务",
+  "jiuyan_concept_reason": {
+   "舰船与海洋防务": "松发股份：船舶及高端装备（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 军工/舰船与海洋防务"
  },
  "603269": {
   "business_summary": "冷却技术及装备的研发、设计、生产、销售。",
@@ -81729,13 +81821,19 @@
   "business_summary": "LNG业务、城镇燃气运营，以天然气发电为主的燃气设备制造以及分布式能源综合服务业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "天然气",
   "name": "水发燃气",
   "primary_source": "legacy",
   "sector": "燃气Ⅱ/天然气/氢能源/绿色电力",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "天然气",
+  "jiuyan_concept_reason": {
+   "天然气": "水发燃气：LNG/城镇燃气（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 化工/天然气"
  },
  "603319": {
   "business_summary": "发动机(或内燃机)系统的关键及重要零部件-泵类产品的研发、制造和销售。",
@@ -89590,13 +89688,19 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "化学纤维",
   "name": "聚合顺",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "化学纤维",
+  "jiuyan_concept_reason": {
+   "化学纤维": "聚合顺：尼龙切片/化纤（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 化工/化学纤维"
  },
  "605167": {
   "business_summary": "主营土木工程建筑业",
@@ -89873,13 +89977,19 @@
   "business_summary": "电线电缆研发、生产、销售和服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电缆",
   "name": "起帆电缆",
   "primary_source": "legacy",
   "sector": "电网设备/大飞机/商业航天",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电缆",
+  "jiuyan_concept_reason": {
+   "电缆": "起帆电缆：电线电缆（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 电力/电缆"
  },
  "605228": {
   "business_summary": "主营汽车制造业",
@@ -111201,15 +111311,21 @@
  },
  "301660": {
   "name": "粤芯半导",
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "晶圆制造与IDM",
   "concept_boards": [],
   "industry_boards": [],
   "business_summary": "",
   "sector": "",
   "sector_type": "manual_add",
   "primary_source": "manual_add",
-  "updated_at": "2026-10-22 00:00:00"
+  "updated_at": "2026-11-12 15:54:20",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "晶圆制造与IDM",
+  "jiuyan_concept_reason": {
+   "晶圆制造与IDM": "粤芯半导：12英寸晶圆代工（2026-11-12 涨幅榜补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 半导体/晶圆制造与IDM"
  },
  "301718": {
   "name": "N通则",
