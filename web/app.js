@@ -8720,6 +8720,115 @@ function _replayPaint() {
   b.appendChild(st);
 }
 
+/* ---- Data Window（2026-11-14 owner：TradingView「数据窗口」落地）----
+   十字光标停在哪根，就把那根的 OHLC/涨跌/量额/均线/BOLL/MACD/RSI 固定陈列在一个
+   停靠面板里（不靠悬浮 tooltip，也不用一直按住鼠标）。纯函数，node 单测直接跑。
+   口径：涨跌% = 相对**前一根**收盘；无前一根(第0根)⇒null；index 越界自动夹紧。 */
+function buildDataWindow(period, i) {
+  if (!period || !Array.isArray(period.ohlc) || !Array.isArray(period.dates) || !period.dates.length) return null;
+  const n = period.dates.length;
+  const k = Math.max(0, Math.min(n - 1, Math.floor(Number(i))));
+  const bar = period.ohlc[k] || [];
+  const num = (x) => (x == null || !isFinite(Number(x))) ? null : Number(x);
+  const o = num(bar[0]), c = num(bar[1]), l = num(bar[2]), h = num(bar[3]);
+  const pc = k > 0 ? num(period.ohlc[k - 1] && period.ohlc[k - 1][1]) : null;
+  const chg = (c != null && pc != null && pc > 0) ? (c - pc) / pc * 100 : null;
+  const ma = (j) => (Array.isArray(period.ma) && Array.isArray(period.ma[j])) ? num(period.ma[j][k]) : null;
+  const bm = period.boll && Array.isArray(period.boll.mid) ? num(period.boll.mid[k]) : null;
+  const bu = period.boll && Array.isArray(period.boll.up) ? num(period.boll.up[k]) : null;
+  const bd = period.boll && Array.isArray(period.boll.dn) ? num(period.boll.dn[k]) : null;
+  const dif = period.macd && Array.isArray(period.macd.dif) ? num(period.macd.dif[k]) : null;
+  const dea = period.macd && Array.isArray(period.macd.dea) ? num(period.macd.dea[k]) : null;
+  const hist = period.macd && Array.isArray(period.macd.hist) ? num(period.macd.hist[k]) : null;
+  const rsi = Array.isArray(period.rsi) ? num(period.rsi[k]) : null;
+  return {
+    index: k,
+    date: String(period.dates[k] || ""),
+    open: o, high: h, low: l, close: c,
+    chgPct: chg, up: chg != null ? chg >= 0 : null,
+    volume: num(period.volume && period.volume[k]),
+    amount: num(period.amount && period.amount[k]),
+    ma5: ma(0), ma10: ma(1), ma20: ma(2),
+    bollMid: bm, bollUp: bu, bollDn: bd,
+    macdDif: dif, macdDea: dea, macdHist: hist,
+    rsi: rsi,
+  };
+}
+
+let _dwOpen = false;
+let _dwHoverIdx = null;      // null = 用最后一根；十字光标移动时更新为悬停那根
+function toggleDataWindow() {
+  _dwOpen = !_dwOpen;
+  if (_dwOpen) _renderDataWindow();
+  else { const p = document.getElementById("paDataWin"); if (p) p.remove(); }
+}
+function _renderDataWindow() {
+  if (!_dwOpen) return;
+  const old = document.getElementById("paDataWin");
+  if (old) old.remove();
+  const base = (stockChartData && stockChartData.period_data
+    && stockChartData.period_data[stockChartPeriod]) || {};
+  const period = _replaySlice(base, _replayCursor) || base;
+  const n = (period.dates || []).length;
+  if (!n) return;
+  const idx = (_dwHoverIdx != null && _dwHoverIdx >= 0 && _dwHoverIdx < n) ? _dwHoverIdx : n - 1;
+  const dw = buildDataWindow(period, idx);
+  if (!dw) return;
+  const f = (x, d) => (x == null ? "—" : fmt(x, d));
+  const up = dw.up === true ? "up" : (dw.up === false ? "down" : "");
+  const rows = [
+    ["日期", dw.date, ""],
+    ["开盘", f(dw.open, 2), ""],
+    ["最高", f(dw.high, 2), (dw.open != null && dw.high > dw.open) ? "up" : ""],
+    ["最低", f(dw.low, 2), (dw.open != null && dw.low < dw.open) ? "down" : ""],
+    ["收盘", f(dw.close, 2), up],
+    ["涨跌", dw.chgPct == null ? "—" : (dw.chgPct >= 0 ? "+" : "") + dw.chgPct.toFixed(2) + "%", up],
+    ["量(手)", f(dw.volume, 0), ""],
+    ["额(亿)", dw.amount == null ? "—" : fmt(dw.amount / 1e8, 2), ""],
+    ["MA5", f(dw.ma5, 2), ""],
+    ["MA10", f(dw.ma10, 2), ""],
+    ["MA20", f(dw.ma20, 2), ""],
+    ["BOLL上", f(dw.bollUp, 2), ""],
+    ["BOLL中", f(dw.bollMid, 2), ""],
+    ["BOLL下", f(dw.bollDn, 2), ""],
+    ["DIF", f(dw.macdDif, 3), ""],
+    ["DEA", f(dw.macdDea, 3), ""],
+    ["HIST", f(dw.macdHist, 3), (dw.macdHist != null && dw.macdHist >= 0) ? "up" : "down"],
+    ["RSI", f(dw.rsi, 1), ""],
+  ];
+  const p = document.createElement("div");
+  p.id = "paDataWin";
+  p.style.cssText = "position:fixed;left:10px;top:96px;z-index:2147483000;width:190px;"
+    + "background:rgba(22,27,34,.96);border:1px solid #30363d;border-radius:8px;padding:8px;"
+    + "box-shadow:0 8px 24px rgba(0,0,0,.6);color:#c9d1d9;font-size:11px;user-select:none";
+  const hd = document.createElement("div");
+  hd.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:4px";
+  const tt = document.createElement("b");
+  tt.textContent = `数据窗口 · 第 ${dw.index + 1}/${n} 根`;
+  const cl = document.createElement("button");
+  cl.textContent = "✕";
+  cl.title = "关闭";
+  cl.style.cssText = "background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px";
+  cl.onclick = () => { _dwOpen = false; p.remove(); };
+  hd.appendChild(tt); hd.appendChild(cl);
+  p.appendChild(hd);
+  const g = document.createElement("div");
+  g.style.cssText = "display:grid;grid-template-columns:auto 1fr;column-gap:8px;row-gap:2px";
+  rows.forEach(([k, v, cls]) => {
+    const kk = document.createElement("span");
+    kk.textContent = k;
+    kk.style.color = "#8b949e";
+    const vv = document.createElement("span");
+    vv.textContent = v;
+    vv.style.cssText = "text-align:right;font-family:var(--mono,monospace);white-space:nowrap";
+    if (cls === "up") vv.style.color = "#f85149";
+    else if (cls === "down") vv.style.color = "#3fb950";
+    g.appendChild(kk); g.appendChild(vv);
+  });
+  p.appendChild(g);
+  document.body.appendChild(p);
+}
+
 function renderStockChart(applyZoom = true) {
   // 2026-10-20：实时尾（1~5s）重绘时**不要**再写 dataZoom —— setOption 里的
   // start/end 会把用户正在拖动的滑杆弹回，表现为「看一会儿就缩放不了」。
@@ -9767,7 +9876,29 @@ function renderStockChart(applyZoom = true) {
     } catch (e) { /* 桩环境忽略 */ }
   }
 
+  // Data Window：十字光标移到哪根，就把哪根的完整数据读出来（只在面板开着时刷新）
+  if (stockChartInst && !stockChartInst.__dwBound) {
+    stockChartInst.__dwBound = true;
+    try {
+      stockChartInst.on("updateAxisPointer", (ev) => {
+        try {
+          if (!_dwOpen) return;
+          const ax = (ev && ev.axesInfo || [])[0];
+          if (!ax || ax.value == null) return;
+          const pd = (stockChartData && stockChartData.period_data || {})[stockChartPeriod] || {};
+          const ds = pd.dates || [];
+          let idx = null;
+          if (typeof ax.value === "string") idx = ds.indexOf(ax.value);
+          else if (typeof ax.value === "number") idx = Math.round(ax.value);
+          if (idx != null && idx >= 0 && idx < ds.length) _dwHoverIdx = idx;
+          _renderDataWindow();
+        } catch (e) { /* 忽略 */ }
+      });
+    } catch (e) { /* 桩环境忽略 */ }
+  }
+
   _scheduleNowTag(stockChartInst, cur, _nowCol);
+  if (_dwOpen) _renderDataWindow();
 
   // Shift 测量框：整图重绘后按**数据坐标**重新投影（盘中几秒一次重绘，只记像素会飘）
   if (_msr) {
@@ -12742,7 +12873,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114c", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114d", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

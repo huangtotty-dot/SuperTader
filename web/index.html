@@ -649,6 +649,9 @@
         <!-- 2026-11-14 owner：TradingView「Bar Replay」落地 —— 逐根回放，未来那几根真的消失 -->
         <button class="mini-btn" id="replayBtn" onclick="toggleReplay()"
                 title="Bar Replay 逐根回放：把 K 线截到游标为止，未来那几根真的消失，逼自己不带后视读盘。⏮ 起点 / ◀ 上一根 / ▶ 自动播放 / ◀▸ 下一根 / ⏹ 退出">▶ 回放</button>
+        <!-- 2026-11-14 owner：TradingView「数据窗口」落地 —— 十字光标处整根数据的停靠面板 -->
+        <button class="mini-btn" id="dataWinBtn" onclick="toggleDataWindow()"
+                title="数据窗口：十字光标停在哪根，就把那根的 开/高/低/收/涨跌/量/额/MA/BOLL/MACD/RSI 固定陈列在面板里（不靠悬浮提示）">🧮 数据</button>
         <!-- 2026-10-28：缺口点掉后是**真消失**，用这个按钮一键恢复 -->
         <button class="mini-btn" id="paGapBtn" onclick="restoreHiddenGaps()"
                 style="display:none" title="恢复显示本票本周期所有被点掉的缺口">👁 缺口(0)</button>
@@ -801,6 +804,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261114c"></script>
+<script src="app.js?v=20261114d"></script>
 </body>
 </html>
