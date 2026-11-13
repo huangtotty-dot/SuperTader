@@ -5342,6 +5342,94 @@ function setPoolFilter(v) {
   if (window._pbLastPayload) renderPB(window._pbLastPayload);
 }
 
+/* ===== 筛选预设（2026-11-14，TradingView「Screener 保存筛选」落地）=====
+   把「建仓信号扫描」当前的筛选状态（池分管 / 扫描日期 / 代码·名称搜索）存成命名预设，
+   一键切回。存 localStorage，键 superTrader.screenerPresets，最多 20 条。 */
+const SCREENER_LS_KEY = "superTrader.screenerPresets";
+const SCREENER_PRESET_CAP = 20;
+
+function buildScreenerPreset(name, state, savedAt) {
+  // 归一化一条预设：name 必填（trim 后非空）；pool 只收 all/manual/auto；
+  // date/code/nameQ 可选，空值剔除。savedAt 由调用方给（测试可控），缺省取当前毫秒。
+  if (name == null) return null;
+  name = String(name).trim();
+  if (!name) return null;
+  const st = (state && typeof state === "object") ? state : {};
+  const pool = (st.pool === "manual" || st.pool === "auto") ? st.pool : "all";
+  const out = { name, pool, savedAt: (savedAt != null ? savedAt : Date.now()) };
+  if (st.date) { const v = String(st.date).slice(0, 10).trim(); if (v) out.date = v; }
+  if (st.code) { const v = String(st.code).trim(); if (v) out.code = v; }
+  if (st.nameQ) { const v = String(st.nameQ).trim(); if (v) out.nameQ = v; }
+  return out;
+}
+
+function mergeScreenerPresets(list, preset, cap) {
+  // 同名覆盖，其余按 savedAt 新→旧；cap 上限（默认 20，<1 按 20）。
+  const n = (cap != null && isFinite(cap) && cap >= 1) ? Math.floor(cap) : 20;
+  const arr = Array.isArray(list) ? list.slice() : [];
+  if (!preset) return arr.slice(0, n);
+  const rest = arr.filter(p => p && p.name !== preset.name);
+  rest.unshift(preset);
+  rest.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  return rest.slice(0, n);
+}
+
+function _screenerRead() {
+  try { return JSON.parse(localStorage.getItem(SCREENER_LS_KEY) || "[]") || []; }
+  catch (e) { return []; }
+}
+function _screenerWrite(list) {
+  try { localStorage.setItem(SCREENER_LS_KEY, JSON.stringify(list)); } catch (e) { /* 隐私模式忽略 */ }
+}
+function _screenerCapture() {
+  return {
+    pool: window._pbPoolFilter || "all",
+    date: (document.getElementById("pbScanDate") || {}).value,
+    code: (document.getElementById("pbSearchCode") || {}).value,
+    nameQ: (document.getElementById("pbSearchName") || {}).value,
+  };
+}
+function refreshScreenerPresets() {
+  const sel = document.getElementById("screenerPresetSel");
+  if (!sel) return;
+  const keep = sel.value;
+  const list = _screenerRead();
+  sel.innerHTML = '<option value="">— 筛选预设 —</option>'
+    + list.map(p => `<option value="${esc(p && p.name ? p.name : "")}">${esc(p && p.name ? p.name : "")}</option>`).join("");
+  if (keep && list.some(p => p && p.name === keep)) sel.value = keep;
+}
+function saveScreenerPreset() {
+  const nameEl = document.getElementById("screenerPresetName");
+  const p = buildScreenerPreset(nameEl ? nameEl.value : "", _screenerCapture());
+  if (!p) { _paToast("预设名不能为空", "err"); return; }
+  _screenerWrite(mergeScreenerPresets(_screenerRead(), p, SCREENER_PRESET_CAP));
+  if (nameEl) nameEl.value = "";
+  refreshScreenerPresets();
+  const sel = document.getElementById("screenerPresetSel");
+  if (sel) sel.value = p.name;
+  _paToast(`已保存筛选预设「${p.name}」`, "ok");
+}
+function applyScreenerPreset(name) {
+  if (!name) return;
+  const p = _screenerRead().find(x => x && x.name === name);
+  if (!p) return;
+  const poolSel = document.getElementById("pbPoolFilter");
+  if (poolSel && poolSel.value !== p.pool) poolSel.value = p.pool;
+  if ((window._pbPoolFilter || "all") !== p.pool) setPoolFilter(p.pool);
+  if (p.date) { const d = document.getElementById("pbScanDate"); if (d) d.value = p.date; }
+  if (p.code != null) { const c = document.getElementById("pbSearchCode"); if (c) c.value = p.code; }
+  if (p.nameQ != null) { const q = document.getElementById("pbSearchName"); if (q) q.value = p.nameQ; }
+  _paToast(`已应用筛选预设「${p.name}」`, "ok");
+}
+function deleteScreenerPreset() {
+  const sel = document.getElementById("screenerPresetSel");
+  const name = sel ? sel.value : "";
+  if (!name) { _paToast("先选一个预设再删", "err"); return; }
+  _screenerWrite(_screenerRead().filter(x => x && x.name !== name));
+  refreshScreenerPresets();
+  _paToast(`已删除筛选预设「${name}」`, "ok");
+}
+
 /* ---- P4-3 自动盘页：读 t_io/bridge ---- */
 async function loadAutoStatus() {
   try {
@@ -13060,7 +13148,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114g", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114h", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -13300,6 +13388,7 @@ document.addEventListener("DOMContentLoaded", () => {
       doBoot();
     }
   }, 8000);
+  refreshScreenerPresets();   // 启动时回填「筛选预设」下拉
 });
 
 /* ══════════════════════════════════════════════════════════════════════

@@ -308,6 +308,15 @@
           <option value="manual">人工池</option>
           <option value="auto">自动池</option>
         </select>
+        <!-- 2026-11-14 owner：筛选预设 —— 把当前筛选（池/日期/代码·名称搜索）存成命名预设，一键切回 -->
+        <span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-weight:400;font-size:12px">
+          <input type="text" id="screenerPresetName" class="mini-input" placeholder="预设名" style="width:76px"
+                 title="给当前筛选起个名，点「💾 保存」存成预设">
+          <button class="mini-btn" onclick="saveScreenerPreset()" title="把当前筛选（池分管/扫描日期/代码·名称搜索）存成命名预设">💾 保存</button>
+          <select id="screenerPresetSel" class="mini-btn" onchange="applyScreenerPreset(this.value)"
+                  title="应用已保存的筛选预设"></select>
+          <button class="mini-btn" onclick="deleteScreenerPreset()" title="删除当前选中的预设">🗑</button>
+        </span>
         <button class="mini-btn" id="pbRefreshBtn" style="margin-left:8px" onclick="refreshPBNow()"
                 title="只重新拉取最新行情/状态并就地重绘（秒级），不动所选日期；要按所选日期重放请用左侧「🔄 扫描该日」（日线口径，1~2 分钟）">🔄 刷新</button>
       </h2>
@@ -821,6 +830,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261114g"></script>
+<script src="app.js?v=20261114h"></script>
 </body>
 </html>
