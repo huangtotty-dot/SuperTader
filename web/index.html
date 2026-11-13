@@ -793,6 +793,9 @@
         <button class="mini-btn" id="mwLay2x2" onclick="mwSetLayout('2x2')"
                 title="四宫格：4 只，每格最大（2 列 × 2 行）">▣ 2×2</button>
       </span>
+      <!-- 2026-11-14 owner：多图同步十字光标 —— 一格动、其它格跟着动（认同一根） -->
+      <label class="toggle-item" title="一格十字光标动、其它格跟着动（认同一根；跨周期对不上就跳过）"
+             style="margin:0 2px;color:#c9d1d9"><input type="checkbox" id="tgMwXhair" checked> 光标同步</label>
       <!-- 2026-11-02 owner：多窗口也要显示密集成交区；与 K 线弹窗里的开关是同一状态 -->
       <button class="mini-btn" id="mwVpBtn" onclick="toggleVolumeProfile()"
               title="显示/隐藏每格的密集成交区（右侧横向直方图 + POC 点线；与 K 线弹窗里的「◫ 密集区」同一开关）">◫ 密集区</button>
@@ -818,6 +821,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261114f"></script>
+<script src="app.js?v=20261114g"></script>
 </body>
 </html>

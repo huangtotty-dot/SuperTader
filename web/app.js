@@ -13060,7 +13060,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114f", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114g", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -13817,6 +13817,7 @@ function _mwBuildCells() {
     }
   }
   _mwBindResize();   // 浮窗右下角一缩放，6 个小图跟着重排
+  _mwBindCrosshair();   // 跨格同步十字光标
 }
 
 function mwPick(i, raw) {
@@ -13839,6 +13840,51 @@ function mwPick(i, raw) {
   const px = document.getElementById("mwPx" + i);
   if (px) px.innerHTML = "";
   if (code) mwTick();
+}
+
+/* ===== 多图同步十字光标（2026-11-14，TradingView「多图同步十字光标」）=====
+   九宫格里一格动、其它格跟着动（认「同一根」）；跨周期时间轴对不上就跳过，不乱跳。 */
+function mwCrosshairTarget(ev) {
+  // 从 ECharts updateAxisPointer 事件里取出 x 轴当前值：category 轴是时间字符串，
+  // 数值轴是坐标。跨格同步就把它原样 dispatch 给其它格。
+  const infos = (ev && ev.axesInfo) || [];
+  for (const a of infos) {
+    if (a && a.axisDim === "x" && a.value != null && a.value !== "") return a.value;
+  }
+  return null;
+}
+
+let _mwXhairBusy = false;   // dispatchAction 会同步触发目标格的 updateAxisPointer，用它挡住回环
+
+function _mwBindCrosshair() {
+  // 幂等：靠每格 inst.__mwXhairBound 标防重复绑定；懒建格（第二处 init）也会被重新扫到。
+  if (!window.echarts) return;
+  for (let i = 0; i < mwN(); i++) {
+    const inst = mwInsts[i];
+    if (!inst || inst.__mwXhairBound) continue;
+    inst.__mwXhairBound = true;
+    inst.on("updateAxisPointer", (ev) => {
+      if (_mwXhairBusy) return;
+      const g = document.getElementById("tgMwXhair");
+      if (g && !g.checked) return;
+      const v = mwCrosshairTarget(ev);
+      if (v == null) return;
+      _mwXhairBusy = true;
+      try {
+        for (let j = 0; j < mwN(); j++) {
+          if (j === i) continue;
+          const o = mwInsts[j];
+          if (!o) continue;
+          o.dispatchAction({ type: "updateAxisPointer",
+                             axesInfo: [{ axisDim: "x", axisIndex: 0, value: v }] });
+        }
+      } finally {
+        // 目标格的 updateAxisPointer 是同步派发、被 _mwXhairBusy 挡掉；
+        // 下一拍再解锁，鼠标连移也不会抖回环。
+        setTimeout(() => { _mwXhairBusy = false; }, 0);
+      }
+    });
+  }
 }
 
 /* 六宫格里的迷你 K 线：K 线 + **日线 MA5/10/20**（虚线，与单图同款）+ 缺口色块 + 成交额。
@@ -14351,6 +14397,7 @@ async function mwTick() {
         if (!el || !window.echarts) return;
         inst = mwInsts[i] = echarts.init(el);
         _mwBindZoom(i, inst);
+        _mwBindCrosshair();   // 懒建出的格也要补上跨格同步
       }
       try {
         // 把该格当前的缩放窗口喂回去 —— `notMerge:true` 会把上一步的 dataZoom 一起清掉
