@@ -3713,6 +3713,7 @@ const DEC_CN = { SELL_HIGH: "卖出", BUY_LOW: "买入", ADD_POS: "加仓", PANI
 const DEC_ICON = { SELL_HIGH: "🔴", BUY_LOW: "🟢", ADD_POS: "🔵", PANIC_SELL: "⛔" };
 
 function pushAlert(s) {
+  alertStreamAdd(s);   // 统一告警流：建仓/加仓/买卖信号也滚进时间线
   const banner = document.getElementById("alertBanner");
   if (!banner) return;
   banner.style.display = "flex";
@@ -8594,6 +8595,7 @@ async function pollPriceAlerts() {
   if (!fresh.length) return;
   playAlert(fresh.some(e => e.side === "down") && !fresh.some(e => e.side === "up")
     ? "PRICE_DOWN" : "PRICE_UP");
+  fresh.forEach(e => alertStreamAdd(e));   // 统一告警流：画框穿越也滚进时间线
   fresh.forEach(e => _paToast(
     `${e.side === "down" ? "🔻 向下跌破" : "🔔 向上突破"} ${e.name}(${e.code}) `
     + `框沿 ${e.level}，现价 ${e.price}`, ""));
@@ -8826,6 +8828,121 @@ function _renderDataWindow() {
     g.appendChild(kk); g.appendChild(vv);
   });
   p.appendChild(g);
+  document.body.appendChild(p);
+}
+
+/* ---- 统一告警流（2026-11-14 owner：TradingView「Alert Webhook 统一事件流」落地）----
+   把**散在各处的告警**（画框上破/下破、建仓/加仓/买卖信号、系统提示）归一成一个规范
+   事件 `{id,ts,kind,code,name,side,level,price,score,text}`，滚进一个可见的时间线面板，
+   并可被 `buildWebhookPayload` 序列化成统一 JSON（任何 webhook / 飞书卡片都能消费同一份）。
+   纯函数部分 node 单测直接跑。 */
+function normalizeAlertEvent(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const s = String;
+  // ① 画框价格穿越事件（load_price_alerts.events / pollPriceAlerts）
+  if (raw.side === "up" || raw.side === "down") {
+    return {
+      id: raw.id != null ? s(raw.id) : `${s(raw.ts || "")}|price|${s(raw.code || "")}|${raw.level}|${raw.side}`,
+      ts: raw.ts != null ? s(raw.ts) : null,
+      kind: "price", code: raw.code != null ? s(raw.code) : null,
+      name: raw.name != null ? s(raw.name) : null,
+      side: raw.side,
+      level: raw.level != null ? Number(raw.level) : null,
+      price: raw.price != null ? Number(raw.price) : null,
+      score: null,
+      text: `${raw.side === "up" ? "🔔 上破" : "🔻 下破"} ${raw.name || raw.code || ""} 框沿 ${raw.level} 现价 ${raw.price}`,
+    };
+  }
+  // ② 信号告警（pushAlert：建仓 / 加仓 / 买卖）
+  if (raw.type || raw.decision) {
+    const _CN = { SELL_HIGH: "卖出", BUY_LOW: "买入", ADD_POS: "加仓", PANIC_SELL: "恐慌卖" };
+    const isPos = raw.type === "建仓" || raw.type === "加仓";
+    const label = isPos ? raw.type : (_CN[raw.decision] || raw.decision);
+    const score = isPos ? Number(raw.composite_score) : Number(raw.score);
+    return {
+      id: s(raw.ts || raw.scan_time || "") + "|" + (isPos ? (raw.type === "建仓" ? "jiancang" : "add") : "signal") + "|" + s(raw.code || ""),
+      ts: raw.scan_time != null ? s(raw.scan_time) : (raw.ts != null ? s(raw.ts) : null),
+      kind: isPos ? (raw.type === "建仓" ? "jiancang" : "add") : "signal",
+      code: raw.code != null ? s(raw.code) : null,
+      name: raw.name != null ? s(raw.name) : null,
+      side: isPos ? "buy" : (raw.decision === "SELL_HIGH" || raw.decision === "PANIC_SELL" ? "sell" : "buy"),
+      level: null, price: null,
+      score: isFinite(score) ? score : null,
+      text: `${label}信号 ${raw.name || raw.code || ""}${isFinite(score) ? " " + score + "分" : ""}`,
+    };
+  }
+  return null;
+}
+
+function buildWebhookPayload(evt) {
+  if (!evt) return null;
+  return {
+    event: evt.kind || "alert",
+    ts: evt.ts || new Date().toISOString(),
+    code: evt.code || null,
+    name: evt.name || null,
+    side: evt.side || null,
+    price: evt.price != null ? evt.price : null,
+    level: evt.level != null ? evt.level : null,
+    score: evt.score != null ? evt.score : null,
+    text: evt.text || "",
+  };
+}
+
+let _alertStream = [];
+let _asOpen = false;
+function alertStreamAdd(raw) {
+  const evt = normalizeAlertEvent(raw);
+  if (!evt || !evt.id) return;
+  if (_alertStream.some(x => x.id === evt.id)) return;   // 按 id 去重（轮询重放不刷屏）
+  if (!evt.ts) evt.ts = new Date().toISOString();
+  _alertStream.unshift(evt);
+  if (_alertStream.length > 100) _alertStream.length = 100;
+  if (_asOpen) _renderAlertStream();
+}
+function toggleAlertStream() {
+  _asOpen = !_asOpen;
+  if (_asOpen) _renderAlertStream();
+  else { const p = document.getElementById("paAlertStream"); if (p) p.remove(); }
+}
+function _renderAlertStream() {
+  if (!_asOpen) return;
+  const old = document.getElementById("paAlertStream");
+  if (old) old.remove();
+  const p = document.createElement("div");
+  p.id = "paAlertStream";
+  p.style.cssText = "position:fixed;left:10px;bottom:14px;z-index:2147483000;width:340px;"
+    + "background:rgba(22,27,34,.96);border:1px solid #30363d;border-radius:8px;padding:8px;"
+    + "box-shadow:0 8px 24px rgba(0,0,0,.6);color:#c9d1d9;font-size:11px;max-height:46vh;"
+    + "overflow:auto;user-select:none";
+  const hd = document.createElement("div");
+  hd.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:6px";
+  const tt = document.createElement("b");
+  tt.textContent = `📡 告警流（${_alertStream.length}）`;
+  const cl = document.createElement("button");
+  cl.textContent = "✕";
+  cl.title = "关闭";
+  cl.style.cssText = "background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px";
+  cl.onclick = () => { _asOpen = false; p.remove(); };
+  hd.appendChild(tt); hd.appendChild(cl);
+  p.appendChild(hd);
+  if (!_alertStream.length) {
+    const em = document.createElement("div");
+    em.setAttribute("class", "cell-dim");
+    em.textContent = "还没有告警。画框上破/下破、建仓/加仓/买卖信号会滚进来。";
+    p.appendChild(em);
+  } else {
+    _alertStream.forEach(evt => {
+      const row = document.createElement("div");
+      row.style.cssText = "padding:3px 0;border-bottom:1px solid rgba(48,54,61,.5);"
+        + "font-family:var(--mono,monospace);line-height:1.5";
+      const ts = (evt.ts || "").slice(11, 19);
+      const col = evt.side === "up" || evt.side === "buy" ? "#f85149"
+        : (evt.side === "down" || evt.side === "sell" ? "#3fb950" : "#c9d1d9");
+      row.innerHTML = `<span style="color:#6e7681">${ts}</span> <span style="color:${col}">${esc(evt.text || "")}</span>`;
+      p.appendChild(row);
+    });
+  }
   document.body.appendChild(p);
 }
 
@@ -12873,7 +12990,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114d", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114e", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

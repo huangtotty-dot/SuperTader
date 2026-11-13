@@ -652,6 +652,9 @@
         <!-- 2026-11-14 owner：TradingView「数据窗口」落地 —— 十字光标处整根数据的停靠面板 -->
         <button class="mini-btn" id="dataWinBtn" onclick="toggleDataWindow()"
                 title="数据窗口：十字光标停在哪根，就把那根的 开/高/低/收/涨跌/量/额/MA/BOLL/MACD/RSI 固定陈列在面板里（不靠悬浮提示）">🧮 数据</button>
+        <!-- 2026-11-14 owner：TradingView「Alert 统一事件流」落地 —— 散落的告警归一成一条时间线 -->
+        <button class="mini-btn" id="alertStreamBtn" onclick="toggleAlertStream()"
+                title="统一告警流：画框上破/下破、建仓/加仓/买卖信号归一成一条时间线；可序列化成统一 JSON 供 webhook 消费">📡 告警流</button>
         <!-- 2026-10-28：缺口点掉后是**真消失**，用这个按钮一键恢复 -->
         <button class="mini-btn" id="paGapBtn" onclick="restoreHiddenGaps()"
                 style="display:none" title="恢复显示本票本周期所有被点掉的缺口">👁 缺口(0)</button>
@@ -804,6 +807,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261114d"></script>
+<script src="app.js?v=20261114e"></script>
 </body>
 </html>
