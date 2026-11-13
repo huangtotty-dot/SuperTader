@@ -203,10 +203,16 @@ def write_daily_history(code, df) -> bool:
     # MA5=47.57 ⇒ 技术标签报「破5日线」、猎手整行按未站上染黄。全池同批 **61 只**中招。
     # 判据：**末行就是今天** ⇒ 它只能来自快照（历史日不会变），必须标 forming；
     # 后续真数据确认时会覆盖并清标记（merge 的 `old_forming ∩ incoming` 分支）。
+    #
+    # 2026-11-13（11-12 事故）：**收盘后（≥15:10，与 `_CLOSE_SETTLED_HHMM` 同一口径）
+    # 拿到的当日根就是真收盘，别再标 forming**。原来一律标 ⇒ 15:10 那轮预下载写下的
+    # 是"已确认"的收盘却永久挂着 forming，次日被当成半成品反复重下/丢弃，
+    # 也让 `daily_repair`（只修 last<今天）无从清理。
     _forming = None
     try:
         _last = str(df["date"].iloc[-1])[:10]
-        if _last == datetime.now().strftime("%Y-%m-%d"):
+        _n = datetime.now()
+        if _last == _n.strftime("%Y-%m-%d") and _n.strftime("%H:%M") < "15:10":
             _forming = _last
     except Exception:
         _forming = None
@@ -700,11 +706,25 @@ def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=200,
         if not skip_current:
             return False
         cd = _read_json(_DAILY_CACHE_DIR / f"{c}.json", {}) or {}
-        if is_prefetch_current(cd.get("rows") or [], now):
+        rows = cd.get("rows") or []
+        _now = now or datetime.now()
+        today = _now.strftime("%Y-%m-%d")
+        # 2026-11-13（11-12 事故）：**末行挂着 forming = 盘中快照，不是收盘**，不能算"当期"。
+        # 否则：盘中（GUI 启动预下载 / 开过图的票）写下的快照根日期就是"当天"，
+        # `is_prefetch_current` 只看日期 gap ⇒ 收盘后这一轮**整批跳过**（实测 11-12 10:48
+        # 写过 2050 只），次日那根假"收盘"就一路带着用（603955 存 37.18、真值 33.35），
+        # 直到第二天 15:40 的 `daily_repair` 才有机会修。
+        # 判据：过去某天的 forming ⇒ 一定重下；**当天**的 forming ⇒ 收盘后（≥15:10）也重下
+        # （那正是本轮预下载的时点，重下才拿得到真收盘）；盘中则视为当期，不必白重下。
+        _last = str(rows[-1].get("date"))[:10] if rows else ""
+        _form = {str(x)[:10] for x in (cd.get("forming") or [])}
+        if _last and _last in _form:
+            if _last < today or _now.strftime("%H:%M") >= "15:10":
+                return False
+        if is_prefetch_current(rows, now):
             return True
         # 今日已写过（merge_daily_cache 会把 date 头写成今天）⇒ 视为当期。
         # 假期里「末行=上个交易日、gap>5」会让 5 天窗失效，导致每次跑都重下全池，这条兜住。
-        today = (now or datetime.now()).strftime("%Y-%m-%d")
         return str(cd.get("date") or "") == today
 
     todo = [c for c in codes if not _is_current(c)]
@@ -929,40 +949,63 @@ def daily_close_series(fp):
 
     解析失败 / 无 rows / 任一行 close 转不动 → ((), ())（调用方按样本不足跳过，永不抛）。
     """
+    dates, closes, _forming = daily_close_series_meta(fp)
+    return dates, closes
+
+
+def daily_close_series_meta(fp):
+    """同 `daily_close_series`，多返回 `forming`（当天/过去某天是"盘中快照"的日期集合）。
+
+    2026-11-13：`t_gui._ma5_streak` 需要 forming 才能判"今日那根能不能当收盘"。
+    与本层共用同一份缓存（`_DAILY_KV_CACHE` 存三元组），避免 GUI 里再解析一遍
+    —— 单档 80KB JSON 冷解析 ≈ 6.7ms，几百只 × 每轮就是秒级。
+    """
+    _key, dates, closes, forming = daily_close_series_keyed(fp)
+    return dates, closes, forming
+
+
+def daily_close_series_keyed(fp):
+    """`daily_close_series_meta` + **返回本层用的键**（`(路径, mtime_ns, size)`，读不到时 None）。
+
+    给调用方当**自己的缓存键**用：这样"文件改写 ⇒ 失效"由本层统一判，不必再 `stat` 一次。
+    ⚠️ 本机 `nt.stat` 实测 **1.5ms/次**（盘慢）⇒ 几百只 × 每轮多一次 stat 就是 0.4s。
+    """
     global _DAILY_KV_ROWS
     try:
         st = os.stat(fp)
         key = (str(fp), st.st_mtime_ns, st.st_size)
     except OSError:
-        return (), _array("d")
+        return None, (), _array("d"), frozenset()
     with _DAILY_KV_LOCK:
         hit = _DAILY_KV_CACHE.get(key)
         if hit is not None:
             _DAILY_KV_CACHE.move_to_end(key)
-            return hit
+            return (key,) + hit
     try:
-        rows = (_read_json(fp, {}) or {}).get("rows") or []
+        blob = _read_json(fp, {}) or {}
+        rows = blob.get("rows") or []
         if not rows:
-            return (), _array("d")
+            return None, (), _array("d"), frozenset()
         # intern：全池 5500 档的日期字符串其实只有 ~900 个不同值，共享后 dates 只剩指针
         dates = tuple(sys.intern(str(r.get("date"))[:10]) for r in rows)
         closes = _array("d", (float(r.get("close") or 0) for r in rows))
+        forming = frozenset(str(x)[:10] for x in (blob.get("forming") or []))
     except Exception:
-        return (), _array("d")
-    del rows
+        return None, (), _array("d"), frozenset()
+    del rows, blob
     n = len(dates)
     with _DAILY_KV_LOCK:
         # 同路径的旧版本先逐出（一轮回写只留最新版，别让废数据吃行数预算）
         for k in [k for k in _DAILY_KV_CACHE if k[0] == key[0] and k != key]:
             _DAILY_KV_ROWS -= len(_DAILY_KV_CACHE[k][0])
             del _DAILY_KV_CACHE[k]
-        _DAILY_KV_CACHE[key] = (dates, closes)
+        _DAILY_KV_CACHE[key] = (dates, closes, forming)
         _DAILY_KV_ROWS += n
         while _DAILY_KV_CACHE and (len(_DAILY_KV_CACHE) > _DAILY_KV_MAX_ENTRIES
                                    or _DAILY_KV_ROWS > _DAILY_KV_MAX_ROWS):
             _, ev = _DAILY_KV_CACHE.popitem(last=False)
             _DAILY_KV_ROWS -= len(ev[0])
-    return dates, closes
+    return key, dates, closes, forming
 
 
 def invalidate_daily_close_cache(fp=None):

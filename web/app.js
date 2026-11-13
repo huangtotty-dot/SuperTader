@@ -94,19 +94,20 @@ function verdictBadge(v) {
 function ma5StreakHtml(n) {
   const d = Number(n);
   if (n === null || n === undefined || isNaN(d) || d <= 0) {
-    return '<span class="cell-dim" title="截至最新收盘未站上 5 日线（或日线缓存不足）">—</span>';
+    return '<span class="cell-dim" title="未站上 5 日线（或日线缓存不足）。盘中按实时价判：现价跌破今日 MA5 即归零">—</span>';
   }
   /* 2026-11-11 逐个实验（5498 只 / 54.2 万段，scripts/experiment/ma5_streak_break_20261111.py）：
      平均 3.59 天破线、中位 3、75 分位 5、90 分位 7；已站上 ≥4 天 = 越过历史平均破线窗口，
      用**红色 + ⚠** 提醒回撤风险。 */
   const risk = d >= 4;
   const cls = d >= 7 ? " s-fire" : risk ? " s-hot" : d >= 3 ? " s-warm" : "";
+  /* 2026-11-13：盘中当日那根由后端用**实时价**代入（不再等日线缓存落盘）⇒ 提示里说明口径。 */
   const tip = risk
     ? `连续站上 5 日线第 ${d} 天（从第一次站上算起）。历史 5498 只 / 54.2 万段：平均 3.6 天破线、`
       + `中位 3 天、75% 在 5 天内、90% 在 7 天内 ⇒ 已进入破线高发窗口，注意回撤/下杀风险`
-      + `（破线本身是节奏提醒，不是必跌信号）。`
+      + `（破线本身是节奏提醒，不是必跌信号）。盘中当日那根用实时价代入。`
     : `连续站上 5 日线第 ${d} 天（从第一次站上算起；跌破即归零）。`
-      + `历史平均 3.6 天破线、中位 3 天。`;
+      + `历史平均 3.6 天破线、中位 3 天。盘中当日那根用实时价代入。`;
   return `<span class="ma5-streak${cls}" title="${tip}">${risk ? "⚠" : ""}🔥<b>${d}</b><i>天</i></span>`;
 }
 function wrCell(w) {
@@ -193,7 +194,13 @@ const _API_TIMEOUT_MS = 20000;
 // 2026-10-21：`load_stock_chart` 单独放宽到 45s。栈证据（gui_freeze.log 15:29）：进程被
 // 技术标签批算（get_trend30/背离）吃满时，开图请求会在队列里等到 20s 超时并**丢弃结果**，
 // 用户看到「K线加载失败」。放宽后同一场景只是慢，不会白开一次。
-const _API_TIMEOUT_OVERRIDE = { recompute_pb: 300000, load_stock_chart: 45000 };
+// 2026-11-13：异常监控池 / 避风港湾整表重算（254 行的建仓符合度 + 技术标签 + 均线回站），
+// 空闲时 ~3.5s、进程被猎手批量取数吃满时会到 15~30s。原来套 20s ⇒ 正好在临界上，
+// 用户看到「后端 load_abnormal_pool 超时 20000ms（投递层积压，该次结果已弃）」，
+// 而后端其实算完了、只是结果被弃 ⇒ 表永远空着。这两个是**整表**接口（不像报价那样
+// 10s 轮询），放宽到 45s/30s：最坏只是慢一拍，不会白算一次。
+const _API_TIMEOUT_OVERRIDE = { recompute_pb: 300000, load_stock_chart: 45000,
+  load_abnormal_pool: 45000, load_shelter_pool: 30000 };
 const _API_MAX_INFLIGHT = 6;
 let _apiInflight = 0;
 let _apiTimeoutCnt = 0;
@@ -1087,9 +1094,10 @@ function tabClear(baseId) {
 // tab 切换时 resize 所有 ECharts
 function resizeAllEch() {
   Object.values(echInstances).forEach(i => i.resize());
-  // 年限宽度图 / 站上20线占比图 是独立实例（不在 echInstances 里）
+  // 年限宽度图 / 站上20线占比图 / 市场情绪图 是独立实例（不在 echInstances 里）
   if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
   if (ma20Inst) { try { ma20Inst.resize(); } catch (e) { } }
+  if (sentInst) { try { sentInst.resize(); } catch (e) { } }
 }
 window.addEventListener("resize", () => {
   Object.values(echInstances).forEach(i => i.resize());
@@ -3310,6 +3318,239 @@ function renderMa20Breadth(d) {
   ma20Inst.resize();
 }
 
+/* ---- 市场情绪（2026-11-13 owner：「站上20线公司占比下面加一块 市场情绪」）----
+   指标是筛过的（tmp/sentiment_study*.py，328 个交易日 × 全 A 等权）：
+     · 涨停家数 / 触板总数 对未来 20 日**负相关**（rank IC −0.16~−0.26，两年同向），
+       扣掉当日涨跌后更强（残差 IC −0.14~−0.17）⇒ 不是"今天涨多了明天回落"的换皮；
+     · 炸板率单指标**无信息**（IC≈0）；三项简单合成反而把信号洗掉。
+   ⇒ 只画原始三件套当温度计：涨停/跌停家数（柱）+ 炸板率（右轴线）。不做合成分。
+   数据来自 `load_market_sentiment`（只读 index_regime 的涨跌停缓存，零网络）。 */
+let sentInst = null, sentNode = null, sentSig = "";
+let sentTimer = null, sentInflight = false, sentData = null;
+let sentRange = 120;
+let sentDirty = false;        // 取数途中改了区间 ⇒ 这一拍的结果作废，回来立刻重取
+
+function setSentRange(days) {
+  if (sentRange === days) return;
+  sentRange = days;
+  [["sentRangeRecent", 120], ["sentRange360", 360], ["sentRangeAll", 0]].forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("primary", days === v);
+  });
+  sentData = null;                      // 区间变了必须重取（切片在后端做）
+  if (sentInflight) { sentDirty = true; return; }
+  loadMarketSentiment();
+}
+
+async function loadMarketSentiment() {
+  if (sentInflight) { sentDirty = true; return; }
+  const el = document.getElementById("sentChart");
+  if (!el) return;
+  sentInflight = true;
+  let nextMs = 300000;                  // 日频指标：5 分钟够用，别跟着 10s 轮询烧桥
+  try {
+    const d = await apiCall("load_market_sentiment", sentRange || 1200);   // 0=全部（后端上限 1200）
+    if (d && d.available && (d.series || []).length) {
+      sentData = d;
+      renderMarketSentiment(d);
+      nextMs = 300000;
+    } else {
+      const meta = document.getElementById("sentMeta");
+      if (meta) meta.innerHTML = `<span class="down">${esc((d && d.error) || "暂无数据")}</span>`;
+      if (sentInst) { try { sentInst.dispose(); } catch (e) { } sentInst = null; sentNode = null; }
+      sentSig = "";
+      el.innerHTML = '<div class="empty">暂无数据</div>';
+      nextMs = 60000;
+    }
+  } catch (e) {
+    nextMs = 60000;
+  } finally {
+    sentInflight = false;
+    if (sentTimer) clearTimeout(sentTimer);
+    if (sentDirty) { sentDirty = false; nextMs = 50; }   // 途中换了区间：立刻按新区间重取
+    sentTimer = setTimeout(loadMarketSentiment, nextMs);
+  }
+}
+
+/* 情绪温度三区（0~100，2026-11-13 owner：「弱势区/强势区/平稳区用颜色块区分开」）。
+   0~40 弱势 · 40~60 平稳 · 60~100 强势。只用于**读数**，不接任何判定/告警。 */
+const SENT_BANDS = [
+  { lo: 0, hi: 40, name: "弱势区", color: "#1f6feb", fill: "rgba(31,111,235,.16)" },
+  { lo: 40, hi: 60, name: "平稳区", color: "#8b949e", fill: "rgba(139,148,158,.10)" },
+  { lo: 60, hi: 100, name: "强势区", color: "#f85149", fill: "rgba(248,81,73,.16)" },
+];
+function sentBand(v) {
+  const d = Number(v);
+  if (v === null || v === undefined || isNaN(d)) return { name: "—", color: "#8b949e" };
+  return SENT_BANDS.find(b => d < b.hi) || SENT_BANDS[SENT_BANDS.length - 1];
+}
+
+function _sentMetaHtml(d) {
+  const s = d.stats || {}, l = d.last || {}, parts = s.sent_parts || {};
+  const _pct = v => (v === null || v === undefined) ? "—" : `${Math.round(v * 100)}%`;
+  // 2026-11-13 owner：「指标通过算 5 日平均值进行平滑处理」⇒ 展示/分区一律用 `sent_ma`
+  const val = (l.sent_ma !== null && l.sent_ma !== undefined) ? l.sent_ma : l.sent;
+  const b = sentBand(val);
+  const big = (val === null || val === undefined) ? "—" : val.toFixed(1);
+  // 弱势→强势 跨越的历史分布（图上的 ▲N日 就是这个口径）
+  const tr = s.trans || {};
+  const trText = (tr.n > 0)
+    ? ` · <span style="color:${SENT_BANDS[2].color}">弱势→强势</span> 历史 <b>${tr.n}</b> 次，`
+      + `中位 <b>${tr.median}</b> 个交易日（均值 ${tr.mean}，最长 ${tr.max}）`
+    : "";
+  return `<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+      <span style="font-size:26px;font-weight:700;line-height:1;color:${b.color}">${big}</span>
+      <span style="font-size:13px;font-weight:600;color:${b.color}">${b.name}</span>
+      <span class="cell-dim" style="font-size:11px">情绪温度 <b>5日均值</b>（&lt;40 弱势 / 40~60 平稳 / ≥60 强势）·
+        当日原始值 <b>${l.sent ?? "—"}</b> ·
+        分项(5日均)：触板分位 <b>${_pct(parts.touch)}</b> · 封板质量 <b>${_pct(parts.zb === null || parts.zb === undefined ? null : 1 - parts.zb)}</b> · 跌停分位 <b>${_pct(parts.dt)}</b>
+      </span>
+    </div>
+    <div class="cell-dim" style="font-size:11px;margin-bottom:6px">
+      数据日 <b>${esc(d.end || "")}</b> · 样本 <b>${s.n_days || 0}</b> 个交易日
+      <span title="同花顺涨停池只回 2025-07-08 以后；更早的历史用本地日线自算补（与同花顺重叠段相关 0.94），同日以同花顺为准">（同花顺 ${s.src_ths || 0} + 本地自算 ${s.src_local || 0}）</span> ·
+      涨停 <b style="color:${MA365_UP}">${l.zt ?? "—"}</b> 家（60日分位 ${_pct(s.zt_p60)}）·
+      跌停 <b style="color:${MA365_DOWN}">${l.dt ?? "—"}</b> 家 ·
+      炸板率 <b>${l.zb_rate ?? "—"}%</b>（60日分位 ${_pct(s.zb_rate_p60)}）·
+      5日均涨停 ${s.zt_ma5 ?? "—"} · 口径：同花顺涨停池，每天 14:30 尾盘快照
+      ${trText}
+    </div>`;
+}
+
+function renderMarketSentiment(d) {
+  const el = document.getElementById("sentChart");
+  const meta = document.getElementById("sentMeta");
+  if (!el) return;
+  const series = (d && d.series) || [];
+  if (!series.length) return;
+  if (meta) meta.innerHTML = _sentMetaHtml(d);
+  const sig = `${d.days}|${series.length}|${series[0] && series[0].date}|${d.end}`
+    + `|${(d.last || {}).zt}|${(d.last || {}).sent_ma}`;
+  const _canvasOk = !!(el.querySelector && el.querySelector("canvas"));
+  if (sentInst && sentNode === el && _canvasOk && sig === sentSig) return;
+  if (sentInst && (sentNode !== el || !_canvasOk)) {
+    try { sentInst.dispose(); } catch (e) { }
+    sentInst = null; sentNode = null;
+  }
+  if (!sentInst) {
+    el.innerHTML = "";
+    sentInst = echarts.init(el);
+    sentNode = el;
+  }
+  sentSig = sig;
+  const dates = series.map(x => String(x.date).slice(5));
+  const zt = series.map(x => x.zt);
+  const dt = series.map(x => x.dt);
+  // 曲线/分区/跨越一律用 5 日均值；当日原始值只在 tooltip 里给对照
+  const sent = series.map(x => (x.sent_ma === null || x.sent_ma === undefined) ? null : x.sent_ma);
+  const ma5 = zt.map((v, i) => {
+    const w = zt.slice(Math.max(0, i - 4), i + 1).filter(x => x != null);
+    return w.length ? +(w.reduce((a, b) => a + b, 0) / w.length).toFixed(1) : null;
+  });
+  /* 「弱势区 → 强势区」跨越（2026-11-13 owner：「跨越的时间标注出来」）：
+     后端按**交易日**算（最后一天弱势 → 首次进入强势，中途回落到弱势就重新计时），
+     这里只取落在当前区间里的那几次，打点 + 标 "N日"。区间太长（全部 328 天）时
+     只打点不标字，否则标签会互相压住。 */
+  const _idxOf = {};
+  series.forEach((x, i) => { _idxOf[x.date] = i; });
+  const trans = (d.transitions || []).filter(t => _idxOf[t.to] !== undefined
+    && series[_idxOf[t.to]].sent_ma !== null && series[_idxOf[t.to]].sent_ma !== undefined);
+  const transByDate = {};
+  trans.forEach(t => { transByDate[t.to] = t; });
+  const transPts = trans.map(t => {
+    const i = _idxOf[t.to];
+    return { coord: [i, series[i].sent_ma], value: t.days, name: `自 ${t.from}` };
+  });
+  // 标记数量本身才是拥挤判据（不是区间长度）：≤20 个就标字，再多只打点
+  const showTransLabel = trans.length <= 20;
+  /* 三区底色（2026-11-13 owner：「弱势区/强势区/平稳区用颜色块区分开」）：
+     0~40 弱势（蓝）· 40~60 平稳（灰）· 60~100 强势（红），整块平铺满横向，
+     一眼看出今天落在哪个区；线本身也按区上色（visualMap piecewise）。 */
+  const _band = (lo, hi, fill, color, name) => ([
+    { yAxis: lo, itemStyle: { color: fill },
+      label: { show: true, position: "insideTopRight", fontSize: 10, fontWeight: "bold",
+               color: color, opacity: 0.85, formatter: name } },
+    { yAxis: hi },
+  ]);
+  sentInst.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    grid: { left: 44, right: 52, top: 30, bottom: 24 },
+    legend: { top: 0, left: 6, itemGap: 12, itemWidth: 14, itemHeight: 8,
+      textStyle: { color: "#8b949e", fontSize: 10 } },
+    tooltip: {
+      trigger: "axis", axisPointer: { type: "shadow" },
+      backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
+      borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
+      formatter: (ps) => {
+        const i = ps && ps[0] ? ps[0].dataIndex : -1;
+        const x = series[i];
+        if (!x) return "";
+        const bd = sentBand(x.sent_ma);
+        const _tr = transByDate[x.date];
+        const _raw = (x.sent == null) ? "—" : x.sent.toFixed(1);
+        return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}
+            <span style="color:${bd.color};margin-left:6px">情绪温度(5日均) ${x.sent_ma == null ? "—" : x.sent_ma.toFixed(1)}（${bd.name}）</span>
+            <span style="color:#8b949e;margin-left:6px">当日 ${_raw}</span></div>`
+          + (_tr ? `<div style="color:${SENT_BANDS[2].color}">▲ 弱势→强势：自 ${esc(_tr.from)} 起跨越 <b>${_tr.days}</b> 个交易日</div>` : "")
+          + `涨停 <b style="color:${MA365_UP}">${x.zt}</b> 家 · 跌停 <b style="color:${MA365_DOWN}">${x.dt}</b> 家`
+          + ` · 净涨停 <b>${x.net >= 0 ? "+" : ""}${x.net}</b>`
+          + (x.touch != null ? ` · 触板 ${x.touch}` : "")
+          + `<br>炸板率 <b>${x.zb_rate != null ? x.zb_rate + "%" : "—"}</b>`
+          + (x.seal_rate != null ? ` · 封板率 ${x.seal_rate}%` : "")
+          + `<br><span style="color:#8b949e">5日均涨停 ${ma5[i]} 家 · 温度=0.5×触板分位+0.3×封板质量+0.2×(1−跌停分位)，不是买卖信号</span>`;
+      },
+    },
+    xAxis: {
+      type: "category", data: dates,
+      axisLine: { lineStyle: { color: "#e4e8ef" } },
+      axisLabel: { color: "#8b949e", fontSize: 9,
+        interval: Math.max(0, Math.ceil(dates.length / 12) - 1) },
+    },
+    yAxis: [
+      { type: "value", name: "家数", nameTextStyle: { color: "#8b949e", fontSize: 9 },
+        axisLabel: { color: "#8b949e", fontSize: 9 },
+        splitLine: { lineStyle: { color: "rgba(139,148,158,.2)" } } },
+      { type: "value", name: "情绪温度", min: 0, max: 100, position: "right",
+        nameTextStyle: { color: "#8b949e", fontSize: 9 },
+        axisLabel: { color: "#8b949e", fontSize: 9 },
+        splitLine: { show: false } },
+    ],
+    series: [
+      { name: "涨停家数", type: "bar", data: zt, yAxisIndex: 0,
+        barMaxWidth: 10, itemStyle: { color: MA365_UP, borderRadius: [3, 3, 0, 0] } },
+      { name: "跌停家数", type: "bar", data: dt, yAxisIndex: 0,
+        barMaxWidth: 10, itemStyle: { color: MA365_DOWN, borderRadius: [3, 3, 0, 0] } },
+      { name: "情绪温度", type: "line", data: sent, yAxisIndex: 1, symbol: "none",
+        connectNulls: false, smooth: false, z: 5,
+        // 颜色交给 visualMap（按区上色），这里**不要**写死 lineStyle.color 否则会盖掉分段色
+        lineStyle: { width: 2.4 },
+        // z:1 ⇒ 色块画在柱/线**下面**（柱子默认 z=2），别把涨停柱糊住
+        markArea: { silent: true, z: 1, data: SENT_BANDS.map(b =>
+          _band(b.lo, b.hi, b.fill, b.color, b.name)) },
+        // 弱势→强势 的跨越点：三角形 + "N日"
+        markPoint: transPts.length ? {
+          symbol: "triangle", symbolSize: 8, symbolOffset: [0, 7], z: 6,
+          itemStyle: { color: SENT_BANDS[2].color },
+          label: { show: showTransLabel, position: "top", distance: 8, fontSize: 9,
+                   fontWeight: "bold", color: SENT_BANDS[2].color,
+                   formatter: (p) => `${p.value}日` },
+          data: transPts,
+        } : undefined },
+    ],
+    // 线按区上色：弱势蓝 / 平稳灰 / 强势红（dimension 1 = y 值）
+    visualMap: {
+      type: "piecewise", show: false, seriesIndex: 2, dimension: 1,   // 2 = 情绪温度（第 3 条）
+      pieces: [
+        { lt: 40, color: SENT_BANDS[0].color },
+        { gte: 40, lt: 60, color: SENT_BANDS[1].color },
+        { gte: 60, color: SENT_BANDS[2].color },
+      ],
+    },
+  });
+  sentInst.resize();
+}
+
 /* ---- 盘中实时 ---- */
 /* 「无趋势状态」不能只是一句空话：`intraday_state.json` 由 core/signal_engine 写，
    2026-09-14 之后引擎没再跑过 ⇒ 文件一直停在旧日期。这里把**源文件的日期**摆出来，
@@ -4336,7 +4577,7 @@ function renderAbnormalPool(d) {
       <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
       <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
       ${maReclaimCellHtml(r.ma_reclaim)}
-      <td class="num" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起；跌破即归零）">${ma5StreakHtml(r.ma5_streak)}</td>
+      <td class="num" data-abncode="${esc(r.code)}" data-kind="ma5" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起；跌破即归零）。盘中当日那根用实时价">${ma5StreakHtml(r.ma5_streak)}</td>
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
       ${up30CellHtml(r.up30, r.up30_prev, r.build_reason || "")}
       ${bias5CellHtml(r.bias5, r.build_reason || "")}
@@ -4360,7 +4601,7 @@ function renderAbnormalPool(d) {
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
       <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
       <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
-      <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
+      <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久。盘中当日那根用实时价代入（随 10s 行情刷新）">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
       <th>时机条件</th>${UP30_TH}<th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
       <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       <th title="上方 🕘 = **涨停时间**（通达信本地 1 分钟线里**首次触及涨停价**的分钟；封=收盘仍封板）。下方是**手动**记录的涨停原因（一句话，最多 120 字），只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">时间 · 手动</span></th>
@@ -4385,13 +4626,21 @@ async function _patchPoolQuotes(rows, sel) {
   const codes = Array.from(new Set((rows || []).map(r => r.code).filter(Boolean)));
   if (!codes.length) return;
   try {
-    const r = await apiCall("load_quotes_for", codes);
+    // 带面板日期（历史日 ⇒ 后端按那天算站上5日线，不掺今天实时价）
+    const r = await apiCall("load_quotes_for", codes, state.date || null);
     const qm = (r && r.quotes) || {};
+    const sm = (r && r.ma5_streak) || {};
     document.querySelectorAll(`${sel} td[data-abncode]`).forEach(td => {
-      const q = qm[td.getAttribute("data-abncode")];
+      const c = td.getAttribute("data-abncode");
+      const kind = td.getAttribute("data-kind");
+      if (kind === "ma5") {
+        // 2026-11-13：站上5日线天数与价同拍（原来只随 15s/60s 整表重绘，盘中偏慢）
+        if (Object.prototype.hasOwnProperty.call(sm, c)) td.innerHTML = ma5StreakHtml(sm[c]);
+        return;
+      }
+      const q = qm[c];
       if (!q) return;
-      td.innerHTML = td.getAttribute("data-kind") === "px"
-        ? hunterPriceHtml(q) : hunterMktcapHtml(q);
+      td.innerHTML = kind === "px" ? hunterPriceHtml(q) : hunterMktcapHtml(q);
     });
   } catch (e) { /* 取不到就保持 ⏳，不刷成 0 */ }
 }
@@ -4619,6 +4868,110 @@ async function shelterRemove(code) {
   await loadShelterPool(true);
 }
 
+/* ---- 个股联动（2026-11-13 owner：「搜一只个股 → 找到相关的联动股票」）----
+   后端 `load_linked_stocks` 走离线矩阵档（全池 5487 只 × 250 日），单次查询 ~35ms。
+   口径与证据写在后端注释与面板说明里：按**过去 120 日收益相关**排序，概念只做解释。 */
+let _linkInflight = false;
+
+async function searchLinkage() {
+  const inp = document.getElementById("linkSearch");
+  const q = (inp && inp.value || "").trim();
+  if (!q) { statusEl("先输代码或名称", "err"); return; }
+  if (_linkInflight) return;
+  _linkInflight = true;
+  const meta = document.getElementById("linkMeta");
+  const box = document.getElementById("linkBody");
+  const btn = document.getElementById("linkBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "计算中…"; }
+  if (meta) meta.innerHTML = "⏳ 计算中…（首次约 0.7s 解矩阵档，之后 ~40ms）";
+  try {
+    const d = await apiCall("load_linked_stocks", q, 120, 25);
+    if (!d || !d.available) {
+      if (meta) meta.innerHTML = `<span class="down">${esc((d && d.error) || "取数失败")}</span>`;
+      if (box) box.innerHTML = "";
+      return;
+    }
+    renderLinkage(d);
+  } catch (e) {
+    if (meta) meta.innerHTML = `<span class="down">失败：${esc(e && e.message || e)}</span>`;
+  } finally {
+    _linkInflight = false;
+    if (btn) { btn.disabled = false; btn.textContent = "🔍 查找联动"; }
+  }
+}
+
+/* 概念名徽章：`tagBadge` 收的是对象 {label,color}，概念是纯字符串 ⇒ 单独一个渲染器 */
+function _conceptChip(x) {
+  return `<span class="badge chop" title="韭研概念：${esc(x)}">${esc(x)}</span>`;
+}
+
+function _linkCorrBar(c) {
+  const col = c >= 0.8 ? "#f85149" : c >= 0.6 ? "#d29922" : "#388bfd";
+  const w = Math.max(6, Math.round(Math.max(0, Math.min(1, c)) * 70));
+  return `<span style="display:inline-block;width:${w}px;height:6px;border-radius:3px;`
+    + `background:${col};vertical-align:middle;margin-right:6px"></span>`
+    + `<b style="color:${col}">${c.toFixed(3)}</b>`;
+}
+
+function renderLinkage(d) {
+  const meta = document.getElementById("linkMeta");
+  const el = document.getElementById("linkBody");
+  if (!el) return;
+  const t = d.target || {};
+  if (meta) {
+    const bits = [`<b style="font-size:13px">${esc(d.name || "")}</b> <span class="mono cell-dim">${esc(d.code || "")}</span>`];
+    if ((t.concepts || []).length) bits.push(`概念：${t.concepts.map(_conceptChip).join(" ")}`);
+    if (t.sector) bits.push(`行业：${esc(t.sector)}`);
+    if (t.last_pct != null) bits.push(`上日 <b class="${t.last_pct >= 0 ? "up" : "down"}">${t.last_pct >= 0 ? "+" : ""}${t.last_pct.toFixed(2)}%</b>`);
+    bits.push(`窗口 <b>${esc((d.window || [])[0] || "")} → ${esc((d.window || [])[1] || "")}</b>（${d.days} 个交易日）`);
+    bits.push(`全池 <b>${d.universe}</b> 只 · 矩阵更新于 ${esc(d.matrix_date || "")}`);
+    meta.innerHTML = bits.join(" · ");
+  }
+  const rows = d.rows || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">没有找到正相关的联动股（或该股数据不足）</div>';
+    return;
+  }
+  const body = rows.map((r, i) => {
+    const tags = (r.concepts_same || []).map(_conceptChip).join(" ")
+      || '<span class="cell-dim" style="font-size:10px">—</span>';
+    const sd = (r.same_day == null) ? "—" : `${Math.round(r.same_day * 100)}%`;
+    return `<tr data-code="${esc(r.code)}" data-name="${esc(r.name || "")}"
+        ondblclick="openStockChart('${esc(r.code)}','${esc(r.name || "")}')" style="cursor:pointer">
+      <td><span class="cell-dim" style="margin-right:6px">${i + 1}</span>${esc(r.name || r.code)}
+        <span class="mono cell-dim">${esc(r.code)}</span>${r.sector_same ? ' <span class="badge" title="与目标同一个 legacy 行业（sector 首段）">同行业</span>' : ""}</td>
+      <td class="num" style="white-space:nowrap">${_linkCorrBar(r.corr)}</td>
+      <td class="num">${sd}</td>
+      <td style="max-width:260px;line-height:1.7">${tags}</td>
+      <td class="num ${r.last_pct == null ? "" : (r.last_pct >= 0 ? "up" : "down")}">${r.last_pct == null ? "—" : (r.last_pct >= 0 ? "+" : "") + r.last_pct.toFixed(2) + "%"}</td>
+      <td onclick="event.stopPropagation()" ondblclick="event.stopPropagation()">
+        <button class="mini-btn" onclick="linkageAdd('${esc(r.code)}','${esc(r.name || "")}')"
+                title="加入避风港湾">＋避风</button>
+      </td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<div class="card" style="overflow-x:auto"><table><thead><tr>
+      <th>联动股</th><th class="num" title="过去 120 个交易日日收益的皮尔逊相关（0~1）">相关性</th>
+      <th class="num" title="同向涨跌的天数占比">同涨同跌</th>
+      <th title="与目标共享的韭研概念标签（只作解释，不参与筛选）">共同概念</th>
+      <th class="num">上日涨幅</th><th></th>
+    </tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+async function linkageAdd(code, name) {
+  try {
+    const r = await apiCall("shelter_pool_add", code, name || null);
+    if (r && r.ok) {
+      statusEl(`已加入避风港湾：${name || code}`, "ok");
+      loadShelterPool(true);
+    } else {
+      statusEl("加入失败：" + ((r && r.error) || "未知"), "err");
+    }
+  } catch (e) {
+    statusEl("加入失败：" + ((e && (e.message || e)) || "未知"), "err");
+  }
+}
+
 function renderShelterPool(d) {
   const el = document.getElementById("shelterPoolBody");
   if (!el) return;
@@ -4659,7 +5012,7 @@ function renderShelterPool(d) {
       <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
       <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
       ${maReclaimCellHtml(r.ma_reclaim)}
-      <td class="num" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起；跌破即归零）">${ma5StreakHtml(r.ma5_streak)}</td>
+      <td class="num" data-abncode="${esc(r.code)}" data-kind="ma5" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起；跌破即归零）。盘中当日那根用实时价">${ma5StreakHtml(r.ma5_streak)}</td>
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
       ${up30CellHtml(r.up30, r.up30_prev, r.build_reason || "")}
       ${bias5CellHtml(r.bias5, r.build_reason || "")}
@@ -4675,7 +5028,7 @@ function renderShelterPool(d) {
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
       <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
       <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
-      <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
+      <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久。盘中当日那根用实时价代入（随 10s 行情刷新）">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
       <th>时机条件</th>${UP30_TH}<th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
       <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       <th></th>
@@ -4697,9 +5050,28 @@ function renderShelterPool(d) {
    · 按钮上的 ▾ 折叠后转成 ▸（CSS 旋转），点标题行里的按钮即可切换；
    · **只隐藏，不销毁**：内容仍在 DOM 里，展开即见，不会因为折叠丢掉已加载的数据/滚动位置。 */
 const SEC_LS_KEY = "secCollapsed";
+/* 2026-11-13 owner：「建仓信号扫描 / 异常监控池 / 避风港湾 默认闭合」——
+   这三块是"按需看"的大表，默认展开会把整页撑得很长。
+   ⚠️ **只折叠显示、不省数据**：切页时的取数/渲染照旧（`loadAbnormalPool` 等不看折叠态），
+   展开即见，不会有"折叠时数据没更新"的坑。
+   一次性迁移：老用户 localStorage 里没有版本标记 ⇒ 把这三块补进折叠集合；
+   之后用户自己的展开/折叠照常持久化（默认值只生效一次，不会覆盖用户选择）。 */
+const SEC_DEFAULT_COLLAPSED = ["position-builder", "abnormal-pool", "shelter-pool"];
+const SEC_DEFAULTS_VER = "20261113";
 function _secCollapsedSet() {
-  try { const v = JSON.parse(localStorage.getItem(SEC_LS_KEY) || "[]"); return new Set(Array.isArray(v) ? v : []); }
-  catch (e) { return new Set(); }
+  let st;
+  try {
+    const v = JSON.parse(localStorage.getItem(SEC_LS_KEY) || "[]");
+    st = new Set(Array.isArray(v) ? v : []);
+  } catch (e) { st = new Set(); }
+  try {
+    if (localStorage.getItem(SEC_LS_KEY + ".ver") !== SEC_DEFAULTS_VER) {
+      SEC_DEFAULT_COLLAPSED.forEach(id => st.add(id));
+      localStorage.setItem(SEC_LS_KEY, JSON.stringify(Array.from(st)));
+      localStorage.setItem(SEC_LS_KEY + ".ver", SEC_DEFAULTS_VER);
+    }
+  } catch (e) { /* 隐私模式/配额满：本次按默认折叠，不持久化 */ }
+  return st;
 }
 function _secApply(id, collapsed) {
   const el = document.getElementById(id);
@@ -4948,7 +5320,7 @@ function renderPB(pb) {
           <th title="通道/箱体/背离等技术形态。背离标签已**自带周期**（如「日线顶背离」），与 30 分钟口径不同源（『站上5日线』是天数口径）—— 悬停标签可见确认日期">技术标签</th>
           <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（该日 5min bar 里第一次收盘价站上该均线）。口径：昨收 < 昨MA(p) 且 现价 > 今MA(p)；只看今天，历史日期无当日分钟数据所以是 —">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
-          <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破 5 日线即归零）。🔥 颜色越深=连续越久，数据来自本地日线缓存">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
+          <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破 5 日线即归零）。🔥 颜色越深=连续越久。数据=本地日线缓存 + 盘中当日那根用实时价（随 10s 行情刷新）">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
           <th title="仓位结构（30min/10min，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段(①蓄势/②抬升/③派发/④下跌)；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给出三档下档支撑挂单价与5日成交率估计。⚠️ 是**结构参考、不是买卖信号**——机械按阶段加减仓经实测无正贡献(纯择时-1.4~+2.7pp不显著)，「破前低就清仓」-30pp强有害；唯一有证据的是破位后在下档支撑挂限价补仓(改善成本结构、不提高期望)。悬停看明细">仓位结构</th>
           <th title="30min MA5 状态（**纯展示**）：现价相对 5×30min 均线 站上/跌破，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（状态/跃迁 × 站上/跌破 四口径，同日同bar-of-day对照 |diff|≤0.03pp、|t|≤2.4）⇒ 仅供参考，不参与任何判定。朴素对照的 −0.343pp(t=−25.5) 是日内时段伪影">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
           ${UP30_TH}
@@ -9506,6 +9878,10 @@ function _hunterTabActive() {
      ③ **全局 TTL**：10s 轮询下 15s 内不重复取，避免自己和上一轮打架。 */
 let hunterQuoteLast = 0;
 let hunterQuoteRetry = 0;
+/* 2026-11-13 owner：「站上5日线的数字没有实时更新」。猎手那列原来只在 `load_stock_tags_batch`
+   里取一次就被 `hunterStreakCache` 钉死 ⇒ 盘中不再变。现在与价同拍取（同一次
+   `load_quotes_for`，后端用当日实时价算今日那根），每次成功取回**整份替换**。 */
+let hunterStreakLive = {};
 async function loadHunterQuotes(force) {
   if (hunterQuoteInflight) return;                 // ② 全局单飞
   const now = Date.now();
@@ -9515,7 +9891,8 @@ async function loadHunterQuotes(force) {
   const t0 = Date.now();
   hunterQuoteInflight = true;
   try {
-    const r = await apiCall("load_quotes_for", codes);
+    // 带上面板日期：看历史日时后端按**那天**算（不掺今天的实时价）
+    const r = await apiCall("load_quotes_for", codes, _panelDate());
     // 契约：`{quotes: {code: {price, change_pct}}, count}`（与 load_quotes 同款包法）。
     // ⚠️ 后端**必须**包 `quotes` 键 —— 曾经返回裸字典 ⇒ 这里永远读到 {} ⇒ 整列永远 ⏳。
     const qm = (r && r.quotes) || {};
@@ -9524,6 +9901,9 @@ async function loadHunterQuotes(force) {
     //    之后 15s 内不再重试 ⇒ 整块面板干等。
     if (got) {
       Object.assign(hunterQuoteCache, qm);         // 平铺：code -> {price, change_pct}
+      // 站上5日线天数与价同拍：每次成功取回**整份替换**（含 null = 未站上/缓存不足）
+      const sm = (r && r.ma5_streak) || {};
+      if (Object.keys(sm).length) hunterStreakLive = sm;
       hunterQuoteLast = Date.now();
       hunterQuoteRetry = 0;
     } else if (hunterQuoteRetry < 3) {
@@ -9559,6 +9939,15 @@ function _applyHunterQuotes() {
   el.querySelectorAll(".h-expand-row td.h-mktcap[data-hcode]").forEach(td => {
     td.innerHTML = hunterMktcapHtml(hunterQuoteCache[td.getAttribute("data-hcode")]);
     n++;
+  });
+  // 2026-11-13：站上5日线天数（与价同源同拍）。**只补本次返回里有的码** ——
+  // 拿不到就保留标签批那份，别刷成「—」冒充"已破线"。
+  el.querySelectorAll(".h-expand-row td.h-ma5streak[data-hcode]").forEach(td => {
+    const c = td.getAttribute("data-hcode");
+    if (Object.prototype.hasOwnProperty.call(hunterStreakLive, c)) {
+      td.innerHTML = ma5StreakHtml(hunterStreakLive[c]);
+      n++;
+    }
   });
   return n;   // 返回命中格数 ⇒ 诊断能分辨"没拿到值"与"没命中 DOM"
 }
@@ -9609,8 +9998,12 @@ function applySectorTags(tbody, category) {
       }
     }
     // 2026-11-11：站上5日线天数独立回填（🔥 徽标；不等标签取齐）
+    // 2026-11-13：标签批可能比 10s 行情批**旧** ⇒ 有实时值就让它赢，别用旧值盖新值。
     const _msTd = row.querySelector("td.h-ma5streak");
-    if (_msTd && streakMap[code] !== undefined) _msTd.innerHTML = ma5StreakHtml(streakMap[code]);
+    if (_msTd) {
+      if (code in hunterStreakLive) _msTd.innerHTML = ma5StreakHtml(hunterStreakLive[code]);
+      else if (streakMap[code] !== undefined) _msTd.innerHTML = ma5StreakHtml(streakMap[code]);
+    }
   });
   // 板块阶段判定（用 trend）
   // 2026-10-24：若后端已下发韭研广度阶段（data-breadth=1），**不要**用个股趋势覆盖它——
@@ -10594,7 +10987,7 @@ function renderHunter(h) {
         <td style="text-align:center" title="${esc("日线阶段。" + _stageSlope + " " + DAY_STAGE_TIP)}">${_stageTxt}</td>
                         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
-        <td class="num h-ma5streak" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起）">${ma5StreakHtml((hunterStreakCache[category] || {})[s.code])}</td>
+        <td class="num h-ma5streak" data-hcode="${esc(s.code)}" style="text-align:center" title="连续站上 5 日线的天数（从第一次站上算起）。盘中当日那根用实时价（随 10s 行情刷新）">${ma5StreakHtml((s.code in hunterStreakLive) ? hunterStreakLive[s.code] : (hunterStreakCache[category] || {})[s.code])}</td>
                 <td class="num h-up30" style="text-align:center"
             title="${esc(up30Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30, (hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30_prev, s.build_reason || ""))}">${up30InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30, (hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30_prev)}</td>
         <td class="num h-bias5" style="text-align:center"
@@ -10805,7 +11198,7 @@ function renderHunter(h) {
             <th title="日线三态（描述状态，紧挨得分/通过便于对照）：多头=MA60 近20个交易日上涨>3%；空头=MA60 近20日下跌>3%；震荡=其余（60日线走平）。⚠️ 实测(977只×2017-2026/156万股票·日)：分布 多头31%/震荡39%/空头30%；未来20日超额 多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)，H=5/10/20 排序一致。仅作状态描述，不是买卖信号。⚠️ 得分里的阶段项**仍是旧四阶段口径**（三态映射会让得分 IC 变负）">日线阶段</th>
                                     <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
-            <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
+            <th title="连续站上 5 日线的天数（从第一次站上那天算起；跌破即归零）。🔥 颜色越深=连续越久。盘中当日那根用实时价代入（随 10s 行情刷新）">站上5日线<br><span style="font-size:9px;opacity:.6">天数</span></th>
                                     ${UP30_TH}
             <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
             <th title="(现价 − 365 日均线) / 365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。原来这列是「理由」，已挪到本格 tooltip">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
@@ -11040,7 +11433,8 @@ function renderOB(ob) {
         <b>站上5日线</b>（只看这一列）：🔥 徽标里的数字 = <b>连续站上 5 日线的天数</b>，
         <b>从这一轮第一次站上那天开始算</b>（收盘 &gt; 当日 MA5）；跌破 5 日线即归零、显示「—」。
         颜色：绿 1~2 天 · 橙 3 天 · <b style="color:var(--red)">红 ≥4 天（⚠ 历史平均 3.6 天破线，进入高发窗口）</b> ·
-        深红 ≥7 天（90 分位）。数据=本地日线缓存，非 30 分钟口径。
+        深红 ≥7 天（90 分位）。数据=本地日线缓存 + <b>盘中当日那根用实时价</b>（与「现价」列同源，
+        随 10s 行情刷新；收盘后以日线缓存为准）。
       </div>
       <table><thead><tr>
         <th>股票</th><th class="num">现价</th>
@@ -11806,6 +12200,10 @@ function switchTab(tab) {
       loadShelterPool();
       if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
       if (ma20Inst) { try { ma20Inst.resize(); } catch (e) { } }
+      if (sentInst) { try { sentInst.resize(); } catch (e) { } }
+      // 市场情绪（日频、只读本地缓存）：首次进页拉一次；已有数据就地重画
+      if (!sentData) loadMarketSentiment();
+      else renderMarketSentiment(sentData);
       // 首次进 tab 才拉（默认在总览页，别让 5500 个日线缓存的解析和首屏抢 CPU）；
       // 已有数据则就地重画（节点若被重建过，renderMa365 / renderMa20Breadth 会自行重建实例）。
       if (!ma365Data || ma365DataRange !== ma365Range) loadMa365Breadth();
@@ -12336,6 +12734,9 @@ let mwFrameSig = {};
 // 2026-11-04：多窗口记忆（后端共享状态）——独立原生窗口与主窗口 origin 可能不同，
 // localStorage 不通，而主窗口开窗时还会用内存 codes 当 seed 覆盖看盘窗自己的列表。
 let _mwRemoteCodes = null, _mwRemoteLayout = null;
+/* 2026-11-13：多窗口下拉的**选股池成员**（避风港湾）。由 `load_pool_members` 一次取回，
+   开窗时刷新一次即可（池子变动不频繁；用户在池里加票后重开窗口就生效）。 */
+let _mwPools = { shelter: [], abnormal: [] };
 /* 2026-10-26 owner：「可以通过鼠标滚轮放大或者缩小」——每格独立的 dataZoom 状态。
    ⚠️ 必须**存在外面**：`mwTick` 每 4 秒用 `notMerge:true` 重画一次，
       不把 start/end 重新喂进去，用户滚出来的缩放每一跳都会被冲掉。
@@ -12377,6 +12778,17 @@ function _mwHoldings() {
 
 /* 后端共享状态（2026-11-04）：多窗口**记忆上次打开的股票/布局**的唯一真源。
    老后端没有这两个方法 ⇒ catch 后沿用 localStorage/seed，行为与以前一致。 */
+/* 2026-11-13：取一次「避风港湾」成员，给多窗口下拉用。
+   轻接口（后端只读状态档，实测 3ms）；老后端没有这个方法 ⇒ 静默跳过，只少一组选项。 */
+async function _mwLoadPools() {
+  try {
+    const d = await apiCall("load_pool_members");
+    if (d && Array.isArray(d.shelter)) {
+      _mwPools = { shelter: d.shelter, abnormal: d.abnormal || [] };
+    }
+  } catch (e) { /* 老后端 / 桥未就绪：不下拉这一组，其它功能不受影响 */ }
+}
+
 async function _mwSyncFromServer() {
   try {
     const d = await apiCall("load_multi_watch");
@@ -12493,6 +12905,7 @@ async function openMultiWatch() {
   if (!win) return;
   win.style.display = "flex";
   await _mwSyncFromServer();                        // 先取后端记忆，再决定票/布局
+  await _mwLoadPools();                             // 避风港湾成员（下拉里的「🛡 避风港湾」组）
   mwCodes = _mwLoadCodes();
   _mwLoadLayout();
   _mwLoadPeriod();
@@ -12727,28 +13140,37 @@ function _mwBuildCells() {
   mwZoom = [];                 // 重开窗口 / 重建格子 ⇒ 缩放归位（换票同理，见 mwPick）
   mwSig = [];                  // 渲染签名一并清空 ⇒ 重建后必定重画一次
   const hs = _mwHoldings();
+  // 2026-11-13 owner：「多窗口可以选择避风港湾中的股票」——池成员由 `load_pool_members`
+  // 随开窗拉一次（3ms，只读状态档；**不能**用 load_shelter_pool，那要整表算 2~3s）。
+  // 与持仓/指数去重：同一只票别在两个 optgroup 里各出现一次（下拉会显示错乱）
+  const shelter = ((_mwPools && _mwPools.shelter) || [])
+    .filter(h => !hs.some(x => x.code === h.code) && !MW_INDEXES.some(x => x.code === h.code));
   // 候选写进共享 datalist：输入框有提示、也能直接敲别的代码
   const dl = document.getElementById("mwNames");
   if (dl) {
-    dl.innerHTML = hs.map(h => `<option value="${esc(h.code)}">${esc(h.name || h.code)}</option>`).join("");
+    dl.innerHTML = hs.concat(shelter)
+      .map(h => `<option value="${esc(h.code)}">${esc(h.name || h.code)}</option>`).join("");
   }
   _mwApplyLayoutUI();                    // 行数（3 行 / 2 行）+ 按钮选中态
   host.innerHTML = mwCodes.slice(0, mwN()).map((c, i) => {
-    // 下拉**只显示名称**（owner：不要显示代码），分两组：📈 指数 / 体检持仓
+    // 下拉**只显示名称**（owner：不要显示代码），三组：📈 指数 / 体检持仓 / 🛡 避风港湾
     const _opt = (code, text) => `<option value="${esc(code)}"${code === c ? " selected" : ""}>`
       + `${esc(text)}</option>`;
     const idxOpts = MW_INDEXES.map(x => _opt(x.code, "📈 " + x.name)).join("");
     const holdOpts = hs.map(h => _opt(h.code, h.name || h.code)).join("");
-    // 存过但当前两组里都没有的码，补一个占位项（否则下拉显示空白、图却还在画）
-    const _known = hs.some(h => h.code === c) || MW_INDEXES.some(x => x.code === c);
+    const shelterOpts = shelter.map(h => _opt(h.code, h.name || h.code)).join("");
+    // 存过但当前几组里都没有的码，补一个占位项（否则下拉显示空白、图却还在画）
+    const _known = hs.some(h => h.code === c) || MW_INDEXES.some(x => x.code === c)
+      || shelter.some(h => h.code === c);
     const extra = (c && !_known) ? _opt(c, c) : "";
     const opts = `<option value="">— 选择标的 —</option>`
       + `<optgroup label="📈 指数">${idxOpts}</optgroup>`
       + `<optgroup label="体检持仓">${holdOpts}</optgroup>`
+      + (shelterOpts ? `<optgroup label="🛡 避风港湾">${shelterOpts}</optgroup>` : "")
       + extra;
     return `<div class="mw-cell">
       <div class="mw-head">
-        <select class="mw-sel" title="大盘指数，或「持仓股」里的股票"
+        <select class="mw-sel" title="大盘指数 / 持仓股 / 避风港湾里的股票"
                 onchange="mwPick(${i}, this.value)">${opts}</select>
         <span class="mw-px" id="mwPx${i}"></span>
       </div>

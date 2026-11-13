@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261111b">
+<link rel="stylesheet" href="style.css?v=20261113a">
 </head>
 <body>
 <header class="topbar">
@@ -245,6 +245,36 @@
       <div id="ma20BreadthMeta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
       <div id="ma20BreadthChart" class="echart" style="height:220px"></div>
     </div>
+    <div class="section" id="market-sentiment">
+      <!-- 2026-11-13 owner：「在站上20线公司占比下面加一块 市场情绪」。
+           指标是**筛过**的（328 个交易日 × 全 A 等权）：涨停家数/触板总数对未来 20 日
+           负相关（rank IC −0.16~−0.26，两年同向）；炸板率单指标无信息；三项简单合成反而
+           洗掉信号 ⇒ 这里只摆原始三件套当"温度计"，不做合成分、不出买卖信号。 -->
+      <h2>🌡️ 市场情绪
+        <span class="cell-dim" style="font-weight:normal;font-size:12px">
+          情绪温度指数（0~100）+ 每日涨停 / 跌停家数 · 同花顺涨停池口径（index_regime 每天 14:30 尾盘落盘）
+        </span>
+        <span style="display:inline-flex;gap:4px;margin-left:10px;font-weight:400">
+          <button class="mini-btn primary" id="sentRangeRecent" onclick="setSentRange(120)">近120日</button>
+          <button class="mini-btn" id="sentRange360" onclick="setSentRange(360)">近360日</button>
+          <button class="mini-btn" id="sentRangeAll" onclick="setSentRange(0)">全部</button>
+        </span>
+      </h2>
+      <div class="cell-dim" style="font-size:11px;line-height:1.8;margin-bottom:8px;padding:5px 9px;background:rgba(210,153,34,.12);border-left:3px solid #d29922">
+        <b>指数怎么算</b>：<b>情绪温度 = 0.5 × 触板分位 + 0.3 × 封板质量 + 0.2 × (1 − 跌停分位)</b>
+        （分位 = 各自 60 日滚动分位；触板=涨停+炸板；封板质量 = 1 − 炸板率），
+        再对三个分位各取 <b>5 日均值</b>做平滑（曲线/分区/跨越都用平滑后的值；括号里的"当日"给原始值对照）。
+        <b style="color:#1f6feb">0~40 弱势区</b> · <b style="color:#8b949e">40~60 平稳区</b> · <b style="color:#f85149">60~100 强势区</b>。
+        <br>⚠️ <b>它是"少看几个数"的可读性工具，不是更好用的信号</b> —— 328 个交易日实测：
+        <b>单看触板总数</b>对未来 20 日等权收益 rank IC −0.26（分位差 3.35pp），
+        <b>合成成这一条线后只剩 −0.08（1.39pp）</b>；且全部信息集中在 2026 后半段（前半窗 IC≈0）。
+        <b>5 日尺度完全无信号</b>。⇒ 只用来读「今天在弱势区还是强势区」，<b>不要据此下单</b>。
+        <br><span style="color:#f85149">▲N日</span> = 从<b>最后一天弱势区</b>到<b>首次进入强势区</b>跨越了 <b>N 个交易日</b>（中途回落到弱势区会重新计时）；
+        底部一行给历史分布（次数 / 中位 / 均值 / 最长）。
+      </div>
+      <div id="sentMeta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
+      <div id="sentChart" class="echart" style="height:240px"></div>
+    </div>
     <div class="section" id="market-beacon">
       <!-- ⚠️ **必须是独立 section、不能长在 `#liveBody` 里**（2026-10-13 实测教训）：
            `refreshLive` 每 10s 整体覆写 `#liveBody` ⇒ 卡片连同 23 个板块表每 10s 被销毁重建
@@ -340,6 +370,32 @@
         </span>
       </h2>
       <div id="shelterPoolBody"><div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div></div>
+    </div>
+
+    <!-- 个股联动（2026-11-13 owner：「我搜索一只个股后 帮我找到相关的联动股票」）。
+         口径用数据选过：过去 120 日收益相关挑出来的 10 只，与目标在**未来 20 日**的平均相关
+         0.533（随机基准 0.26；同概念的随机 10 只只有 0.46）⇒ 相关性排序，概念只做解释。
+         数据来自离线矩阵档（scripts/ops/build_linkage_matrix.py），单次查询 ~35ms。 -->
+    <div class="section" id="stock-linkage">
+      <h2>🔗 个股联动
+        <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-weight:400;font-size:12px">
+          <input type="text" id="linkSearch" class="mini-input" placeholder="代码 或 名称" style="width:150px"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();searchLinkage();}">
+          <button class="mini-btn primary" id="linkBtn" onclick="searchLinkage()"
+                  title="按过去 120 日收益相关性，从全池找与它同涨同跌的股票">🔍 查找联动</button>
+        </span>
+        <span class="cell-dim" style="font-size:11px;font-weight:400;margin-left:10px">
+          按过去 120 日**收益相关性**排序（全池）· 双击行看 K 线 · 共同概念只作解释，不参与筛选
+        </span>
+      </h2>
+      <div class="cell-dim" style="font-size:11px;line-height:1.8;margin-bottom:8px;padding:5px 9px;background:rgba(56,139,253,.10);border-left:3px solid #388bfd">
+        📐 <b>口径</b>：相关性 = 过去 120 个交易日「目标 vs 候选」日收益的皮尔逊相关（前复权、剔除 |收益|&gt;50% 的复权伪影）；
+        <b>同涨同跌</b> = 两边同向的天数占比。样本外实测：这样挑出的 10 只，与目标在<b>未来 20 日</b>的平均相关
+        <b>0.533</b>（随机 10 只 0.26，同概念随机 10 只 0.46，同行业 0.40）⇒ <b>相关性比"同概念"更能代表真实联动</b>，
+        而且概念只覆盖 36% 的票，所以列表按相关性排序、共同概念只写在旁边作解释。<b>不是买卖信号。</b>
+      </div>
+      <div id="linkMeta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
+      <div id="linkBody"></div>
     </div>
   </div>
 
@@ -738,6 +794,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261111d"></script>
+<script src="app.js?v=20261113k"></script>
 </body>
 </html>

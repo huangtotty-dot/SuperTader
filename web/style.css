@@ -703,9 +703,10 @@ body.mw-winmode #multiWatchWin {
    折叠时只留 <h2> 标题行（含区块内的操作按钮），其余内容整块不显示。
    状态存 localStorage，刷新/重启后保持。 */
 .section.collapsed > *:not(h2) { display: none !important; }
-.sec-toggle { padding: 0 6px; font-size: 11px; line-height: 1.5; margin-right: 4px;
-  transition: transform .15s ease; }
-.section.collapsed > h2 > .sec-toggle { transform: rotate(-90deg); }
+.sec-toggle { padding: 0 6px; font-size: 11px; line-height: 1.5; margin-right: 4px; }
+/* 2026-11-13：箭头由 JS 直接换字形（`_secApply`：展开 ▾ / 折叠 ▸），
+   这里再 rotate 一次会把 ▸ 转成朝上，看着像"展开了"。 */
+
 
 /* 人工判词小标（面板里跟在股票名后）：核心/相关/边缘/错标 */
 .h-verdict { display: inline-block; margin: 0 3px 0 5px; padding: 0 5px; border-radius: 8px;

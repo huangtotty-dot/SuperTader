@@ -173,6 +173,36 @@ def _read_store() -> dict:
     return store
 
 
+def peek_quotes(codes, max_age_sec: float = None) -> dict:
+    """**只读共享档**的 `{code: quote}`；与 `get_quotes` 的唯一差别：**永不触发网络**。
+
+    给"顺手算个派生值"的展示层用（2026-11-13：`t_gui._ma5_streak` 拿实时价当当日那根）——
+    宁可这个码拿不到，也不许为了一列徽标去打腾讯。`max_age_sec=None` ⇒ 不限新鲜度。
+    """
+    try:
+        want = []
+        for c in (codes or []):
+            b = _norm(c)
+            if b and b not in want:
+                want.append(b)
+        if not want:
+            return {}
+        store = _read_store()
+        now = _time.time()
+        out = {}
+        for c in want:
+            ent = store.get(c) or {}
+            q = ent.get("q")
+            if not isinstance(q, dict) or not q:
+                continue
+            if max_age_sec is not None and (now - float(ent.get("ts") or 0)) > float(max_age_sec):
+                continue
+            out[c] = q
+        return out
+    except Exception:
+        return {}
+
+
 def _fetch(codes: list) -> dict:
     """经 TencentProvider.snapshot_auction_many 补齐（其内部已分块）。异常 ⇒ {}（不抛）。
 

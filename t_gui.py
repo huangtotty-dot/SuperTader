@@ -14,6 +14,7 @@ t_gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
   doc/每日复盘/{date}_复盘.md                              复盘报告 markdown
   holdings.json / t_io/state/holdings_daily_{date}.json     持仓（当前 + GUI 日快照；旧 holdings_{date}.json 已于 2026-08-30 清理）
 """
+import array as _array
 import copy
 import json
 import math
@@ -60,6 +61,8 @@ NAMES = {
 # **605198 安德利 / 688003 天准科技**）只能渲染成"605198 605198"，看起来像坏了。
 # ⚠️ 该文件 **2MB**，必须按 mtime 缓存 —— 否则每轮 `_compute_auto_pnl` 都要解析一次。
 _JY_NAMES_CACHE = {"mtime": None, "map": {}}
+# 韭研档的**概念/行业**标签（个股联动用）：{6位码: {"concepts":[...], "sector": "..."}}，按 mtime 记忆
+_LINK_META_CACHE = {"mtime": None, "map": {}}
 
 
 # 不是题材、只作标记的「板块」名（不进星空图/站上均线占比）
@@ -582,6 +585,12 @@ _ROTATION_CACHE_DIR = BASE / "t_io" / "cache" / "sector_rotation"
 # `_compute_auto_pnl` 只用它拼 `{code}.json` 路径，却把整条 pandas 链拖进首帧的 import 锁。
 # 值必须与 core/position_builder.py::_DAILY_CACHE_DIR 一致（同为 BASE/t_io/cache/daily_kline）。
 _DAILY_KLINE_DIR = BASE / "t_io" / "cache" / "daily_kline"
+# 市场情绪面板的数据源：同花顺涨停池按日缓存（`analysis.index_regime` 每天 14:30 落盘一次，
+# append-only）。面板**只读、零网络**；测试会 patch 这个常量。
+_E5_THS_FP = BASE / "t_io" / "index_regime" / "e5_ths_cache.json"
+# 同花顺只回 2025-07-08 以后 ⇒ 更早的历史由本地日线自算补（`scripts/ops/build_sentiment_local.py`）。
+# 与同花顺重叠段相关 0.943（涨停）/ 0.853（跌停），仅用于补历史；同日以同花顺为准。
+_SENT_LOCAL_FP = BASE / "t_io" / "cache" / "sentiment_local.json"
 # ---- 年限宽度：每日站上 365 日均线的股票占比（2026-10-18）----
 # 数据源 = 全部个股日线缓存（t_io/cache/daily_kline/*.json）。全量解析约 5500 个文件 ≈10s（本机
 # 单线程实测），故：**后台线程算 + 内存/磁盘 SWR**，前端未就绪时短轮询。磁盘缓存按"数据日"复用，
@@ -4145,6 +4154,232 @@ class Api:
                        "progress": {"done": int(st.get("done") or 0),
                                     "total": int(st.get("total") or 0)}})
 
+    # ---------- 市场情绪（涨跌停温度，2026-11-13 owner）----------
+    # owner：「在站上20线公司占比下面加一块 市场情绪，用什么指标请研究下」。
+    # 指标是**选过**的（doc/research/2026-11-13_市场情绪指标筛选.md，328 个交易日 × 全 A 等权）：
+    #   · **涨停家数 / 触板总数** 对未来 20 日等权收益是**反指**：rank IC −0.16~−0.26
+    #     （2025 −0.16/−0.22、2026 −0.21/−0.26，两年同向），Q5−Q1 −5.1pp（t=−4.6，重叠窗），
+    #     扣掉当日涨跌后更强（残差 IC −0.14/−0.17）⇒ 不是"今天涨多了明天回落"的换皮；
+    #   · **炸板率单指标没有信息**（IC≈0，Q5−Q1 −0.14pp t=−0.25）；
+    #   · 三项（涨停−跌停−炸板）**简单合成反而把信号洗掉**（t=−0.4）⇒ 面板不做合成分。
+    # ⇒ 这块只做「情绪温度计」：涨停/跌停家数 + 炸板率三件套，不做信号、不给分数。
+    # 数据源 = 同花顺涨停池按日缓存（`analysis.index_regime` 每天 14:30 尾盘拉一次并落盘），
+    # 本方法**只读该档、零网络**；与本地日线缓存自算的涨停家数相关 0.944（口径已互验）。
+    _SENT_MEM: dict = {"ts": 0.0, "mtime": None, "val": None}
+
+    def load_market_sentiment(self, days=120):
+        """市场情绪面板数据 → 每日 涨停/跌停/炸板/封板 + 最新值与 60 日分位。只读、零网络。
+
+        数据源**两段合并**（2026-11-13 owner 要 360 日视图）：
+          · `e5_ths_cache.json` 同花顺涨停池 —— 权威，但接口只回 2025-07-08 以后；
+          · `sentiment_local.json` 本地日线自算（`scripts/ops/build_sentiment_local.py`）——
+            补 2023-07 起的历史，与同花顺重叠段相关 0.943（涨停）/ 0.853（跌停）。
+        **同一天两边都有时以同花顺为准**，每行用 `src` 标出来源。
+        """
+        fp = _E5_THS_FP
+        if not fp.exists():
+            fp = STATE_DIR / "e5_ths_cache.json"
+        loc_fp = _SENT_LOCAL_FP
+        try:
+            days = max(20, min(int(days or 120), 1200))
+        except Exception:
+            days = 120
+        try:
+            mt = (fp.stat().st_mtime,
+                  (loc_fp.stat().st_mtime if loc_fp.exists() else 0.0))
+        except OSError:
+            return _clean({"available": False, "error": "涨跌停缓存不存在（index_regime 尚未跑过一次）"})
+        now = _time_mod.time()
+        mem = self._SENT_MEM
+        if mem.get("val") and mem.get("mtime") == mt and (now - float(mem.get("ts") or 0)) < 300:
+            rec = mem["val"]
+        else:
+            try:
+                rec = json.loads(fp.read_text(encoding="utf-8"))
+            except Exception as e:
+                return _clean({"available": False, "error": f"涨跌停缓存读取失败: {type(e).__name__}"})
+            local = {}
+            if loc_fp.exists():
+                try:
+                    local = (json.loads(loc_fp.read_text(encoding="utf-8")) or {}).get("series") or {}
+                except Exception:
+                    local = {}
+            rec = {"ths": rec, "local": local}
+            self._SENT_MEM = {"ts": now, "mtime": mt, "val": rec}
+        ths, local = (rec.get("ths") or {}), (rec.get("local") or {})
+
+        def _iso(x):
+            x = str(x)
+            if len(x) == 8 and x.isdigit():
+                return f"{x[:4]}-{x[4:6]}-{x[6:]}"
+            return x[:10]
+
+        merged = {}
+        for d, v in local.items():                      # 先铺本地历史
+            # 覆盖家数不足的日期（早期缓存不全 / 盘中半成品）不要：家数会被系统性低估
+            if int(v.get("n") or 0) < 2000:
+                continue
+            d = _iso(d)
+            if len(d) != 10:
+                continue
+            zt, dt = int(v.get("zt") or 0), int(v.get("dt") or 0)
+            touch = v.get("touch")
+            zb = v.get("zb_rate")
+            merged[d] = {
+                "date": d, "zt": zt, "dt": dt, "net": zt - dt,
+                "touch": (int(touch) if touch is not None else None),
+                "zb_rate": (round(float(zb) * 100, 2) if zb is not None else None),
+                "seal_rate": (round((1.0 - float(zb)) * 100, 2) if zb is not None else None),
+                "src": "local",
+            }
+        for k, v in ths.items():                        # 同花顺覆盖同日（权威）
+            if v.get("zt_count") is None or v.get("dt_count") is None:
+                continue
+            k = str(k)
+            if len(k) != 8:
+                continue
+            zt, dt = int(v["zt_count"]), int(v["dt_count"])
+            touch, zb = v.get("zt_touched"), v.get("zb_rate")
+            merged[f"{k[:4]}-{k[4:6]}-{k[6:]}"] = {
+                "date": f"{k[:4]}-{k[4:6]}-{k[6:]}", "zt": zt, "dt": dt, "net": zt - dt,
+                "touch": (int(touch) if touch is not None else None),
+                "zb_rate": (round(float(zb) * 100, 2) if zb is not None else None),
+                "seal_rate": (round((1.0 - float(zb)) * 100, 2) if zb is not None else None),
+                "src": "ths",
+            }
+        rows = [merged[d] for d in sorted(merged)]
+        if not rows:
+            return _clean({"available": False, "error": "涨跌停缓存里没有有效记录"})
+
+        # ── 情绪温度指数（0~100）：owner 2026-11-13「指标太多看着乱，加权合成一个指数」。
+        # 权重按**证据**定（scripts/experiment/sentiment_index_screen_20261113.py）：
+        #   0.5 × 触板总数的 60 日分位      —— 单项信息量最大（IC −0.259）；"今天有多少票去摸过板"
+        # + 0.3 × (1 − 炸板率分位)         —— 封板质量；单指标 IC≈0，但用来区分"摸板多而封不住"
+        # + 0.2 × (1 − 跌停家数分位)       —— 亏钱效应
+        # ⚠️ 合成**比单看触板更弱**（分位差 3.35pp → 1.39pp），且信息集中在 2026 后半段
+        #   ⇒ 它是**可读性工具**，不是更好用的信号；面板上照实写。
+        # 不用上涨家数占比：IC 方向与上证温度相反（+0.056）且与指数相关 0.71，加进去只会稀释。
+        def _roll_pct(vals, w=60):
+            """滚动分位（含当日，窗口 w，最少 20 个样本）；不足 → None。"""
+            out = []
+            for j, v in enumerate(vals):
+                seg = [x for x in vals[max(0, j - w + 1):j + 1] if x is not None]
+                out.append(round(sum(1 for x in seg if x <= v) / len(seg), 4)
+                           if (v is not None and len(seg) >= 20) else None)
+            return out
+
+        p_touch = _roll_pct([r["touch"] for r in rows])
+        p_zb = _roll_pct([r["zb_rate"] for r in rows])
+        p_dt = _roll_pct([r["dt"] for r in rows])
+
+        # 2026-11-13 owner：「指标通过算 5 日平均值进行平滑处理」。
+        # 先把三个分位各自取 5 日均值，再加权 —— 与"先合成再平均"数学上等价
+        # （合成是线性的），但这样 `sent_parts` 报的就是**撑起这个数的那三个值**。
+        # 窗口内至少 3 个有效样本才出数（否则开头几天噪声太大）。
+        def _ma5(vals):
+            out = []
+            for j in range(len(vals)):
+                seg = [v for v in vals[max(0, j - 4):j + 1] if v is not None]
+                out.append(round(sum(seg) / len(seg), 4) if len(seg) >= 3 else None)
+            return out
+
+        p_touch_ma, p_zb_ma, p_dt_ma = _ma5(p_touch), _ma5(p_zb), _ma5(p_dt)
+        for j, r in enumerate(rows):
+            # sent = 当日原始温度（tooltip 里给对照）；sent_ma = 5 日均值 = **面板展示/分区/跨越口径**
+            r["sent"] = (round(100.0 * (0.5 * p_touch[j]
+                                        + 0.3 * (1.0 - p_zb[j])
+                                        + 0.2 * (1.0 - p_dt[j])), 1)
+                         if None not in (p_touch[j], p_zb[j], p_dt[j]) else None)
+            r["sent_ma"] = (round(100.0 * (0.5 * p_touch_ma[j]
+                                           + 0.3 * (1.0 - p_zb_ma[j])
+                                           + 0.2 * (1.0 - p_dt_ma[j])), 1)
+                            if None not in (p_touch_ma[j], p_zb_ma[j], p_dt_ma[j]) else None)
+        # ── 弱势区 → 强势区 的跨越（2026-11-13 owner：「跨越的时间标注出来」）。
+        # 用**全量 rows** 算，不受前端区间切片影响（切到近 120 日也还是同一批跨越）。
+        # 口径跑在 **5 日均值**上（与曲线/分区一致），否则标记点和色带对不上。
+        def _zone(v):
+            if v is None:
+                return None
+            return 0 if v < 40 else (1 if v < 60 else 2)
+
+        transitions = self._sent_transitions([r.get("sent_ma") for r in rows],
+                                             [r["date"] for r in rows])
+        _sent_by_date = {r["date"]: r.get("sent_ma") for r in rows}
+        for t in transitions:
+            t["sent"] = _sent_by_date.get(t["to"])   # 跨越当日的（平滑后）温度值，前端打点用
+        _td = [t["days"] for t in transitions]
+        series = rows[-days:]
+
+        def _pct_rank(vals, x, w=60):
+            seg = [v for v in vals[-w:] if v is not None]
+            if not seg or x is None:
+                return None
+            return round(sum(1 for v in seg if v <= x) / len(seg), 3)
+
+        zt_all = [r["zt"] for r in rows]
+        zb_all = [r["zb_rate"] for r in rows]
+        last = series[-1]
+        j_last = len(rows) - 1
+        # 当前区 + 已连续几天：从尾往前数，遇到换区就停（口径 = 5 日均值，与曲线一致）
+        _zone_last = _zone(last.get("sent_ma"))
+        _zone_days = 0
+        if _zone_last is not None:
+            for _k in range(1, len(rows) + 1):
+                if _zone(rows[-_k].get("sent_ma")) != _zone_last:
+                    break
+                _zone_days = _k
+        stats = {
+            "zt_p60": _pct_rank(zt_all, last["zt"]),
+            "zb_rate_p60": _pct_rank(zb_all, last["zb_rate"]),
+            "zt_ma5": round(sum(zt_all[-5:]) / len(zt_all[-5:]), 1) if zt_all else None,
+            "n_days": len(rows),
+            # 指数分项（解释"这个数是怎么来的"）：**5 日均值后的分位**，与展示的指数同口径
+            "sent_parts": {"touch": p_touch_ma[j_last], "zb": p_zb_ma[j_last],
+                           "dt": p_dt_ma[j_last]},
+            "sent_p60": _pct_rank([r["sent_ma"] for r in rows], last.get("sent_ma")),
+            # 数据来源构成：让面板能说清"哪一段是同花顺、哪一段是本地自算"
+            "src_ths": sum(1 for r in rows if r.get("src") == "ths"),
+            "src_local": sum(1 for r in rows if r.get("src") == "local"),
+            "trans": ({"n": len(_td),
+                       "median": sorted(_td)[len(_td) // 2] if _td else None,
+                       "mean": round(sum(_td) / len(_td), 1) if _td else None,
+                       "min": min(_td) if _td else None,
+                       "max": max(_td) if _td else None} if _td else
+                      {"n": 0, "median": None, "mean": None, "min": None, "max": None}),
+            # 当前处于哪个区 + 已连续几天（弱势区里"第几天"最有参考价值）
+            "zone": _zone_last,
+            "zone_days": _zone_days,
+        }
+        return _clean({"available": True, "source": "ths_limit_up_pool",
+                       "days": days, "series": series, "last": last, "stats": stats,
+                       "weights": {"touch": 0.5, "zb": 0.3, "dt": 0.2},
+                       "transitions": transitions,
+                       "start": series[0]["date"], "end": last["date"],
+                       "latest_date": last["date"]})
+
+    @staticmethod
+    def _sent_transitions(vals, dates):
+        """情绪温度「弱势区(<40) → 强势区(≥60)」的跨越 → [{from, to, days}]。
+
+        口径：`from` = **最后一天还在弱势区**，`to` = **之后首次进入强势区**，
+        `days` = 两者的**交易日数**（同一 `vals/dates` 序列里的下标差）。
+        中途若回到弱势区就重新计时（只认单程）；一次跨越只记一次。
+        `vals` 里的 None（滚动窗不足）跳过，不打破当前状态。
+
+        为什么不是"从整个弱势段第一天算"：那段常与上一轮跨越重叠，
+        会把"弱势已经持续多久"和"这次冲出去花了多久"混成一个数。
+        """
+        out, weak = [], None
+        for j, v in enumerate(vals or []):
+            if v is None:
+                continue
+            if v < 40:
+                weak = j
+            elif v >= 60 and weak is not None:
+                out.append({"from": dates[weak], "to": dates[j], "days": j - weak})
+                weak = None
+        return out
+
     @staticmethod
     def _ma365_payload(rec, days, stale=False):
         series = (rec.get("series") or [])[-days:]
@@ -4978,7 +5213,7 @@ class Api:
     # 400 覆盖 8~10 个板块 × 每板块 20~50 行的常见情形；服务端再分块（`snapshot_auction_many`）。
     _QUOTES_FOR_MAX = 400
 
-    def load_quotes_for(self, codes):
+    def load_quotes_for(self, codes, date=None):
         """一批代码的**实时快照** → {6位码: {price, change_pct, ts_date}}。2026-10-12 新增。
 
         为什么必须单独有：猎手面板的行是**扫描时**的快照 —— 价与涨跌幅都停在"跑扫描那一刻"
@@ -5037,7 +5272,13 @@ class Api:
         # 2026-10-12 踩过：本方法原先返回**裸字典**，而前端照 `load_quotes` 的写法读 `r.quotes`
         # ⇒ 永远读到空 ⇒ 重试耗尽 ⇒ 整列永远 ⏳。诊断日志一次就定死了：
         # `hunter_hq req=47 got=47` 对上 `hunter_hq_js req=47 got=0 patched=2438`。
-        return {"quotes": out, "count": len(out)}
+        #
+        # 2026-11-13：**搭同一趟车**下发「站上5日线天数」（owner：该列盘中不更新）。
+        # 猎手那列原本只在标签批里取一次并被 `hunterStreakCache` 钉死 ⇒ 盘中永远是开盘前那份。
+        # 这里与价同源同拍（10s），`date` 由前端带（历史日 ⇒ `_ma5_streak` 自会按那天算、不掺实时价）。
+        # 多一个键不影响老前端（它只读 `quotes`）。
+        return {"quotes": out, "count": len(out),
+                "ma5_streak": {c: self._ma5_streak(c, date) for c in want}}
 
     def load_order_flow(self, code, force=False, step=10):
         """5 / 10 分钟 K 线的「多单/空单」分布（2026-10-20 owner）。
@@ -13446,6 +13687,210 @@ class Api:
                                "判定/得分与建仓信号扫描同源（build_decision）；"
                                "手动池，自己往里加票；未在本地日线缓存里的票显示 —")
 
+    def load_pool_members(self):
+        """各手动池的**成员名单**（只读状态档，零计算/零网络/毫秒级）。
+
+        2026-11-13 owner：「多窗口可以选择避风港湾中的股票」——多窗口看盘的下拉只需要名单。
+        ⚠️ **别用 `load_abnormal_pool` / `load_shelter_pool` 来填下拉**：那两个要整表算
+        建仓符合度（254 行实测 3~12s、还会起预热线程），为了几十个下拉选项不值得。
+        """
+        _names = {}
+
+        def _lst(stocks):
+            out = []
+            for code, info in (stocks or {}).items():
+                c = str(code).split("_")[0]
+                if len(c) != 6 or not c.isdigit():
+                    continue
+                nm = (info or {}).get("name")
+                if not nm:
+                    if not _names:
+                        _names.update(_jiuyan_names())
+                    nm = _names.get(c) or c
+                out.append({"code": c, "name": nm})
+            return out
+
+        return _clean({"shelter": _lst(self._shelter_read()),
+                       "abnormal": _lst(self._abn_read())})
+
+    # ---------- 个股联动（2026-11-13 owner：「搜一只个股 → 找到相关的联动股票」）----------
+    # 口径**用数据选过**（tmp/linkage_study.py，300 个交易日 × 120 目标 × 每 20 日一个时点）：
+    #   用「过去 N 日收益相关」挑 top10，看它们与目标在**未来 20 日**的相关性：
+    #     N=20 → 0.422 ｜ N=40 → 0.471 ｜ N=60 → 0.505 ｜ **N=120 → 0.533**（随机基准 ≈0.26）
+    #   同样 10 只，改成"同概念的随机 10 只"只有 0.46、"同 sector" 0.40
+    #   ⇒ **相关性比概念更强**，而且概念只覆盖 36% 的票 ⇒ 用相关性排序，概念只做**解释**
+    #     （列表里标出"共同概念"，但不用它筛候选，否则会漏掉跨概念的统计联动）。
+    # 性能：全池 5300 只逐只取日线冷解析要 32.5s ⇒ 改成扁平矩阵档
+    #   （`scripts/ops/build_linkage_matrix.py` → 250 日 × 5487 只 float32，4.4MB），
+    #   加载 ~30ms、相关是一次向量化 ~1ms。
+    _LINK_MEM: dict = {"mtime": None, "data": None}
+    _LINK_BUILD: dict = {"running": False, "at": 0.0}
+
+    _LINK_FP = None          # 测试注入用；None = 生产路径
+
+    @classmethod
+    def _link_matrix_fp(cls):
+        return cls._LINK_FP or (BASE / "t_io" / "cache" / "linkage_matrix.npz")
+
+    def _link_matrix(self):
+        """→ (codes, dates, R) 或 None（档缺失/损坏）。按文件 mtime 记忆，npz 只解一次。"""
+        import numpy as np
+        fp = self._link_matrix_fp()
+        try:
+            mt = fp.stat().st_mtime
+        except OSError:
+            return None
+        mem = self._LINK_MEM
+        if mem.get("data") is not None and mem.get("mtime") == mt:
+            return mem["data"]
+        try:
+            z = np.load(fp, allow_pickle=False)
+            data = (list(z["codes"]), list(z["dates"]), z["R"])
+        except Exception:
+            return None
+        self._LINK_MEM = {"mtime": mt, "data": data}
+        return data
+
+    def _kick_link_matrix_build(self):
+        """后台重算联动矩阵（单飞 + 1 小时节流）。只重建一次，失败下次再试。"""
+        import subprocess
+        st = self._LINK_BUILD
+        if st.get("running") or (_time_mod.time() - float(st.get("at") or 0)) < 3600:
+            return
+        st["running"] = True
+        st["at"] = _time_mod.time()
+
+        def _bg():
+            try:
+                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                subprocess.run([sys.executable, str(BASE / "scripts" / "ops" / "build_linkage_matrix.py")],
+                               cwd=str(BASE), creationflags=flags, timeout=600,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+            finally:
+                st["running"] = False
+
+        _th.Thread(target=_bg, name="link-matrix-build", daemon=True).start()
+
+    @staticmethod
+    def _link_meta():
+        """韭研档里的概念/行业标签 {code: {"concepts": [...], "sector": str}}（按 mtime 记忆）。"""
+        fp = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+        try:
+            mt = fp.stat().st_mtime
+        except OSError:
+            return {}
+        cache = _LINK_META_CACHE
+        if cache.get("mtime") == mt:
+            return cache["map"]
+        out = {}
+        try:
+            d = json.loads(fp.read_text(encoding="utf-8"))
+            for k, v in d.items():
+                if not isinstance(v, dict):
+                    continue
+                c = str(k).split("_")[0]
+                if len(c) != 6 or not c.isdigit():
+                    continue
+                tags = []
+                for f in ("jiuyan_concept1", "jiuyan_concept2", "jiuyan_concept3"):
+                    t = v.get(f)
+                    if isinstance(t, str) and t.strip():
+                        tags.append(t.strip())
+                sec = str(v.get("sector") or "").split("/")[0].strip()
+                out[c] = {"concepts": tags, "sector": sec}
+        except Exception:
+            return cache.get("map") or {}
+        cache.update({"mtime": mt, "map": out})
+        return out
+
+    def load_linked_stocks(self, code, days=120, top=25):
+        """一只股票的**联动股**：全池过去 `days` 日收益相关性降序（只取正相关）。
+
+        `code` 可以是 6 位代码，也可以是名称（走韭研名表，必须唯一命中）。
+        """
+        import numpy as np
+        raw = str(code or "").strip()
+        base = raw.split("_")[0]
+        if not (len(base) == 6 and base.isdigit()):
+            hits = [k for k, v in _jiuyan_names().items() if str(v) == raw]
+            if len(hits) != 1:
+                return _clean({"available": False,
+                               "error": (f"「{raw}」没匹配到唯一一只，请输完整代码"
+                                         if not hits else f"「{raw}」匹配到多只，请输代码")})
+            base = hits[0]
+        mat = self._link_matrix()
+        if mat is None:
+            self._kick_link_matrix_build()
+            return _clean({"available": False, "warming": True,
+                           "error": "联动矩阵还没生成（首次约 30s），稍后自动出现"})
+        # 档过期（>20h 且已收盘）⇒ 后台重算一次；本次仍用旧档出结果，不等它
+        try:
+            _age = _time_mod.time() - self._link_matrix_fp().stat().st_mtime
+            if _age > 20 * 3600 and datetime.now().strftime("%H:%M") >= "15:40":
+                self._kick_link_matrix_build()
+        except Exception:
+            pass
+        codes, dates, R = mat
+        try:
+            j = codes.index(base)
+        except ValueError:
+            return _clean({"available": False,
+                           "error": f"{base} 不在联动矩阵里（可能停牌/次新，或矩阵档太旧）"})
+        n = max(20, min(int(days or 120), R.shape[0]))
+        W = R[-n:, :]
+        x = W[:, j]
+        # 每列 z 化（忽略 NaN），NaN 填 0（对相关贡献为 0，等价于"该日缺测"）
+        # 有些列整列都是 NaN（长期停牌/次新）⇒ nanmean 会打 RuntimeWarning，静音即可
+        import warnings as _warn
+        with _warn.catch_warnings():
+            _warn.simplefilter("ignore", RuntimeWarning)
+            mu = np.nanmean(W, axis=0)
+            sd = np.nanstd(W, axis=0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            Z = (W - mu) / sd
+        Z = np.nan_to_num(Z, nan=0.0, posinf=0.0, neginf=0.0)
+        zx = Z[:, j]
+        corr = (Z.T @ zx) / float(n)
+        # 同涨同跌率（只数两边都有值的日子）
+        valid = np.isfinite(W) & np.isfinite(x)[:, None]
+        same = ((np.sign(W) == np.sign(x)[:, None]) & valid).sum(axis=0)
+        cnt = valid.sum(axis=0)
+        same_day = np.where(cnt > 0, same / np.maximum(cnt, 1), np.nan)
+        # 只留正相关、非自身、有足够样本
+        order = np.argsort(-corr)
+        names = _jiuyan_names()
+        meta = self._link_meta()
+        tgt = meta.get(base) or {}
+        rows = []
+        for k in order:
+            if k == j or not np.isfinite(corr[k]) or corr[k] <= 0:
+                continue
+            if cnt[k] < n * 0.7:
+                continue
+            c = codes[k]
+            m = meta.get(c) or {}
+            shared = [t for t in m.get("concepts", []) if t in (tgt.get("concepts") or [])]
+            rows.append({
+                "code": c, "name": names.get(c) or c,
+                "corr": round(float(corr[k]), 3),
+                "same_day": (round(float(same_day[k]), 3) if np.isfinite(same_day[k]) else None),
+                "concepts_same": shared,
+                "sector_same": bool(m.get("sector") and m.get("sector") == tgt.get("sector")),
+                "last_pct": (round(float(R[-1, k]) * 100, 2) if np.isfinite(R[-1, k]) else None),
+            })
+            if len(rows) >= max(5, min(int(top or 25), 100)):
+                break
+        return _clean({
+            "available": True, "code": base, "name": names.get(base) or base,
+            "days": n, "window": [dates[-n], dates[-1]],
+            "target": {"concepts": tgt.get("concepts") or [], "sector": tgt.get("sector") or "",
+                       "last_pct": (round(float(R[-1, j]) * 100, 2)
+                                    if np.isfinite(R[-1, j]) else None)},
+            "rows": rows, "matrix_date": dates[-1], "universe": len(codes),
+        })
+
     def shelter_pool_add(self, code, name=None):
         """加入避风港湾（代码或名称，同异常监控池的容错口径）。"""
         t = str(code or "").strip()
@@ -14283,34 +14728,95 @@ class Api:
         return datetime.now().strftime("%Y-%m-%d")
 
     @classmethod
+    def _ma5_series(cls, base):
+        """日线缓存 → `(key, dates, closes, forming)`，走 `core.chart_cache` 的**全进程共享**投影层。
+
+        2026-11-13（GUI 卡顿）：**不要自己解析**。单档 80KB JSON 冷解析 ≈7~14ms，猎手/建仓表
+        每轮 254 只 ⇒ 秒级；自己再维护一份 LRU 还会与「板块站上均线宽度」各解析一遍。
+        `daily_close_series_keyed` 与后者共用同一份 LRU（6000 档 / ~77MB 行预算），一次解析全表复用；
+        它顺手返回本层的键（路径, mtime_ns, size），**省掉本函数自己那次 `stat`**
+        （本机实测 `nt.stat` ≈1.5ms/次，几百只就是 0.4s）。
+        """
+        from core.chart_cache import daily_close_series_keyed
+        return daily_close_series_keyed(_DAILY_KLINE_DIR / f"{base}.json")
+
+    @classmethod
+    def _live_price_for(cls, base, day):
+        """QuoteBus 共享档里的**当日实时价**；非当日/无价 ⇒ None。
+
+        **纯读共享档、零网络**（`peek_quotes`）：与前端「现价」列同源（都走 QuoteBus），
+        但绝不为了一列徽标去打腾讯。超过 180s 没刷新的档也不用（宁可用昨日收盘口径）。
+        """
+        try:
+            from core.market_data.quote_bus import peek_quotes
+            q = (peek_quotes([base], max_age_sec=180.0) or {}).get(base) or {}
+        except Exception:
+            return None
+        try:
+            if str(q.get("ts_date") or "")[:10] != day:
+                return None
+            px = float(q.get("price") or 0.0)
+        except (TypeError, ValueError):
+            return None
+        return px if px > 0 else None
+
+    @classmethod
     def _ma5_streak(cls, code, date=None):
         """当前**连续站上 5 日线**的天数（含截至 date 的最后一个交易日）。
 
         口径：从最近一根日线往前回溯，`收盘 > 当日 MA5(含当日)` 连续成立的天数；
-        **从这一轮的第一次站上开始算**，跌破即归零。今天收盘在 MA5 下方 → 0。
-        只读本地日线缓存；按 (码,日期,mtime_ns) 记忆。无缓存/不足 5 根 → None。
+        **从这一轮的第一次站上开始算**，跌破即归零。今天在 MA5 下方 → 0。
+
+        2026-11-13 owner：「站上5日线的数字没有实时更新」。原来只读**已落盘**日线 ⇒ 盘中
+        今日那根要么还没有（数字停在昨天）、要么是 15min TTL 的 forming 快照（旧价）。
+        现在 `date==今天` 且已开盘时，今日那根用 QuoteBus 的**实时价**顶替（forming 根）
+        或追加（尚未落盘）；缓存里已是**确认收盘根**（today 不在 forming 里）时不顶替。
+        按 (文件键, 日期, 实时价) 记忆（文件键含 mtime/size，改写即失效）；无缓存/不足 5 根 → None。
         """
         base = str(code or "").split("_")[0]
         if len(base) != 6 or not base.isdigit():
             return None
         d = cls._norm_ymd(date)
         try:
-            fp = _DAILY_KLINE_DIR / f"{base}.json"
-            mt = fp.stat().st_mtime_ns
-            ck = (base, d, mt)
+            now = datetime.now()
+            today = now.strftime("%Y-%m-%d")
+            live_px = None
+            # 09:30 前不顶替：集合竞价快照会造出假当日根（见 memory preopen_placeholder_bar_fake_daily）
+            if d == today and now.strftime("%H:%M") >= "09:30":
+                live_px = cls._live_price_for(base, today)
+            key, dates, closes, forming = cls._ma5_series(base)
+            if key is None or not dates:
+                return None
+            # 键里带共享层的 (路径, mtime_ns, size)：文件一改写就自动失效，不必自己再 stat
+            ck = (key, d, live_px)
             hit = cls._MA5_STREAK_CACHE.get(ck)
             if hit is not None:
                 return hit
-            rows = json.loads(fp.read_text(encoding="utf-8")).get("rows") or []
-            closes = [float(r.get("close") or 0.0)
-                      for r in rows if str(r.get("date"))[:10] <= d]
-            n = len(closes)
+            end = len(dates)
+            if d < dates[-1]:                     # 历史日：截到 ≤ d 的最后一根
+                while end > 0 and dates[end - 1] > d:
+                    end -= 1
+                if end == 0:
+                    return None
+            # 2026-11-13：**过去某天仍挂 forming** 的那根是盘中快照、不是收盘（11-12 全池 2050 只）。
+            # 与展示层/`daily_repair` 同一条纪律：没被真数据确认的 bar **不许**当收盘用 ——
+            # 宁可少一根（用前一日 + 今日实时价），也别用 603955 那种 37.18（真值 33.35）算 MA5。
+            if end > 1 and dates[end - 1] < today and dates[end - 1] in forming:
+                end -= 1
+            cl = closes[:end]                     # array 切片（C 层拷贝，不产生 py 对象）
+            if live_px is not None and dates[-1] <= today:   # 缓存里有"未来根"就不掺实时价
+                if dates[end - 1] == today:
+                    if today in forming:          # 当日 forming 快照 ⇒ 用实时价顶替
+                        cl[-1] = live_px
+                else:                             # 今天还没落盘 ⇒ 追加当日临时根
+                    cl.append(live_px)
+            n = len(cl)
             if n < 5:
                 return None
             streak, i = 0, n - 1
             while i >= 4:
-                ma5 = sum(closes[i - 4:i + 1]) / 5.0
-                if closes[i] > ma5:
+                ma5 = sum(cl[i - 4:i + 1]) / 5.0
+                if cl[i] > ma5:
                     streak += 1
                     i -= 1
                 else:
