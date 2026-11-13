@@ -6901,6 +6901,7 @@ function closeStockChart() {
   // 关窗必须把「画框模式」一起收掉：否则提示条/监听会挂在一个不存在的图上
   if (typeof _paDrawMode !== "undefined" && _paDrawMode) _paExitDraw();
   _msrClear();                 // Shift 测量框同理（覆盖层在 body 上，不关会一直留着）
+  if (_replayCursor != null) _replayExit();   // Bar Replay 一起收掉
   document.getElementById("stockModal").style.display = "none";
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   // 关窗时断开尺寸监听（否则它还会对着已 dispose 的实例触发，且随 open/close 累积）
@@ -6913,6 +6914,7 @@ function closeStockChart() {
   stockProfileLiveLoaded = false;
 }
 function switchStockPeriod(p) {
+  if (_replayCursor != null) _replayExit();   // 回放游标是「本周期第几根」，换周期就作废
   stockChartPeriod = p;
   stockChartZoom = null;                    // 周期换了，根数尺度不同，旧缩放作废
   // 多空分布是**某根 10 分 K 线**的结论 ⇒ 周期一换就作废（别让旧数字挂在新周期上）
@@ -8602,13 +8604,129 @@ async function pollPriceAlerts() {
   }
 }
 
+/* ---- Bar Replay（2026-11-14 owner：TradingView「Bar Replay」落地）----
+   逐根回放：把当前周期数据截到回放游标为止，未来那几根**真的不存在**（不是遮罩），
+   逼自己不带后视地读盘。纯函数，node 单测直接跑。
+   口径：cursor=null 关；否则返回 period 的浅拷贝，dates/ohlc/volume/amount/turnover/rsi/
+   vwap/zero/ma[·]/macd{·}/boll{·} 全部截到 [0, cursor]；至少留 1 根；越界自动夹紧。 */
+function _replaySlice(period, cursor) {
+  if (cursor == null || !period || !Array.isArray(period.dates) || !period.dates.length) return null;
+  const n = period.dates.length;
+  const end = Math.max(1, Math.min(n, Math.floor(cursor) + 1));
+  const sl = (a) => (Array.isArray(a) ? a.slice(0, end) : a);
+  const cp = Object.assign({}, period);
+  cp.dates = sl(period.dates);
+  cp.ohlc = sl(period.ohlc);
+  cp.volume = sl(period.volume);
+  cp.amount = sl(period.amount);
+  cp.turnover = sl(period.turnover);
+  cp.rsi = sl(period.rsi);
+  cp.vwap = sl(period.vwap);
+  cp.zero = sl(period.zero);
+  if (Array.isArray(period.ma)) cp.ma = period.ma.map(sl);
+  if (period.macd) cp.macd = { dif: sl(period.macd.dif), dea: sl(period.macd.dea), hist: sl(period.macd.hist) };
+  if (period.boll) cp.boll = { mid: sl(period.boll.mid), up: sl(period.boll.up), dn: sl(period.boll.dn) };
+  return cp;
+}
+
+// 回放游标：null=关；否则 0..n-1（当前周期第几根）
+let _replayCursor = null;
+let _replayTimer = null;
+const _REPLAY_STEP_MS = 500;
+
+function toggleReplay() {
+  if (_replayCursor != null) { _replayExit(); return; }
+  const pd = (stockChartData && stockChartData.period_data
+    && stockChartData.period_data[stockChartPeriod]) || {};
+  const n = (pd.dates || []).length;
+  if (!n) { _paToast("当前周期没有数据可回放", "err"); return; }
+  _replayCursor = n - 1;              // 默认站在最后一根（先看全图，再往回/从头播）
+  stockChartZoom = { start: 0, end: 100 };   // 回放期间始终看全量已揭示的窗口
+  _replayPaint();
+  if (stockChartInst) renderStockChart(false);
+}
+function _replayExit() {
+  _replayCursor = null;
+  if (_replayTimer) { clearInterval(_replayTimer); _replayTimer = null; }
+  const b = document.getElementById("paReplayBar");
+  if (b) b.remove();
+  if (stockChartInst) renderStockChart(false);
+}
+function _replayN() {
+  const pd = (stockChartData && stockChartData.period_data
+    && stockChartData.period_data[stockChartPeriod]) || {};
+  return (pd.dates || []).length;
+}
+function _replayClamp(i) {
+  const n = _replayN();
+  if (!n) return 0;
+  return Math.max(0, Math.min(n - 1, i));
+}
+function _replayStep(delta) {
+  if (_replayCursor == null) return;
+  _replayCursor = _replayClamp(_replayCursor + delta);
+  _replayPaint();
+  if (stockChartInst) renderStockChart(false);
+}
+function _replayToStart() { _replayCursor = 0; _replayPaint(); if (stockChartInst) renderStockChart(false); }
+function _replayToEnd() { _replayCursor = _replayClamp(_replayN()); _replayPaint(); if (stockChartInst) renderStockChart(false); }
+function _replayPlayPause() {
+  if (_replayTimer) { clearInterval(_replayTimer); _replayTimer = null; _replayPaint(); return; }
+  if (_replayCursor == null) return;
+  _replayTimer = setInterval(() => {
+    if (_replayCursor >= _replayN() - 1) { clearInterval(_replayTimer); _replayTimer = null; _replayPaint(); return; }
+    _replayCursor++;
+    _replayPaint();
+    if (stockChartInst) renderStockChart(false);
+  }, _REPLAY_STEP_MS);
+  _replayPaint();
+}
+function _replayPaint() {
+  let b = document.getElementById("paReplayBar");
+  if (_replayCursor == null) { if (b) b.remove(); return; }
+  const pd = (stockChartData && stockChartData.period_data
+    && stockChartData.period_data[stockChartPeriod]) || {};
+  const dates = pd.dates || [];
+  const n = dates.length;
+  const cur = _replayClamp(_replayCursor);
+  const playing = !!_replayTimer;
+  if (!b) {
+    b = document.createElement("div");
+    b.id = "paReplayBar";
+    b.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:14px;"
+      + "z-index:2147483002;display:flex;align-items:center;gap:4px;background:#161b22;"
+      + "border:1px solid #30363d;border-radius:8px;padding:6px 10px;box-shadow:0 8px 24px "
+      + "rgba(0,0,0,.6);color:#c9d1d9;font-size:12px;user-select:none";
+    document.body.appendChild(b);
+  }
+  const btn = (t, fn, title) => {
+    const x = document.createElement("button");
+    x.textContent = t;
+    x.title = title || "";
+    x.style.cssText = "background:#21262d;border:1px solid #30363d;border-radius:4px;"
+      + "color:#c9d1d9;cursor:pointer;font-size:13px;padding:2px 7px;line-height:1.5";
+    x.onclick = fn;
+    return x;
+  };
+  b.innerHTML = "";
+  b.appendChild(btn("⏮", _replayToStart, "回到第一根"));
+  b.appendChild(btn("◀", () => _replayStep(-1), "上一根"));
+  b.appendChild(btn(playing ? "⏸" : "▶", _replayPlayPause, playing ? "暂停" : "自动播放（0.5s/根）"));
+  b.appendChild(btn("◀▸", () => _replayStep(1), "下一根"));
+  b.appendChild(btn("⏹", _replayExit, "退出回放"));
+  const st = document.createElement("span");
+  st.style.cssText = "margin-left:6px;font-family:var(--mono,monospace);white-space:nowrap";
+  st.textContent = `回放 第 ${cur + 1}/${n} 根 · ${dates[cur] || ""}`;
+  b.appendChild(st);
+}
+
 function renderStockChart(applyZoom = true) {
   // 2026-10-20：实时尾（1~5s）重绘时**不要**再写 dataZoom —— setOption 里的
   // start/end 会把用户正在拖动的滑杆弹回，表现为「看一会儿就缩放不了」。
   // 只有打开/切周期/点区间/点缩放按钮时才 applyZoom=true。
   const data = stockChartData;
   if (!data) return;
-  const period = data.period_data[stockChartPeriod];
+  let period = data.period_data[stockChartPeriod];
   // 30分/60分 取不到分时数据时后端不放该键（指数/em 标的、tushare 不可用且无本地缓存）
   // ⇒ 给明确提示而不是抛异常
   if (!period || !(period.dates || []).length) {
@@ -8617,6 +8735,9 @@ function renderStockChart(applyZoom = true) {
       '<div class="empty" style="color:#8b949e;padding-top:120px">该周期无分时数据（tushare 取不到，且本地无该标的缓存）</div>';
     return;
   }
+  // Bar Replay：截到回放游标为止（未来那几根真的消失，不是遮罩）
+  const _rp = _replaySlice(period, _replayCursor);
+  if (_rp) period = _rp;
   // 2026-10-20：这两个**必须在函数最前面**——后面的「日线MA5参考线」会先用到，
   // 放在 maSeries 附近声明会触发 TDZ（Cannot access '_isIntradayPeriod' before initialization）。
   const _periodCn = ({ daily: "日", weekly: "周", monthly: "月",
@@ -12621,7 +12742,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114b", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114c", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
