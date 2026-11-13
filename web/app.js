@@ -8220,6 +8220,15 @@ async function _paFinalize(p0, p1) {
       d0 = String(dates[_cl(l.x)]);        // 完整时间串（分钟图要区分 09:35 / 09:40）
       d1 = String(dates[_cl(rgt.x)]);
     }
+    // 磁吸：上下沿吸到光标所在那根 K 线的 开/高/低/收 最近价位
+    if (_magnetOn && isFinite(xi) && Array.isArray(pd.ohlc) && pd.ohlc.length) {
+      const _bi = Math.max(0, Math.min(pd.ohlc.length - 1, Math.round(xi)));
+      const _bar = pd.ohlc[_bi];
+      if (Array.isArray(_bar)) {
+        up = magnetSnap(up, _bar, MAGNET_TOL_PCT);
+        dn = magnetSnap(dn, _bar, MAGNET_TOL_PCT);
+      }
+    }
   } catch (e) { /* 走下面的错误提示 */ }
   _paExitDraw();
   if (!isFinite(up) || !isFinite(dn) || up <= 0 || dn <= 0) {
@@ -8944,6 +8953,67 @@ function _renderAlertStream() {
     });
   }
   document.body.appendChild(p);
+}
+
+/* ---- 对象模板 + 磁吸（2026-11-14 owner：TradingView「对象模板 + 磁吸」落地）----
+   模板：按现价 ±N% 一键设框（不用每次手填上下沿）；磁吸：拖框时上下沿自动吸到光标
+   所在那根 K 线的 开/高/低/收 最近的价位。纯函数 node 单测直接跑。 */
+function applyBoxTemplate(base, tpl) {
+  const b = Number(base);
+  if (!isFinite(b) || b <= 0 || !tpl || typeof tpl !== "object") return null;
+  const pct = (v) => (v == null ? null : Number(v));
+  const upP = pct(tpl.upperPct), dnP = pct(tpl.lowerPct);
+  if (upP != null || dnP != null) {
+    const upper = upP != null ? b * (1 + upP / 100) : null;
+    const lower = dnP != null ? b * (1 - dnP / 100) : null;
+    return {
+      upper: upper != null ? +upper.toFixed(2) : null,
+      lower: lower != null ? +lower.toFixed(2) : null,
+    };
+  }
+  if (tpl.upper != null && tpl.lower != null) {
+    return { upper: +Number(tpl.upper).toFixed(2), lower: +Number(tpl.lower).toFixed(2) };
+  }
+  return null;
+}
+
+const MAGNET_TOL_PCT = 0.2;   // 磁吸容差：现价的 0.2%
+function magnetSnap(price, bar, tolPct) {
+  const p = Number(price);
+  if (!isFinite(p) || !Array.isArray(bar)) return p;
+  const cand = [bar[0], bar[1], bar[2], bar[3]].map(Number).filter(isFinite);
+  if (!cand.length) return p;
+  const tol = (tolPct != null ? Math.abs(Number(tolPct)) : MAGNET_TOL_PCT) / 100;
+  const eps = Math.abs(p) * tol;
+  let best = p, bestD = Infinity;
+  cand.forEach(c => { const d = Math.abs(c - p); if (d < bestD) { bestD = d; best = c; } });
+  return bestD <= eps ? best : p;
+}
+
+let _magnetOn = false;
+function onMagnetToggle() {
+  _magnetOn = !!(document.getElementById("tgMagnet") || {}).checked;
+}
+async function applyBoxFromTemplate(pct) {
+  if (!stockChartCode) { _paToast("先打开一张 K 线再套模板", "err"); return; }
+  const base = _paCurrentPrice();
+  if (base == null) { _paToast("取不到当前价，无法套模板", "err"); return; }
+  const box = applyBoxTemplate(base, { upperPct: pct, lowerPct: pct });
+  if (!box || box.upper == null || box.lower == null) return;
+  try {
+    const r = await apiCall("save_price_box", stockChartCode, box.upper, box.lower, null, null, base);
+    if (!r || !r.ok) { _paToast("保存失败：" + ((r && r.error) || "后端未返回 ok"), "err"); return; }
+    _paToast(`✅ 已按 ±${pct}% 设框 ${box.lower} ~ ${box.upper}`);
+    await loadPriceAlerts(stockChartCode);
+    _mwSyncBoxesNow();
+    if (stockChartInst) renderStockChart(false);
+  } catch (e) { _paToast("保存失败：" + (e && e.message ? e.message : e), "err"); }
+}
+function onBoxTemplateSel(sel) {
+  const v = parseFloat(sel.value);
+  sel.value = "";                 // 复位，方便连点同一项
+  if (!isFinite(v)) return;
+  applyBoxFromTemplate(v);
 }
 
 function renderStockChart(applyZoom = true) {
@@ -12990,7 +13060,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114e", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114f", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

@@ -641,6 +641,17 @@
                 title="设画框提醒：直接填「上沿 / 下沿」两个价格即出框。本票只有一个框时 = 原地修改它；也可右键框选「修改上下沿」">⌨ 设框</button>
         <button class="mini-btn" id="paDrawBtn" onclick="togglePaDraw()"
                 title="备选：在 K 线上拖一个矩形（或点第一角再点对角）。Esc 取消">✏️ 拖框</button>
+        <!-- 2026-11-14 owner：TradingView「对象模板」落地 —— 按现价 ±N% 一键设框 -->
+        <select class="mini-btn" id="boxTplSel" onchange="onBoxTemplateSel(this)"
+                title="对象模板：按现价 ±N% 一键设框（常用幅度预置，不用每次手填上下沿）">
+          <option value="">框模板</option>
+          <option value="1">±1%</option>
+          <option value="2">±2%</option>
+          <option value="3">±3%</option>
+          <option value="5">±5%</option>
+        </select>
+        <!-- 2026-11-14 owner：TradingView「磁吸」落地 —— 拖框上下沿吸到 OHLC -->
+        <label class="toggle-item" title="磁吸：拖框画框时，上下沿自动吸到光标所在那根 K 线的 开/高/低/收 最近的价位"><input type="checkbox" id="tgMagnet" onchange="onMagnetToggle()"> 磁吸</label>
         <button class="mini-btn" id="paClearBtn" onclick="clearPriceBoxes()"
                 style="display:none" title="删除本票所有画框提醒（单个框也可以右键删除）">🗑 全部框(0)</button>
         <!-- 2026-11-14 owner：TradingView「对象树」落地 —— 集中管理本票所有画框 -->
@@ -807,6 +818,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261114e"></script>
+<script src="app.js?v=20261114f"></script>
 </body>
 </html>
