@@ -1098,6 +1098,23 @@ def try_sell(rt, context, now, today) -> int:
         rt.audit({"event": "osc_sell_skip", "reason": "no_prices", "time": str(now)})
         return 0
     _book = rt.book_dir
+    # ㉘（2026-11-13）：注入交易日历——days_held 由「入场日+交易日历」推导，
+    # 自愈计数器跨周末/漏跑/回退滞后（688652 满5日漏卖红线）；取数失败退化为旧行为。
+    _trading_days = None
+    try:
+        _td_start = (now - _dt.timedelta(days=45)).strftime("%Y-%m-%d 00:00:00")
+        _td_end = now.strftime("%Y-%m-%d 15:30:00")
+        _td_df = rt.sdk_call("osc_trading_days", partial(
+            rt.gm.history, symbol="SHSE.000001", frequency="1d",
+            start_time=_td_start, end_time=_td_end,
+            fields="symbol,eob", adjust=rt.gm.ADJUST_NONE, df=True))
+        if _td_df is not None and len(_td_df):
+            _trading_days = sorted({str(x)[:10] for x in _td_df["eob"]})
+            if str(today) not in _trading_days:
+                _trading_days.append(str(today))   # 当日正在运行，必为交易日
+    except Exception as _e:
+        rt.log(f"[OSC] 交易日历取数失败（days_held 退化为计数器推进）: {_e}")
+        _trading_days = None
     _params = {
         "hold_days": int(rt.param("osc_hold_days", 5)),
         "stop_pct": float(rt.param("osc_stop_pct", 0.05)),
@@ -1107,7 +1124,8 @@ def try_sell(rt, context, now, today) -> int:
     }
     try:
         _res = executor.run_sell_exec(rt.gateway(context), str(today), _prices,
-                                  book_dir=_book, params=_params, dry_run=False, log=print)
+                                  book_dir=_book, params=_params, dry_run=False, log=print,
+                                  trading_days=_trading_days)
         _sm = (_res or {}).get("summary") or {}
         rt.audit({"event": "osc_sell_exec", "date": str(today),
                       "sells": _sm.get("sells_placed"), "stops": _sm.get("stop_count"),

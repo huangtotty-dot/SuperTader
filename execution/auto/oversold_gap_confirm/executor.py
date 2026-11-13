@@ -794,10 +794,44 @@ def _reconcile_open(open_pos: dict, positions: dict, log=print) -> None:
             rec["qty"] = acct_qty
 
 
-def _advance_days_held(open_pos: dict, date: str) -> None:
-    """每日一次推进 days_held（幂等；entry 当日不推进）。14:50 止损检查专用。"""
+def _days_held_by_calendar(entry_date: str, date: str, trading_days) -> int | None:
+    """按交易日历推导持有天数：`entry_date < d <= date` 的交易日数（含当日）。
+
+    日历不可用/为空 ⇒ None（调用方退化为计数器）。entry 当日/异常未来日 ⇒ 0。
+    """
+    if not trading_days:
+        return None
+    entry = str(entry_date or "")
+    today = str(date)
+    if not entry or entry >= today:
+        return 0
+    days = {str(d)[:10] for d in trading_days}
+    days.add(today)                       # 正在运行的当日必为交易日
+    return sum(1 for d in days if entry < d <= today)
+
+
+def _advance_days_held(open_pos: dict, date: str, trading_days=None, log=print) -> None:
+    """每日一次推进 days_held（幂等；entry 当日不推进）。14:50 止损检查专用。
+
+    **㉘ 修复（2026-11-13，688652 满 5 交易日漏卖红线）**：原实现是「策略每跑一天 +1」
+    的计数器，跨周末/漏跑/重启/状态回退都会丢增量（688652 在 11-12 应为 5 却只有 4，
+    到期未卖，迟至 11-13 才卖出）。现在优先按**交易日历推导**
+    （`_days_held_by_calendar`），计数与日历不一致时**以日历为准**并留痕
+    `days_held_calendar_fixed`；日历未注入/取数失败时退化为旧计数器行为。
+    """
     for code, rec in open_pos.items():
-        if rec.get("last_check_date") != date and str(rec.get("entry_date")) != str(date):
+        entry = str(rec.get("entry_date") or "")
+        if entry == str(date):
+            continue
+        cal = _days_held_by_calendar(entry, date, trading_days)
+        if cal is not None:
+            old = int(rec.get("days_held") or 0)
+            if cal != old:
+                rec["days_held"] = cal
+                rec["days_held_calendar_fixed"] = {"from": old, "to": cal, "date": str(date)}
+                log(f"[WS] ㉘天数日历校准 {code}: 计数器 {old} → 交易日历 {cal}（{date}）")
+            rec["last_check_date"] = date
+        elif rec.get("last_check_date") != date:
             rec["days_held"] = int(rec.get("days_held") or 0) + 1
             rec["last_check_date"] = date
 
@@ -932,10 +966,13 @@ def _finish_sell(date, mode, started, sells_out, open_pos, note, tag, book_dir, 
 
 def run_sell_exec(gateway, date: str, prices: dict,
                   book_dir: str = BOOK_DIR_DEFAULT, params: dict | None = None,
-                  dry_run: bool = False, sleep_fn=time.sleep, log=print) -> dict:
+                  dry_run: bool = False, sleep_fn=time.sleep, log=print,
+                  trading_days=None) -> dict:
     """超跌跳空确认 14:50 收盘止损/到期平仓卖侧主流程。返回 fills dict（同时落盘）。
 
     prices = {code: 当日现价}（调用方注入，14:50 批量取数）。
+    trading_days = 近期交易日列表（ISO 日期，调用方由指数日线注入；㉘ 修复）——
+    注入后 days_held 按交易日历推导，自愈计数器滞后；None ⇒ 退化为逐日 +1 旧行为。
     """
     cfg = {**DEFAULTS, **(params or {})}
     mode = "dry" if dry_run else "live"
@@ -944,7 +981,7 @@ def run_sell_exec(gateway, date: str, prices: dict,
     open_pos = dict(book.get("open") or {})
     positions = _snapshot_positions(gateway)
     _reconcile_open(open_pos, positions, log)
-    _advance_days_held(open_pos, date)
+    _advance_days_held(open_pos, date, trading_days=trading_days, log=log)
 
     sell_plan = build_sell_plan(open_pos, prices, str(date),
                                 hold_days=int(cfg["hold_days"]),

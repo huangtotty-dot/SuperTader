@@ -233,6 +233,34 @@ _positions: Dict[str, Dict] = {}
 _cash_estimate: float = 200000
 
 
+def _account_truth_today():
+    """账户真源：读今日 heartbeat 尾行 → (cash, {code: {qty,cost}})；不可用 ⇒ None。
+
+    ㉜（2026-11-13）：watcher 无 GM 查询通道，但策略每根 bar 都写 heartbeat
+    （含真实 cash 与全量持仓），这就是告警该用的口径——不再用「本地估计仓
+    （初始现金 20 万 + 仅本进程可见的成交）」算仓位占比（11-13 曾因此误报
+    「佳驰科技市值占比 96% > 80%」，真实口径该票约占 24%、总仓位约 70.7%）。
+    """
+    fp = os.path.join(BRIDGE_DIR, "heartbeat_%s.jsonl" % datetime.now().strftime("%Y-%m-%d"))
+    try:
+        last = None
+        with open(fp, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    last = json.loads(line)
+        if not last or last.get("cash") is None:
+            return None
+        positions = {}
+        for sym, v in (last.get("positions") or {}).items():
+            code = str(sym).split(".")[-1]
+            qty = int((v or {}).get("qty") or 0)
+            if qty > 0:
+                positions[code] = {"qty": qty, "cost": float((v or {}).get("cost") or 0)}
+        return float(last["cash"]), positions
+    except Exception:
+        return None
+
+
 def _track_position(rec: dict):
     global _positions, _cash_estimate
     code = rec.get("code", "")
@@ -252,14 +280,18 @@ def _track_position(rec: dict):
         else:  # SELL
             _positions[code]["qty"] = max(0, _positions[code]["qty"] - qty)
             _cash_estimate += qty * price
-        # 仓位超限告警
-        total_mv = sum(p["qty"] * p["cost"] for p in _positions.values())
-        total_eq = _cash_estimate + total_mv
-        if total_eq > 0 and total_mv / total_eq > 0.80:
-            # 2026-10-16：原来这里塞的是**裸 6 位码**（标题里连股票都没有）⇒ 与其它
-            # 推送统一走 `_stock_label`（名称+代码+行业）。
-            _push("⚠️ 仓位超限", f"{_stock_label(code)} 市值占比 {total_mv/total_eq:.0%} > 80%",
-                  "orange")
+        # 仓位超限告警（㉜）：按账户真源（heartbeat 尾行）计算**账户总仓位**；
+        # 真源不可用时不告警（宁可缺一条，不可再发误导性假告警）。
+        truth = _account_truth_today()
+        if truth is not None:
+            cash_t, pos_t = truth
+            total_mv = sum(p["qty"] * p["cost"] for p in pos_t.values())
+            total_eq = cash_t + total_mv
+            if total_eq > 0 and total_mv / total_eq > 0.80:
+                _push("⚠️ 仓位超限",
+                      f"账户总仓位 {total_mv/total_eq:.0%} > 80%（{_stock_label(code)} 成交后，"
+                      f"按账户真源复核）",
+                      "orange")
 
 
 # ── 心跳监控 ──

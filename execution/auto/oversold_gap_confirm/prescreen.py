@@ -128,26 +128,39 @@ def universe_board_map(full_market: bool = True) -> dict:
       2. 猎手表韭研主板块（`sym2board_map`，exp12 同口径）**覆盖**其上
          —— 猎手池内的票的板块标签与扩展前**逐码一致**（行为不变式）。
 
+    ⚠️ **㉚ 修复（2026-11-13，11-11 *ST返利 600228 实买红线）**：猎手表覆盖
+    **只改板块标签、不扩大合法宇宙**——猎手表里被 `full_market_meta` 剔除的票
+    （ST/退市/北交所/B股）或 industry_map 中不存在的代码，一律 **fail-closed 不带入**。
+    原实现把猎手表全量覆盖进宇宙（含 ST），测试还曾把「ST 重新进入」写成预期——
+    该"口径不变式的代价"在 11-11 变成真实买入红线，已废止。
+    industry_map 缺失/读坏（meta 为空）⇒ 退化为猎手池旧行为（文档化口径，非 fail-closed）。
+
     注意：这制造了两个标签命名空间（韭研板块名 vs 申万行业名），同一只票只取其一；
     涨停家数按各自标签计数，top-N 排名在两个命名空间混排 —— 这是「猎手池口径不变 +
     全市场扩展」的保守折中，exp15 的板块排名口径结论需在全市场下重验证（见模块 docstring）。
 
-    industry_map.csv 缺失 ⇒ 退化为旧行为（仅猎手表有韭研板块的票）。
-
     `full_market=False`（2026-10-14 新增，由参数 `osc_universe_full_market` 驱动）
-    ⇒ **只返回猎手池那份映射**（扩展前的宇宙）。用途：宇宙扩展目前**只有行为证据、
-    没有通过的回测证据**（exp9/exp24 的标定都在猎手池上；`doc/research/2026-10-14_OSC
-    买不进替补_回测判词.md` 里那次 A/B 因事后选择偏差而无效）⇒ 需要一个**不改代码、不改数据文件**
-    的当天回退闸。**默认 True = 与扩展后的行为逐位一致**。
+    ⇒ **只返回猎手池那份映射**（扩展前的宇宙）。meta 可用时同样 fail-closed 剔除
+    ST/退市等非法票；meta 缺失时退化为旧行为。两种口径守住同一 OSC 可交易宇宙边界。
     """
     _jy = sym2board_map()
+    meta = full_market_meta()
     if full_market:
-        m = {c: v["sw"] for c, v in full_market_meta().items() if v.get("sw")}
+        m = {c: v["sw"] for c, v in meta.items() if v.get("sw")}
         for code, board in _jy.items():
-            if board:
-                m[code] = board    # 韭研主板块优先（猎手池口径不变式）
+            if not board:
+                continue
+            if meta and code not in meta:
+                continue            # ㉚：覆盖只改标签，不扩大合法宇宙（fail-closed）
+            m[code] = board         # 韭研主板块优先（合法票的猎手池口径不变式）
     else:
-        m = {c: b for c, b in _jy.items() if b}
+        m = {}
+        for c, b in _jy.items():
+            if not b:
+                continue
+            if meta and c not in meta:
+                continue            # ㉚：回退口径同样守 ST/退市边界
+            m[c] = b
     # 猎手表可能重新带入北交所/B股；两种口径都守住同一 OSC 可交易宇宙边界。
     return {c: b for c, b in m.items()
             if not (c[:1] in "48" or c[:3] in ("920", "200", "900"))}

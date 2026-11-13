@@ -123,8 +123,10 @@ class TestPushSitesUseTheLabel(unittest.TestCase):
             self.assertIn(title + "{label}", _SRC, f"{title} 没走 label")
 
     def test_position_limit_uses_label(self):
-        """仓位超限原来塞的是裸码（标题里连股票都没有）——已改。"""
-        self.assertIn('_stock_label(code)} 市值占比', _SRC)
+        """仓位超限原来塞的是裸码（标题里连股票都没有）——已改。
+        ㉜（2026-11-13）后文案改为「账户总仓位 xx% > 80%（{label} 成交后，按账户真源复核）」，
+        标签仍在告警体里，钉住新文案。"""
+        self.assertIn('{_stock_label(code)} 成交后', _SRC)
 
 
 class TestCoreStockMeta(unittest.TestCase):

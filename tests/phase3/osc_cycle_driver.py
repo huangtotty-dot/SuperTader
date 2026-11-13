@@ -194,6 +194,18 @@ GM._OSC_BOOK_DIR = BOOK
 GM.OSC_RT.book_dir = BOOK
 OSC.prescreen.default_provider = lambda: FakeProvider()
 OSC.prescreen.sym2board_map = lambda: {c: "半导体" for c in SECTOR_CODES}
+# ㉚（2026-11-13 fail-closed）后：猎手表覆盖不再扩大宇宙——合成票必须同时是
+# industry_map 的合法成员（非 ST/退市/北交所/B股）才会进预筛宇宙。
+# 旧驱动只注入 sym2board_map、industry_map 走生产真表（不含 6000xx 合成码）⇒ 全宇宙被剔。
+# 修法：写沙箱版 industry_map.csv（合成码 → 半导体），并指向它。
+import csv as _csv                                                       # noqa: E402
+_IM_FP = os.path.join(TMP, "industry_map.csv")
+with open(_IM_FP, "w", encoding="utf-8-sig", newline="") as _f:
+    _w = _csv.writer(_f)
+    _w.writerow(["代码", "名称", "行业名称"])
+    for _c in SECTOR_CODES:
+        _w.writerow([_c, "合成%s" % _c, "半导体"])
+OSC.prescreen._INDUSTRY_MAP_FP = _IM_FP
 # P0-3（2026-10-26）：init 预筛主路径置 no-op——本驱动验的是逐日全周期交易行为，
 # 不让 init 预筛抢跑 09:31 钩子的戏份；prescreen_init 自身由 test_osc_prescreen_init 覆盖。
 OSC.prescreen_init = lambda *a, **k: False

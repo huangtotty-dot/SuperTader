@@ -129,10 +129,23 @@ class TestUniverseBoardMap(_Sandbox):
         m = prescreen.universe_board_map()
         for bad in ("300005", "830001", "430002", "920003", "200004", "900005"):
             self.assertNotIn(bad, m)
-        # ⚠️ 300004 是 ST、被 industry_map 剔除，但它在猎手表里有韭研板块 ⇒ 仍会进来。
-        #    这是「猎手池口径不变式」的代价：猎手表自身的票池卫生由猎手表维护方负责，
-        #    本层不二次过滤（与扩展前行为逐码一致）。
-        self.assertEqual(m.get("300004"), "化工")
+        # ㉚（2026-11-13 修复，11-11 *ST返利 600228 实买红线）：300004 是 ST、
+        # 被 industry_map 剔除，即使它在猎手表里有韭研板块也**不得**再被覆盖带入。
+        # 旧实现把它放回来并称之为「猎手池口径不变式的代价」——该代价已变成真实红线，废止。
+        # 覆盖只改板块标签，不扩大合法宇宙；口径不变式只对**合法票**成立。
+        self.assertNotIn("300004", m, "猎手表里的 ST 股不得借覆盖重新进入宇宙")
+
+    def test_watchlist_code_absent_from_industry_map_fail_closed(self):
+        """猎手表存在、industry_map 不存在的代码（新股滞后/脏数据）⇒ 无法验证合法性，fail-closed。"""
+        prescreen.sym2board_map = lambda: {**self.WL, "300999": "化工"}
+        m = prescreen.universe_board_map()
+        self.assertNotIn("300999", m, "industry_map 缺失该码 ⇒ 不能验证非 ST/退市 ⇒ fail-closed")
+
+    def test_fallback_mode_also_excludes_st(self):
+        """full_market=False 回退口径同样守 ST/退市边界（meta 可用时 fail-closed）。"""
+        m = prescreen.universe_board_map(full_market=False)
+        self.assertEqual(m.get("300001"), "锂电池")
+        self.assertNotIn("300004", m, "回退口径也不得带入 ST")
 
     def test_missing_industry_map_degrades_to_watchlist(self):
         prescreen._INDUSTRY_MAP_FP = os.path.join(self._tmp, "nope.csv")
@@ -165,7 +178,11 @@ class TestPremarketCandidatesFullMarket(_Sandbox):
     def test_fullmarket_candidate_included_excluded_categories_blocked(self):
         frames = self._frames()
         frames["300009"] = _frame(_uptrend_lu())              # 计算机涨停票（把「计算机」顶成热门板块）
-        prescreen.sym2board_map = lambda: {**self.WL, "300009": "计算机"}
+        # ㉚ fail-closed（2026-11-13）后：猎手表覆盖不再扩大宇宙，板块热度驱动票必须
+        # 本身就在 industry_map 里（且非 ST/退市/北交所/B股）。把 300009 直接写进
+        # industry_map（申万行业=计算机，不在猎手表）——这更贴近「全市场票」的本义。
+        with open(prescreen._INDUSTRY_MAP_FP, "a", encoding="utf-8", newline="") as f:
+            csv.writer(f).writerow(["300009", "测试计算", "计算机"])
         cand = prescreen.premarket_candidates(5, "2026-10-14",
                                               provider=_FakeProvider(frames))
         self.assertIn("300002", cand, "全市场超跌票（申万行业进 top-N）必须进候选 —— 扩展的意义")
