@@ -573,6 +573,47 @@ HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
 _CHART_PREFETCH_STATE = {"started": False}  # 盘后 K线预下载调度（2026-10-04）
 # 主线程(js_api)心跳：高频轮询方法每次更新；看门狗发现停跳 ⇒ 判界面卡死并落线程栈（2026-10-08）
 _GUI_HB = {"ts": 0.0}
+
+# 带超时的 evaluate_js（2026-11-13）。pywebview 原版**没有超时**：`webview.Invoke(...)`
+# 之后 `semaphore.acquire()` 一直等渲染进程回结果。渲染进程一旦僵死（当天实测：主窗口最小化
+# 一个多小时后，页面不再执行任何脚本 —— CPU 0%、没有崩溃对话框、窗口也 restore 不回来），
+# 这个 js_api 线程就**永久卡住**，桥接槽位被它吃掉、后续调用全排队。
+# 这里丢到后台线程 + join(timeout)：超时就放弃这一帧（下一帧还会再来），
+# 连续 5 次超时判"渲染进程已死"，本进程不再尝试（避免线程越堆越多）。
+_EVAL_GUARD = {"busy": False, "fail": 0}
+
+
+def _eval_js_guarded(win, script, tag="", timeout=3.0):
+    """→ True=已执行 / False=跳过或超时。**永不阻塞超过 timeout**。"""
+    if win is None or _EVAL_GUARD["fail"] >= 5 or _EVAL_GUARD["busy"]:
+        return False
+    _EVAL_GUARD["busy"] = True
+    res = {"ok": False}
+
+    def _run():
+        try:
+            win.evaluate_js(script)
+            res["ok"] = True
+        except Exception:
+            pass
+        finally:
+            _EVAL_GUARD["busy"] = False
+
+    t = _th.Thread(target=_run, daemon=True, name=f"evaljs-{tag or 'x'}")
+    t.start()
+    t.join(float(timeout))
+    if t.is_alive():
+        _EVAL_GUARD["fail"] += 1
+        _EVAL_GUARD["busy"] = False
+        try:
+            print(f"[WARN] evaluate_js({tag}) 超时 {timeout}s —— 渲染进程疑似僵死"
+                  f"（连续 {_EVAL_GUARD['fail']} 次）", flush=True)
+        except Exception:
+            pass
+        return False
+    if res["ok"]:
+        _EVAL_GUARD["fail"] = 0
+    return res["ok"]
 # 建仓推送的「当日去重」状态：自动运行只在候选集变化时推，避免一天重复刷屏
 _HUNTER_BUILD_PUSHED_FP = STATE_DIR / "hunter_build_pushed.json"
 ROTATION_RUN_STATE = {"running": False, "error": None}
@@ -6715,7 +6756,8 @@ class Api:
                     if _o:
                         try:
                             import json as _json
-                            w.evaluate_js("_mwApplyOpts && _mwApplyOpts(%s)" % _json.dumps(_o))
+                            _eval_js_guarded(w, "_mwApplyOpts && _mwApplyOpts(%s)" % _json.dumps(_o),
+                                             "mw-opts")
                         except Exception:
                             pass
                     return {"ok": True, "reused": True}
@@ -6759,10 +6801,11 @@ class Api:
             def _on_loaded():
                 try:
                     import json as _json
-                    win.evaluate_js(
+                    _eval_js_guarded(
+                        win,
                         "mwEnterWindowMode && mwEnterWindowMode(%s, %s)"
-                        % (_json.dumps(_codes), _json.dumps(_opts))
-                    )
+                        % (_json.dumps(_codes), _json.dumps(_opts)),
+                        "mw-enter")
                 except Exception:
                     pass
 
@@ -6884,8 +6927,10 @@ class Api:
                 self._log_turnover_win(f"LOADED via={self._turnover_window_via}")
                 if not _use_query:     # 兜底路径：加载完再把界面切进成交额模式
                     try:
-                        _w.evaluate_js(
-                            "turnoverEnterWindowMode && turnoverEnterWindowMode()")
+                        if not _eval_js_guarded(
+                                _w, "turnoverEnterWindowMode && turnoverEnterWindowMode()",
+                                "turnover-enter"):
+                            self._log_turnover_win("evaluate_js 超时/失败（渲染进程可能已僵死）")
                     except Exception as ee:
                         self._log_turnover_win(f"evaluate_js 失败: {ee}")
 
