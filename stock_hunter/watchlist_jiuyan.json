@@ -3738,21 +3738,27 @@
   "business_summary": "主营电信、广播电视和卫星传输服务",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "算力租赁",
-  "jiuyan_concept": "算力租赁",
+  "jiuyan_category": "算力租赁|AI应用",
+  "jiuyan_concept": "算力租赁|AI影视短剧",
   "name": "湖北广电",
   "primary_source": "legacy",
   "sector": "电信、广播电视和卫星传输服务",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 14:00:00",
+  "updated_at": "2026-11-13 15:56:04",
   "jiuyan_concept_desc": {
    "算力租赁": "自建或租入算力对外出租，赚上架率与租金差"
   },
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "算力租赁": "湖北广电：广电网络+算力"
-  }
+   "算力租赁": "湖北广电：广电网络+算力",
+   "AI影视短剧": "湖北广电：短剧（长江云）；已有算力租赁（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_category1": "算力租赁",
+  "jiuyan_concept1": "算力租赁",
+  "jiuyan_category2": "AI应用",
+  "jiuyan_concept2": "AI影视短剧",
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → AI应用/AI影视短剧"
  },
  "000668": {
   "business_summary": "房地产开发与经营、跨境物流业务以及少量的电商直播业务。",
@@ -5028,13 +5034,19 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "化学制药",
   "name": "通化金马",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "化学制药",
+  "jiuyan_concept_reason": {
+   "化学制药": "通化金马：阿尔茨海默创新药（化学制药）（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 医药/化学制药"
  },
  "000767": {
   "business_summary": "电力商品、热力商品生产和销售。燃料、材料、电力高新技术、电力物资的开发销售。",
@@ -9461,18 +9473,24 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "化工",
-  "jiuyan_concept": "基础化工",
+  "jiuyan_category": "化工|半导体",
+  "jiuyan_concept": "基础化工|半导体材料-光刻胶与配套试剂",
   "name": "兴欣新材",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-13 15:56:04",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "基础化工": "主营：有机胺类精细化学品的研发、生产和销售；与本标签一致"
-  }
+   "基础化工": "主营：有机胺类精细化学品的研发、生产和销售；与本标签一致",
+   "半导体材料-光刻胶与配套试剂": "兴欣新材：光刻胶材料；已有化工（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "基础化工",
+  "jiuyan_category2": "半导体",
+  "jiuyan_concept2": "半导体材料-光刻胶与配套试剂",
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 半导体/半导体材料-光刻胶与配套试剂"
  },
  "001359": {
   "business_summary": "主营非金属矿物制品业",
@@ -9850,13 +9868,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电力电子与配套",
   "name": "维通利",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电力电子与配套",
+  "jiuyan_concept_reason": {
+   "电力电子与配套": "维通利：电连接器/母排，下游新能源车与电力（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 电力/电力电子与配套"
  },
  "001395": {
   "business_summary": "主营专用设备制造业",
@@ -23688,16 +23712,20 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-12 15:54:20",
+  "updated_at": "2026-11-13 15:56:04",
   "jiuyan_tag_removed_20261025": "半导体/算力芯片（实际主营：集装箱装卸设备）",
+  "jiuyan_category": "机器人|半导体",
+  "jiuyan_concept": "智能装备与机床|芯片设计-CPU/GPU/AI计算",
+  "jiuyan_concept_reason": {
+   "智能装备与机床": "华东重机：集装箱起重机/数控机床（2026-11-12 涨幅榜补充）",
+   "芯片设计-CPU/GPU/AI计算": "华东重机：控股国产GPU公司；已有机器人（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 机器人/智能装备与机床",
   "jiuyan_category1": "机器人",
   "jiuyan_concept1": "智能装备与机床",
-  "jiuyan_category": "机器人",
-  "jiuyan_concept": "智能装备与机床",
-  "jiuyan_concept_reason": {
-   "智能装备与机床": "华东重机：集装箱起重机/数控机床（2026-11-12 涨幅榜补充）"
-  },
-  "jiuyan_top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 机器人/智能装备与机床"
+  "jiuyan_category2": "半导体",
+  "jiuyan_concept2": "芯片设计-CPU/GPU/AI计算",
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 半导体/芯片设计-CPU/GPU/AI计算"
  },
  "002686": {
   "business_summary": "主营通用设备制造业",
@@ -24478,7 +24506,7 @@
   "primary_source": "legacy",
   "sector": "广播、电视、电影和录音制作业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-13 15:56:04",
   "jiuyan_aiapp_verdicts": {},
   "jiuyan_aiapp_audited_at": "2026-10-27",
   "jiuyan_aiapp_evidence": {
@@ -24499,7 +24527,15 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主营院线放映、影视剧、潮玩和游戏，观影餐饮商品收入占73.73%，影视剧制作发行仅占3.62%。年报未披露公司自身AI影视短剧产品或收入，数字化经营平台及参股“拍立方”也不足以构成AI影视业务，港股关联公司的产品更不能归入本A股公司。因此原AI影视标签缺乏直接主营和商业化依据，应整只摘除。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧",
+  "jiuyan_concept_reason": {
+   "AI影视短剧": "儒意电影：电影制片+发行（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → AI应用/AI影视短剧"
  },
  "002741": {
   "business_summary": "主营电子化学品Ⅱ",
@@ -24651,8 +24687,16 @@
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 21:00:00",
-  "jiuyan_tag_removed_20261024": "电池/电解液（实际主营：发泡剂/烧碱）"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_tag_removed_20261024": "电池/电解液（实际主营：发泡剂/烧碱）",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "基础化工",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "基础化工",
+  "jiuyan_concept_reason": {
+   "基础化工": "世龙实业：氯化亚砜/精细化工（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 化工/基础化工"
  },
  "002749": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -25648,13 +25692,19 @@
   "business_summary": "主营批发业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "半导体设备-量测与检测",
   "name": "东方中科",
   "primary_source": "legacy",
   "sector": "批发业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "半导体设备-量测与检测",
+  "jiuyan_concept_reason": {
+   "半导体设备-量测与检测": "东方中科：网络分析仪(VNA)/电子测量仪器（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 半导体/半导体设备-量测与检测"
  },
  "002820": {
   "business_summary": "主营食品制造业",
@@ -63839,21 +63889,15 @@
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-10-27 10:49:00",
+  "updated_at": "2026-11-13 15:56:04",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "其他": "华胜天成：算力新基建",
    "IaaS计算与存储": "公司虽以企业IT系统集成为最大板块，但云计算并非单纯合作或参股概念：天成云体系包括全栈私有云、异构混合多云管理、云资源编排、DevOps及云运维，并有制造等客户交付案例。2025年云计算产品及服务收入9.66亿元，同比增长5.94%，占总营收20.74%，已是独立且重要的产品收入板块，符合核心标准。原国资云既未准确反映客户和产品，也忽略多云管理及私有云能力，故改为IaaS与云平台标签并提升为核心。",
-   "云平台与多云管理": "公司虽以企业IT系统集成为最大板块，但云计算并非单纯合作或参股概念：天成云体系包括全栈私有云、异构混合多云管理、云资源编排、DevOps及云运维，并有制造等客户交付案例。2025年云计算产品及服务收入9.66亿元，同比增长5.94%，占总营收20.74%，已是独立且重要的产品收入板块，符合核心标准。原国资云既未准确反映客户和产品，也忽略多云管理及私有云能力，故改为IaaS与云平台标签并提升为核心。"
+   "云平台与多云管理": "公司虽以企业IT系统集成为最大板块，但云计算并非单纯合作或参股概念：天成云体系包括全栈私有云、异构混合多云管理、云资源编排、DevOps及云运维，并有制造等客户交付案例。2025年云计算产品及服务收入9.66亿元，同比增长5.94%，占总营收20.74%，已是独立且重要的产品收入板块，符合核心标准。原国资云既未准确反映客户和产品，也忽略多云管理及私有云能力，故改为IaaS与云平台标签并提升为核心。",
+   "算力租赁": "华胜天成：算力/智算中心；已有云计算|超节点（2026-11-13 涨停复盘补充）"
   },
-  "jiuyan_category2": "超节点",
-  "jiuyan_concept2": "其他",
-  "jiuyan_category1": "云计算",
-  "jiuyan_concept1": [
-   "IaaS计算与存储",
-   "云平台与多云管理"
-  ],
   "jiuyan_concept_desc": {
    "IaaS计算与存储": "通过网络按需交付云主机、裸金属、虚拟化、存储和算力资源，并按配置、时长或用量收费。",
    "云平台与多云管理": "提供私有云、混合云、多云纳管、云迁移、资源编排和持续运维，不等同普通系统集成。"
@@ -63889,7 +63933,16 @@
    ],
    "verdict": "核心",
    "reason": "公司虽以企业IT系统集成为最大板块，但云计算并非单纯合作或参股概念：天成云体系包括全栈私有云、异构混合多云管理、云资源编排、DevOps及云运维，并有制造等客户交付案例。2025年云计算产品及服务收入9.66亿元，同比增长5.94%，占总营收20.74%，已是独立且重要的产品收入板块，符合核心标准。原国资云既未准确反映客户和产品，也忽略多云管理及私有云能力，故改为IaaS与云平台标签并提升为核心。"
-  }
+  },
+  "jiuyan_category1": "云计算",
+  "jiuyan_concept1": "IaaS计算与存储|云平台与多云管理",
+  "jiuyan_category2": "超节点",
+  "jiuyan_concept2": "其他",
+  "jiuyan_category3": "算力租赁",
+  "jiuyan_concept3": "算力租赁",
+  "jiuyan_category": "云计算|超节点|算力租赁",
+  "jiuyan_concept": "IaaS计算与存储|云平台与多云管理|其他|算力租赁",
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 算力租赁/算力租赁"
  },
  "600415": {
   "business_summary": "主营一般零售",
@@ -64486,18 +64539,24 @@
   "business_summary": "主营渔业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "大农业",
-  "jiuyan_concept": "渔业",
+  "jiuyan_category": "大农业|大消费",
+  "jiuyan_concept": "渔业|大消费_预制菜",
   "name": "好当家",
   "primary_source": "legacy",
   "sector": "渔业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-13 15:56:04",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "渔业": "主营：海水养殖、食品加工、远洋捕捞、医药保健；与本标签一致"
-  }
+   "渔业": "主营：海水养殖、食品加工、远洋捕捞、医药保健；与本标签一致",
+   "大消费_预制菜": "好当家：水产品/预制菜；已有大农业（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_category1": "大农业",
+  "jiuyan_concept1": "渔业",
+  "jiuyan_category2": "大消费",
+  "jiuyan_concept2": "大消费_预制菜",
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 大消费/大消费_预制菜"
  },
  "600468": {
   "business_summary": "主营电气机械和器材制造业",
@@ -67679,13 +67738,19 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "封装测试",
   "name": "飞乐音响",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "封装测试",
+  "jiuyan_concept_reason": {
+   "封装测试": "飞乐音响：芯片测试（仪电系）（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 半导体/封装测试"
  },
  "600653": {
   "business_summary": "主营零售业",
@@ -72144,13 +72209,19 @@
   "business_summary": "创作、发行、放映、科技、服务、创新六大板块，涵盖电影剧集制片，电影后产品经营；国产与进口电影宣传发行，二级市场发行；影院投资与管理，院线经营；电影科技研发，影视设备生产销售与技术服务；影视制作，票务平台和融资租赁服务等业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧",
   "name": "中国电影",
   "primary_source": "legacy",
   "sector": "影视院线/短剧游戏/文化传媒概念/IP经济(谷子经济)",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_concept_reason": {
+   "AI影视短剧": "中国电影：电影发行放映/《流浪地球3》出品（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → AI应用/AI影视短剧"
  },
  "600979": {
   "business_summary": "发电、供电、天然气供应、生活饮用水、新能源开发和股权投资。",
@@ -78375,13 +78446,19 @@
   "business_summary": "影视投资、制作、发行、电影放映及相关衍生业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧",
   "name": "横店影视",
   "primary_source": "legacy",
   "sector": "影视院线/短剧游戏/文化传媒概念/IP经济(谷子经济)",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_concept_reason": {
+   "AI影视短剧": "横店影视：影视投资/制作/发行/院线（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → AI应用/AI影视短剧"
  },
  "603105": {
   "business_summary": "主营电力、热力生产和供应业",
@@ -85543,13 +85620,19 @@
   "business_summary": "主营公共设施管理业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体与整机",
   "name": "福龙马",
   "primary_source": "legacy",
   "sector": "公共设施管理业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "本体与整机",
+  "jiuyan_concept_reason": {
+   "本体与整机": "福龙马：环卫装备整机/环卫机器人（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 机器人/本体与整机"
  },
  "603687": {
   "business_summary": "主营造纸和纸制品业",
@@ -86333,18 +86416,24 @@
   "business_summary": "主营减速器",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "大农业",
-  "jiuyan_concept": "农机",
+  "jiuyan_category": "大农业|机器人",
+  "jiuyan_concept": "农机|核心零部件-传动",
   "name": "中马传动",
   "primary_source": "legacy",
   "sector": "减速器/长安汽车概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 04:00:00",
+  "updated_at": "2026-11-13 15:56:04",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
-   "农机": "中马传动：汽车变速器，与农机无关"
-  }
+   "农机": "中马传动：汽车变速器，与农机无关",
+   "核心零部件-传动": "中马传动：车载/机器人减速器；已有大农业（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_category1": "大农业",
+  "jiuyan_concept1": "农机",
+  "jiuyan_category2": "机器人",
+  "jiuyan_concept2": "核心零部件-传动",
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 机器人/核心零部件-传动"
  },
  "603768": {
   "business_summary": "主营汽车制造业",
@@ -87893,18 +87982,24 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "化工",
-  "jiuyan_concept": "基础化工",
+  "jiuyan_category": "化工|半导体",
+  "jiuyan_concept": "基础化工|半导体材料-光刻胶与配套试剂",
   "name": "兴业股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-13 15:56:04",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
-   "基础化工": "主营：有机合成树脂为主的功能新材料的研发、生产、销售和相关技术服务；与本标签一致"
-  }
+   "基础化工": "主营：有机合成树脂为主的功能新材料的研发、生产、销售和相关技术服务；与本标签一致",
+   "半导体材料-光刻胶与配套试剂": "兴业股份：光刻胶用树脂；已有化工（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "基础化工",
+  "jiuyan_category2": "半导体",
+  "jiuyan_concept2": "半导体材料-光刻胶与配套试剂",
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 半导体/半导体材料-光刻胶与配套试剂"
  },
  "603929": {
   "business_summary": "IC半导体、光电等高科技电子产业及食品医药、云计算中心等相关领域的建厂工程提供洁净室工程、机电工程及建筑工程等服务，包括洁净厂房建造规划、设计建议、设备配置、洁净室环境系统集成工程及维护服务等。",
@@ -90291,13 +90386,19 @@
   "business_summary": "集成吊顶、集成墙面等产品的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "算力租赁",
+  "jiuyan_concept": "算力租赁",
   "name": "法狮龙",
   "primary_source": "legacy",
   "sector": "装修建材/智能家居/长三角一体化/装配式建筑/精装修",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-13 15:56:04",
+  "jiuyan_category1": "算力租赁",
+  "jiuyan_concept1": "算力租赁",
+  "jiuyan_concept_reason": {
+   "算力租赁": "法狮龙：算力租赁题材（主业集成吊顶）（2026-11-13 涨停复盘补充）"
+  },
+  "jiuyan_recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 算力租赁/算力租赁"
  },
  "605319": {
   "business_summary": "主营其他",
