@@ -7278,6 +7278,63 @@ function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
      · 密集区 = 连续 ≥1.5×平均箱量 的箱段；不足窗口总量 3% 且不含 POC 的丢掉，
        按累计量降序最多 3 段。
    返回 {zones:[{lo,hi,share,poc}], poc, lo, hi, bins, lookback}；数据不足返回 null。 */
+/* 形态自动标注（2026-11-14，调研 TradingView「自动形态识别」后落地）。
+   纯函数：输入 ECharts candlestick 数据 [open, close, low, high]，输出标记数组
+   [{index, name, dir, side}]，dir ∈ bull/bear/neutral，side ∈ top/bottom（标记画柱顶/柱底）。
+   只做**经典且判定无歧义**的五类：吞没、锤子、射击之星、十字星、孕线。
+   ⚠️ 只标注不判买卖 —— 与 up30 等描述列同口径，不给交易信号。 */
+function detectCandlePatterns(ohlc, startIdx = 0) {
+  if (!Array.isArray(ohlc) || ohlc.length < 2) return [];
+  const out = [];
+  const EPS = 1e-9;   // 浮点容差：9.9-9.7=0.1999… 与 2×0.1=0.2 在 IEEE754 下不等价
+  const b = (i) => {
+    const c = ohlc[i];
+    if (!c) return null;
+    const o = +c[0], cl = +c[1], lo = +c[2], hi = +c[3];
+    if (![o, cl, lo, hi].every(Number.isFinite)) return null;
+    const body = Math.abs(cl - o);
+    const range = hi - lo;
+    if (range <= 0) return null;
+    return { o, c: cl, l: lo, h: hi, body, range,
+             upper: hi - Math.max(o, cl), lower: Math.min(o, cl) - lo, bull: cl >= o };
+  };
+  for (let i = Math.max(1, startIdx); i < ohlc.length; i++) {
+    const a = b(i - 1), c = b(i);
+    if (!a || !c) continue;
+    // 十字星：实体极小（<10% 振幅）且上下影都有（排除锤子/射击之星的「一侧无影」）
+    if (c.body / c.range < 0.1 && c.upper > c.body && c.lower > c.body) {
+      out.push({ index: i, name: "十字星", dir: "neutral", side: "top" });
+      continue;
+    }
+    // 锤子：长下影(≥2×实体)、短上影(≤0.5×实体) ⇒ 潜在见底
+    if (c.lower + EPS >= 2 * c.body && c.upper <= 0.5 * c.body + EPS) {
+      out.push({ index: i, name: "锤子", dir: "bull", side: "bottom" });
+      continue;
+    }
+    // 射击之星：长上影(≥2×实体)、短下影(≤0.5×实体) ⇒ 潜在见顶
+    if (c.upper + EPS >= 2 * c.body && c.lower <= 0.5 * c.body + EPS) {
+      out.push({ index: i, name: "射击之星", dir: "bear", side: "top" });
+      continue;
+    }
+    // 吞没：当前实体完全包住前一根实体，且方向相反
+    if (!a.bull && c.bull && c.c >= a.o && c.o <= a.c) {
+      out.push({ index: i, name: "阳吞没", dir: "bull", side: "bottom" });
+      continue;
+    }
+    if (a.bull && !c.bull && c.o >= a.c && c.c <= a.o) {
+      out.push({ index: i, name: "阴吞没", dir: "bear", side: "top" });
+      continue;
+    }
+    // 孕线：当前实体完全在前一根实体之内，且前一根实体明显更大（≥2×）
+    if (a.body + EPS >= 2 * c.body && Math.max(c.o, c.c) <= Math.max(a.o, a.c)
+        && Math.min(c.o, c.c) >= Math.min(a.o, a.c)) {
+      out.push({ index: i, name: "孕线", dir: a.bull ? "bear" : "bull",
+                 side: a.bull ? "top" : "bottom" });
+    }
+  }
+  return out;
+}
+
 function buildVolumeProfile(ohlc, weights, lookback, bins) {
   const n = Array.isArray(ohlc) ? ohlc.length : 0;
   const wn = Array.isArray(weights) ? weights.length : 0;
@@ -8482,6 +8539,8 @@ function renderStockChart(applyZoom = true) {
      ⚠️ 别和 `maSeries`（当前周期自己的均线）混：分钟图上的 MA5 是"5 根 10min=50 分钟"，
      这里的"日线MA5"是 5 个交易日。 */
   const showDailyMA = (document.getElementById("tgDailyMA") || {}).checked !== false;
+  // 形态自动标注（2026-11-14）：K 线形态叠加（吞没/锤子/射击之星/十字星/孕线）
+  const showPattern = (document.getElementById("tgPattern") || {}).checked !== false;
 
   // markLine: 支撑/压力 — 去重降密度 + 精简标签
   function dedupeLines(items) {
@@ -9276,7 +9335,33 @@ function renderStockChart(applyZoom = true) {
             ...(dailyMa30Line ? [dailyMa30Line] : []),
             ...(dailyMa60Line ? [dailyMa60Line] : []),
           ].filter(_finiteLineItem),
-          label: { position: "insideEndTop" } } },
+          label: { position: "insideEndTop" } },
+        // 形态自动标注（2026-11-14）：叠加在蜡烛顶/底（本 series 的 markPoint 未被占用）。
+        // ⚠️ 空时也要给 `{data:[]}` 而不是 undefined —— 走普通 merge 时 undefined 清不掉旧标记。
+        markPoint: (() => {
+          const pats = showPattern ? detectCandlePatterns(period.ohlc) : [];
+          if (!pats.length) return { data: [] };
+          return {
+            silent: true, z: 12,
+            data: pats.map(p => {
+              const bar = period.ohlc[p.index] || [];
+              const bull = p.dir === "bull", bear = p.dir === "bear";
+              const col = bull ? "#3fb950" : bear ? "#f85149" : "#8b949e";
+              return {
+                coord: [p.index, p.side === "bottom" ? bar[2] : bar[3]],
+                name: p.name,
+                symbol: p.dir === "neutral" ? "circle" : "triangle",
+                symbolRotate: bear ? 180 : 0,
+                symbolSize: p.dir === "neutral" ? 7 : 10,
+                symbolOffset: [0, p.side === "bottom" ? 7 : -7],
+                itemStyle: { color: col, borderColor: "#fff", borderWidth: 1 },
+                label: { show: true, formatter: p.name,
+                         position: p.side === "bottom" ? "bottom" : "top",
+                         color: col, fontSize: 9, fontWeight: "bold" },
+              };
+            }),
+          };
+        })() },
       // 密集成交区：右侧横向直方图（画在网格外留白里，不压 K 线/缺口/画框）
       ...(vpSeries ? [vpSeries] : []),
       ...divSeries,
@@ -12431,7 +12516,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261113k", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114a", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
