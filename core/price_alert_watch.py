@@ -6,7 +6,7 @@ K 线图上画价位线 → **每次**穿越都推飞书。为什么盯在独立
 的 events 后播放；两边共用 `core.price_alerts`。
 
 与盯盘热路径零引擎状态耦合：只依赖 config（log/load_runtime_config/send_feishu_payload/
-FEISHU_KEYWORD）+ core.feishu_cards + 懒加载的 core.price_alerts/stage_gate/jiuyan_tags/
+FEISHU_KEYWORD）+ core.feishu_cards + 懒加载的 core.price_alerts/stage_gate/concept_tags/
 market_data.quote_bus。故整体搬到本模块，main.py 只留 `_start_price_alert_watch()` 调用点。
 """
 from __future__ import annotations
@@ -175,9 +175,9 @@ def _push_price_alert(hits: list, now_ts: float = None) -> None:
         if not _due:
             _save_push_rate(st)                # 攒到下一拍合并
             return
-        # 2026-11-02 owner：「飞书推送的这个信息要注明来自韭研概念的哪个板块」——
-        # 主板块口径与猎手/风向标同源（core.jiuyan_tags，有测试逐码守卫）；读不到就只少这个标签。
-        from core.jiuyan_tags import label_of
+        # 2026-11-02 owner：「飞书推送的这个信息要注明来自概念板块的哪个板块」——
+        # 主板块口径与猎手/风向标同源（core.concept_tags，有测试逐码守卫）；读不到就只少这个标签。
+        from core.concept_tags import label_of
         lines = ["**画框提醒 · 价格刚穿出你画的框**", ""]
         for h in pending:
             _ico = "🔔 向上突破" if h.get("side") == "up" else "🔻 向下跌破"

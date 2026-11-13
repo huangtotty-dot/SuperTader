@@ -8,9 +8,9 @@ from openpyxl import load_workbook
 
 ROOT = Path(r"E:\superTrader")
 DC = ROOT / "data_cleaning"
-SRC = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
-BAK = ROOT / "stock_hunter" / "watchlist_jiuyan.json.bak_20261027_cloud_deep"
-PREVIEW = DC / "watchlist_jiuyan_cloud_cleaned_20261027.json"
+SRC = ROOT / "stock_hunter" / "watchlist_concept.json"
+BAK = ROOT / "stock_hunter" / "watchlist_concept.json.bak_20261027_cloud_deep"
+PREVIEW = DC / "watchlist_concept_cloud_cleaned_20261027.json"
 XLSX = DC / "云计算概念深度清洗_20261027.xlsx"
 AUDIT = DC / "cloud_audit_20261027.json"
 OUT = DC / "cloud_validation_20261027.json"
@@ -57,17 +57,17 @@ for row in audit:
     got_all = []
     for i in list(range(1, 10)) + [0]:
         suffix = "" if i == 0 else str(i)
-        categories = rec.get("jiuyan_category" + suffix, "")
+        categories = rec.get("category" + suffix, "")
         categories = categories if isinstance(categories, list) else [categories]
-        concepts_value = rec.get("jiuyan_concept" + suffix, "")
+        concepts_value = rec.get("concept" + suffix, "")
         concepts_value = concepts_value if isinstance(concepts_value, list) else str(concepts_value).split("|")
         for category in categories:
             got_all.extend((category, c) for c in concepts_value if c)
     expected_all = [(p["category"], c) for p in row["pairs"] for c in p["concepts"]]
     for pair in expected_all:
         assert pair in got_all, (row["code"], pair, got_all)
-        assert rec["jiuyan_concept_reason"].get(pair[1]) == row["reason"]
-        assert rec["jiuyan_concept_desc"].get(pair[1])
+        assert rec["concept_reason"].get(pair[1]) == row["reason"]
+        assert rec["concept_desc"].get(pair[1])
     got_cloud = [pair for pair in got_all if pair[0] == "云计算"]
     expected_cloud = [pair for pair in expected_all if pair[0] == "云计算"]
     assert got_cloud == expected_cloud, (row["code"], got_cloud, expected_cloud)
@@ -78,16 +78,16 @@ star = formal["002439"]
 assert ("网络安全", "云安全与SaaS安全服务") in [
     (p["category"], c) for p in next(x for x in audit if x["code"] == "002439")["pairs"] for c in p["concepts"]
 ]
-assert star["jiuyan_cybersecurity_verdicts"]["网络安全"] == "核心"
-assert star["jiuyan_cybersecurity_verdicts"] == backup["002439"]["jiuyan_cybersecurity_verdicts"]
-assert star["jiuyan_tag_verdict"] == backup["002439"]["jiuyan_tag_verdict"] == "核心"
-assert "云计算" not in star.get("jiuyan_cloud_verdicts", {})
+assert star["cybersecurity_verdicts"]["网络安全"] == "核心"
+assert star["cybersecurity_verdicts"] == backup["002439"]["cybersecurity_verdicts"]
+assert star["tag_verdict"] == backup["002439"]["tag_verdict"] == "核心"
+assert "云计算" not in star.get("cloud_verdicts", {})
 
 loader = WatchlistLoader()
 after_df = loader.load(str(SRC))
 before_df = loader.load(str(BAK))
-after_counts = Counter(after_df["韭研分类"])
-before_counts = Counter(before_df["韭研分类"])
+after_counts = Counter(after_df["概念分类"])
+before_counts = Counter(before_df["概念分类"])
 category_differences = {c: [before_counts[c], after_counts[c]] for c in set(before_counts) | set(after_counts) if before_counts[c] != after_counts[c]}
 assert category_differences["云计算"] == [45, 37]
 # 启明星辰的一级分类原本就是网络安全，本次只调整二级分类，因此一级计数不变。
@@ -96,7 +96,7 @@ for category in ["网络安全", "AI应用", "物理AI", "数据要素"]:
     assert before_counts[category] == after_counts[category]
 assert after_counts["网络安全"] == 38 and after_counts["AI应用"] == 84
 assert after_counts["物理AI"] == 54 and after_counts["数据要素"] == 77
-assert len(after_df.loc[after_df["韭研分类"] == "云计算", "代码"]) == 37
+assert len(after_df.loc[after_df["概念分类"] == "云计算", "代码"]) == 37
 loader_counts = {c: after_counts[c] for c in ["云计算", "网络安全", "AI应用", "物理AI", "数据要素"]}
 
 wb = load_workbook(XLSX, data_only=False)

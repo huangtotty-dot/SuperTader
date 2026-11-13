@@ -229,7 +229,7 @@ class EnhancedTop5Ranker(Top5Ranker):
 
         # 2. 计算概念稀缺性（跨分类数量）
         if category_stats is None:
-            # 从 stock_list 自身推算（基于 韭研分类 字段）
+            # 从 stock_list 自身推算（基于 概念分类 字段）
             category_stats = {}
             for s in stock_list:
                 cat = s.get("所属板块", s.get("板块", ""))

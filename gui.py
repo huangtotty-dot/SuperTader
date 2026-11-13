@@ -55,13 +55,13 @@ NAMES = {
     "300153": "科泰电源", "300364": "中文在线",
 }
 
-# 名称**兜底层**（2026-10-13）：韭研 watchlist 覆盖 **5382 个代码**，含持仓/auto 池之外的票。
+# 名称**兜底层**（2026-10-13）：概念 watchlist 覆盖 **5382 个代码**，含持仓/auto 池之外的票。
 # 为什么需要：逐笔流水的 name 是"读取端反查补"的（引擎 write_fill 不带股票名），
 # 而原来源只有 `NAMES` + `holdings_auto.json` 两处 ⇒ 两处都没有的代码（实测 auto 流水里的
 # **605198 安德利 / 688003 天准科技**）只能渲染成"605198 605198"，看起来像坏了。
 # ⚠️ 该文件 **2MB**，必须按 mtime 缓存 —— 否则每轮 `_compute_auto_pnl` 都要解析一次。
 _JY_NAMES_CACHE = {"mtime": None, "map": {}}
-# 韭研档的**概念/行业**标签（个股联动用）：{6位码: {"concepts":[...], "sector": "..."}}，按 mtime 记忆
+# 概念档的**概念/行业**标签（个股联动用）：{6位码: {"concepts":[...], "sector": "..."}}，按 mtime 记忆
 _LINK_META_CACHE = {"mtime": None, "map": {}}
 
 
@@ -146,9 +146,9 @@ CATEGORY_GUIDES = {
 }
 
 
-def _jiuyan_board() -> dict:
-    """韭研 watchlist → {6位码: 主板块}。**与 `oversold_gap_confirm.prescreen.sym2board_map()`
-    同口径**（取第 1 个有值的 `jiuyan_category{1..9}`，再过 MERGES；全空则按 `jiuyan_category`
+def _concept_board() -> dict:
+    """概念 watchlist → {6位码: 主板块}。**与 `oversold_gap_confirm.prescreen.sym2board_map()`
+    同口径**（取第 1 个有值的 `category{1..9}`，再过 MERGES；全空则按 `category`
     的 `|` 拆分取首段）。
 
     ⚠️ 这是**刻意的第二份实现**，不是疏漏：gui 不该 import 策略包（`execution/auto/` 是
@@ -156,7 +156,7 @@ def _jiuyan_board() -> dict:
     `tests/phase3/test_market_beacon.py::TestBoardMapSingleSource` 逐码比对守卫 ——
     **改任一侧都要同步另一侧**，否则测试红。这是 2026-10-13 背离那次的教训（副本漂移无人知）。
     """
-    fp = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+    fp = BASE / "stock_hunter" / "watchlist_concept.json"
     try:
         if _JY_BOARD_CACHE["mtime"] == fp.stat().st_mtime:
             return _JY_BOARD_CACHE["map"]
@@ -171,11 +171,11 @@ def _jiuyan_board() -> dict:
                 continue
             cats = []
             for i in range(1, 10):
-                c = str(info.get(f"jiuyan_category{i}", "") or "").strip()
+                c = str(info.get(f"category{i}", "") or "").strip()
                 if c:
                     cats.append(merges.get(c, c))
             if not cats:
-                c0 = str(info.get("jiuyan_category", "") or "")
+                c0 = str(info.get("category", "") or "")
                 cats = [merges.get(x.strip(), x.strip()) for x in c0.split("|") if x.strip()]
             # 2026-10-25：「北交所 / 央企」是**机构/市场标签**，不是题材板块 ⇒ 不参与板块统计
             cats = [c for c in cats if c not in NON_BOARD_LABELS]
@@ -189,9 +189,9 @@ def _jiuyan_board() -> dict:
 _JY_BOARD_CACHE = {"mtime": None, "map": {}}
 
 
-def _jiuyan_names() -> dict:
-    """韭研 watchlist → {6位码: 名称}。首次/文件变更时解析一次，之后走缓存；失败返回上次结果。"""
-    fp = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+def _concept_names() -> dict:
+    """概念 watchlist → {6位码: 名称}。首次/文件变更时解析一次，之后走缓存；失败返回上次结果。"""
+    fp = BASE / "stock_hunter" / "watchlist_concept.json"
     try:
         _mt = fp.stat().st_mtime
     except OSError:
@@ -211,7 +211,7 @@ def _jiuyan_names() -> dict:
 # ── 当日涨停清单（2026-11-03 owner：「异常监控池按某日把当天涨停股累加进来」）────
 # 数据源 = 猎手每日扫描落盘的 `stock_hunter/data/market_YYYYMMDD.csv`，零网络。
 # 列里有 `涨停`(1/0) 与 `连板天数`(1=首板, 2=二板 …)；`名称` 列常为空（猎手只存代码），
-# 所以名称以韭研表为准、CSV 兜底。
+# 所以名称以概念表为准、CSV 兜底。
 def _market_csv_fp(date):
     """日期(YYYY-MM-DD 或 YYYYMMDD) → 当日市场快照 CSV 路径；格式不对返回 None。"""
     d = str(date or "").replace("-", "").strip()
@@ -275,7 +275,7 @@ def _limitup_ratio(code, name=""):
 
 
 def _limitup_from_recap(date, fp=None):
-    """韭研复盘成员（`sector_breadth.json` 当天 sections.members）→ 涨停清单。
+    """概念复盘成员（`sector_breadth.json` 当天 sections.members）→ 涨停清单。
 
     市场快照 `market_YYYYMMDD.csv` 缺失时的**兜底**（2026-11-03 实报：主循环当天没落快照，
     但 11-03 的复盘已入库）。`board` = 「N天M板」里的 M。
@@ -391,15 +391,15 @@ def _chart_trades(code):
 _JY_ROLE_CACHE = {"mtime": None, "map": {}}
 
 
-def _jiuyan_roles() -> dict:
-    """韭研 watchlist → {6位码: {"role": 龙头/中军, "reason": 定性理由}}。
+def _concept_roles() -> dict:
+    """概念 watchlist → {6位码: {"role": 龙头/中军, "reason": 定性理由}}。
 
     2026-10-20 机器人/军工板块整治起写入（`stock_hunter/tag_robot_military_fix_20261020.py`）：
     研究核实的**真龙头/中军**静态标签，与 `_tier_sector_stocks` 的当日动态分层**互补**——
     梯队列静态优先（有静态用静态、跳过算法），个股资料面板同步下发。
-    与 `_jiuyan_names` 同构：按 mtime 缓存，失败返回上次结果。
+    与 `_concept_names` 同构：按 mtime 缓存，失败返回上次结果。
     """
-    fp = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+    fp = BASE / "stock_hunter" / "watchlist_concept.json"
     try:
         _mt = fp.stat().st_mtime
     except OSError:
@@ -412,11 +412,11 @@ def _jiuyan_roles() -> dict:
         for code, info in _d.items():
             if not isinstance(info, dict):
                 continue
-            r = str(info.get("jiuyan_role") or "").strip()
+            r = str(info.get("role") or "").strip()
             if r in ("龙头", "中军"):
                 out[str(code).split("_")[0]] = {
                     "role": r,
-                    "reason": str(info.get("jiuyan_role_reason") or "").strip(),
+                    "reason": str(info.get("role_reason") or "").strip(),
                 }
         _JY_ROLE_CACHE.update({"mtime": _mt, "map": out})
     except Exception:
@@ -764,8 +764,8 @@ def _auto_fill_costs():
 
 
 
-def _jiuyan_concepts(info):
-    """合并股票记录的所有韭研概念（编号字段 jiuyan_concept1..9 + 旧普通字段）。
+def _concept_concepts(info):
+    """合并股票记录的所有概念板块（编号字段 concept1..9 + 旧普通字段）。
     返回用 | 连接的去重字符串；无概念返回空串。
     2026-10-19：概念值允许 list/tuple 多标签（医药板块整合起）——逐元素展开，
     否则 str(list) 会把 Python repr（"['临床CRO', …]"）漏进所有下游显示。"""
@@ -782,9 +782,9 @@ def _jiuyan_concepts(info):
             parts.append(str(v).strip())
 
     for i in range(1, 10):
-        _collect(info.get(f"jiuyan_concept{i}"))
+        _collect(info.get(f"concept{i}"))
     if not parts:
-        _collect(info.get("jiuyan_concept"))
+        _collect(info.get("concept"))
     seen = set()
     out = []
     for p in parts:
@@ -796,12 +796,12 @@ def _jiuyan_concepts(info):
     return "|".join(out)
 
 
-def _jiuyan_concept_descs(info, concepts=None):
-    """该股韭研概念的注释映射 {概念: 解释}（watchlist 的 `jiuyan_concept_desc` 字段，
+def _concept_concept_descs(info, concepts=None):
+    """该股概念板块的注释映射 {概念: 解释}（watchlist 的 `concept_desc` 字段，
     2026-10-19 医药板块整合起写入）。concepts 给定时只保留其中出现的键；无注释返回 {}。"""
     if not isinstance(info, dict):
         return {}
-    d = info.get("jiuyan_concept_desc")
+    d = info.get("concept_desc")
     if not isinstance(d, dict) or not d:
         return {}
     if concepts is None:
@@ -810,16 +810,16 @@ def _jiuyan_concept_descs(info, concepts=None):
     return {str(k): str(v) for k, v in d.items() if k in keep and v}
 
 
-def _jiuyan_all_concept_descs():
-    """全表合并的韭研概念注释 {概念: 解释}（前端分组头/概念列 tooltip 用）。
+def _concept_all_concept_descs():
+    """全表合并的概念板块注释 {概念: 解释}（前端分组头/概念列 tooltip 用）。
     同 key 先见先留；读失败返回 {}（非致命）。"""
     out = {}
     try:
-        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
         for info in (jy.values() if isinstance(jy, dict) else []):
             if not isinstance(info, dict):
                 continue
-            d = info.get("jiuyan_concept_desc")
+            d = info.get("concept_desc")
             if not isinstance(d, dict):
                 continue
             for k, v in d.items():
@@ -830,12 +830,12 @@ def _jiuyan_all_concept_descs():
     return out
 
 
-def _jiuyan_concept_reasons(info, concepts=None):
-    """该股「为什么算这个概念」{概念: 理由}（watchlist 的 `jiuyan_concept_reason`，
+def _concept_concept_reasons(info, concepts=None):
+    """该股「为什么算这个概念」{概念: 理由}（watchlist 的 `concept_reason`，
     2026-10-24 数据要素板块纯正性排查起写入）。concepts 给定时只保留其中出现的键。"""
     if not isinstance(info, dict):
         return {}
-    d = info.get("jiuyan_concept_reason")
+    d = info.get("concept_reason")
     if not isinstance(d, dict) or not d:
         return {}
     if concepts is None:
@@ -865,28 +865,28 @@ def _company_profiles():
     return d
 
 
-def _jiuyan_tag_verdicts():
+def _concept_tag_verdicts():
     """{代码: [判词, 理由]} —— 逐股「标签与主营的相关度」，猎手个股行名字后面直接显示小标。
 
-    来源：watchlist 的 `jiuyan_tag_verdict`（核心/相关/边缘/错标，2026-10-24 起逐批人工判）
-    + `jiuyan_concept_reason` 里该股第一条理由（做 tooltip）。没判过的票不下发。
+    来源：watchlist 的 `tag_verdict`（核心/相关/边缘/错标，2026-10-24 起逐批人工判）
+    + `concept_reason` 里该股第一条理由（做 tooltip）。没判过的票不下发。
     """
     out = {}
     try:
-        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
         for code, info in (jy.items() if isinstance(jy, dict) else []):
             if not isinstance(info, dict):
                 continue
-            v = str(info.get("jiuyan_tag_verdict") or "").strip()
+            v = str(info.get("tag_verdict") or "").strip()
             if not v:
                 # 没人工判过的：给「未核」（业务文本能对上该概念，仅是自动比对的参考）
-                if str(info.get("jiuyan_tag_evidence") or "") == "text":
+                if str(info.get("tag_evidence") or "") == "text":
                     out[str(code)] = ["未核", "还没逐只核过（业务文本能对上该概念，仅供参考）"]
                 continue
             reason = ""
-            d = info.get("jiuyan_concept_reason")
+            d = info.get("concept_reason")
             if isinstance(d, dict):
-                for k in _jiuyan_concepts(info).split("|"):
+                for k in _concept_concepts(info).split("|"):
                     reason = str(d.get(k) or "").strip()
                     if reason:
                         break
@@ -896,17 +896,17 @@ def _jiuyan_tag_verdicts():
     return out
 
 
-def _jiuyan_all_concept_reasons():
+def _concept_all_concept_reasons():
     """全表合并的 {概念: [[名称, 理由], ...]}（猎手二级分组头 tooltip 用）。
     同概念下按 watchlist 顺序追加；读失败返回 {}（非致命）。"""
     out = {}
     try:
-        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
         for code, info in (jy.items() if isinstance(jy, dict) else []):
             if not isinstance(info, dict):
                 continue
             nm = str(info.get("name") or code)
-            d = info.get("jiuyan_concept_reason")
+            d = info.get("concept_reason")
             if not isinstance(d, dict):
                 d = {}
             # 兜底理由（2026-10-24）：没人工写过的，用「主营」原文——只认**具体**的主营，
@@ -921,13 +921,13 @@ def _jiuyan_all_concept_reasons():
                 fallback = "主营：" + ptxt[:58]
             elif biz and not biz.startswith("主营") and len(biz) > 8:
                 fallback = "主营：" + biz[:46]
-            for k in _jiuyan_concepts(info).split("|"):
+            for k in _concept_concepts(info).split("|"):
                 k = k.strip()
                 if not k:
                     continue
                 v = str(d.get(k) or "").strip() or fallback
                 if v:
-                    out.setdefault(k, []).append([nm, v, str(info.get("jiuyan_tag_verdict") or "")])
+                    out.setdefault(k, []).append([nm, v, str(info.get("tag_verdict") or "")])
     except Exception:
         pass
     return out
@@ -1026,7 +1026,7 @@ def _stock_concepts(info, em_boards=None) -> list:
     """该股的「概念」列表（离线两源合并 + 可选东财第三源，2026-09-30）。
 
     源：
-      1) 韭研概念 `jiuyan_concept1..9` / `jiuyan_concept`（见 `_jiuyan_concepts`）
+      1) 概念板块 `concept1..9` / `concept`（见 `_concepts`）
       2) `sector` **首段以外**的板块段（首段是行业，已由「行业」列表达）
       3) 可选 `em_boards`：东财「所属板块」[{name,kind}]，**仅当 1+2 全空时启用**，
          取 kind=="概念" 的板块名并去掉「概念」后缀（"MicroLED概念"→"MicroLED"）。
@@ -1052,7 +1052,7 @@ def _stock_concepts(info, em_boards=None) -> list:
             seen.add(x)
             out.append(x)
 
-    for x in _jiuyan_concepts(info).split("|"):
+    for x in _concept_concepts(info).split("|"):
         _add(x)
     ind = _stock_industry(info)
     for p in str(info.get("sector") or "").split("/")[1:]:
@@ -1289,7 +1289,7 @@ def _slim_if_same(frame, known_sig):
     return o
 
 # ---- 手动盘「K线速查」：名称/代码 → 标的（2026-10-18）----
-# 本地名称表（韭研 5382 + NAMES + 持仓）600s 缓存；在线搜索（腾讯 smartbox）结果 600s 缓存
+# 本地名称表（概念 5382 + NAMES + 持仓）600s 缓存；在线搜索（腾讯 smartbox）结果 600s 缓存
 # （空结果只缓存 60s，网络抖动后能快速重试）。
 _SEARCH_CACHE: dict = {}
 _SEARCH_CACHE_TTL = 600.0
@@ -2289,7 +2289,7 @@ def _redmark_save(d: dict) -> None:
 
 
 # ---- 周线 MACD 柱子翻红 → 自动标重点关注（2026-10-31 owner）----
-# 「轮巡所有板块一遍」：遍历韭研池（watchlist 里有 jiuyan_category 的票），对每只算
+# 「轮巡所有板块一遍」：遍历概念池（watchlist 里有 category 的票），对每只算
 # **周线 MACD(12,26,9)**；若**上一周柱子 ≤0 且本周 >0**（翻红）⇒ 自动写进 focus_stocks.json。
 # 只看本地日线缓存（前复权），零网络；结果与人工标记共存，不覆盖、不取消。
 _WM_SCAN = {"running": False, "done": 0, "total": 0, "hits": [], "matched": [],
@@ -2925,7 +2925,7 @@ def _tier_sector_stocks(stocks, min_members=5):
       · **杂毛** = 其余。
       · 板块当日成分 < `min_members` 一律不标（1 只的"板块"谈不上梯队）。
 
-    实测输出（2026-10-10 收盘，韭研分类口径）：
+    实测输出（2026-10-10 收盘，概念分类口径）：
       半导体150只 最高+14.1% → 龙头1(和林微纳) 中军14(寒武纪/兆易创新/中微公司…)
       锂电池 88只 最高+15.9% → 龙头1(科恒股份)  中军4(天赐材料/赣锋锂业/龙蟠/恩捷)
       电力   44只 最高+10.0% → **龙头2**(振华股份+雄韬股份，并列涨停) 中军5
@@ -2939,12 +2939,12 @@ def _tier_sector_stocks(stocks, min_members=5):
       （龙头 h1 +0.282 / h2 −0.217）。效应量 ±0.05~0.13pp 远低于往返成本 0.13~0.35pp。
     ⇒ 它的价值在**能不能买到 / 是不是这个板块的钱**（可执行性），**不在预测收益**。
 
-    2026-10-20 静态优先（机器人/军工板块整治）：watchlist 里带 `jiuyan_role`
-    （研究核实的真龙头/中军，见 `_jiuyan_roles`）的票**直接用静态标签、跳过动态算法**，
+    2026-10-20 静态优先（机器人/军工板块整治）：watchlist 里带 `role`
+    （研究核实的真龙头/中军，见 `_roles`）的票**直接用静态标签、跳过动态算法**，
     也不参与阈值统计；`tier_static=True` + `tier_reason` 供前端区分徽章。
     无静态标签的票照旧走下方动态分层（其它板块的唯一来源）。
     """
-    roles = _jiuyan_roles()
+    roles = _concept_roles()
     for s in stocks:
         st = roles.get(str(s.get("code", "")))
         if st:
@@ -3108,7 +3108,7 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
 
 
 # ---- 板块「站上5日线 / 20日线」成分股占比（2026-10-20 owner：星空图下方多坐标轴）----
-# 数据源 = 韭研主板块映射（`_jiuyan_board()`，与 daily_summary 的板块名同源）+ 个股日线缓存。
+# 数据源 = 概念主板块映射（`_concept_board()`，与 daily_summary 的板块名同源）+ 个股日线缓存。
 # 只扫**有主板块**的代码（实测 1690 只 / 5382），单线程解析约 6~8s ⇒ 与年限宽度同一套
 # 后台 + 内存/磁盘 SWR，磁盘缓存按数据日复用。
 _SECTOR_MA_CACHE_FP = BASE / "t_io" / "cache" / "sector_ma_breadth.json"
@@ -3129,9 +3129,9 @@ _SECTOR_MA_SCHEMA = 6   # v6: 加多头占比（pct_bull/n_bull，2026-11-04）
 
 
 def _watchlist_fp():
-    """韭研 watchlist 的 mtime 指纹（打标/改板块后必变）。读不到返回 ""。"""
+    """概念 watchlist 的 mtime 指纹（打标/改板块后必变）。读不到返回 ""。"""
     try:
-        return str((BASE / "stock_hunter" / "watchlist_jiuyan.json").stat().st_mtime)
+        return str((BASE / "stock_hunter" / "watchlist_concept.json").stat().st_mtime)
     except Exception:
         return ""
 
@@ -3140,7 +3140,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
     """每个板块每日「收盘站上 5 日线 / 20 日线」的成分股占比。
 
     口径：
-      · **板块** = `_jiuyan_board()` 的韭研主板块（每只股票只归一个板块，不重复计数）；
+      · **板块** = `_concept_board()` 的概念主板块（每只股票只归一个板块，不重复计数）；
         与 `daily_summary.json`（星空图数据源）的板块名同源。
       · **样本** = 该板块内**日线缓存末行 = 最新交易日**的个股 —— 停牌/陈旧缓存不进分母，
         否则会把"没数据"算成"跌破均线"。
@@ -3156,7 +3156,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
     from core.chart_cache import daily_close_series as _daily_close_series
     # `end` 给定时窗口锚在**那一天**（历史日期回看），否则锚在最新交易日。
     latest = str(end).strip()[:10] if end else _market_latest_date()
-    board = _jiuyan_board()
+    board = _concept_board()
     mine = {c: s for c, s in board.items() if s}
     files = [p for p in _DAILY_KLINE_DIR.glob("*.json")
              if p.stem.isdigit() and len(p.stem) == 6 and p.stem in mine]
@@ -4871,7 +4871,7 @@ class Api:
                     break
             if not prev:
                 return 0.0
-            nm = _jiuyan_names().get(c, "")
+            nm = _concept_names().get(c, "")
             return math.floor(prev * (1 + _limitup_ratio(c, nm)) * 100 + 0.5) / 100.0
         except Exception:
             return 0.0
@@ -5939,6 +5939,7 @@ class Api:
                 else:
                     _ma20_d, _above_ma20 = None, None      # 不足 20 根 → 前端显示「—」，不猜
             except Exception:
+                _tagres = {}
                 _tags = []
                 _ma20_d, _above_ma20 = None, None
             closes = [x[1] for x in d["ohlc"]]
@@ -6256,7 +6257,7 @@ class Api:
                "dates": [], "ohlc": [], "volume": [], "amount": [], "vwap": [],
                "zero": None, "prev_close": None, "last_close": None, "ma": {}}
         try:
-            jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+            jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
             _e = jy.get(code) if isinstance(jy.get(code), dict) else {}
             out["name"] = (_e or {}).get("name") or code
         except Exception:
@@ -6606,7 +6607,7 @@ class Api:
             return out
         if out["name"] == code:
             try:
-                jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+                jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
                 nm = (jy.get(code, {}) or {}).get("name", "") if isinstance(jy.get(code), dict) else ""
                 if nm:
                     out["name"] = nm
@@ -7512,10 +7513,10 @@ class Api:
 
     # ---------- 手动盘「K线速查」（2026-10-18） ----------
     def _instrument_names(self):
-        """本地 名称→代码 表（韭研 watchlist 5382 + NAMES + 手动/自动持仓），600s 缓存。
+        """本地 名称→代码 表（概念 watchlist 5382 + NAMES + 手动/自动持仓），600s 缓存。
 
         只收裸 6 位码；指数/ETF 不在这里（它们留给在线搜索，腾讯 smartbox 带权威类型）。
-        多来源合并顺序：韭研 → NAMES → 持仓（后者覆盖前者，用户自己的命名最权威）。
+        多来源合并顺序：概念 → NAMES → 持仓（后者覆盖前者，用户自己的命名最权威）。
         """
         now = _time_mod.time()
         with _INSTRUMENT_NAMES_LOCK:
@@ -7523,7 +7524,7 @@ class Api:
                 return _INSTRUMENT_NAMES["map"]
         m = {}
         try:
-            jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {}) or {}
+            jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {}) or {}
             for code, info in jy.items():
                 c = str(code).split("_")[0]
                 nm = str((info or {}).get("name") or "").strip() if isinstance(info, dict) else ""
@@ -7879,9 +7880,9 @@ class Api:
     def load_stock_profile(self, code, live=False):
         """公司资料。两层（owner 2026-09-29：本地先显示 + 按钮拉实时）：
 
-          - **本地层**（`live=False`，秒开、零网络）：`watchlist_jiuyan.json` 的
+          - **本地层**（`live=False`，秒开、零网络）：`watchlist_concept.json` 的
             `business_summary`（主营一句话）、`sector`（`/` 拼接的行业+概念混列）、
-            `_jiuyan_concepts`（韭研概念）
+            `_concepts`（概念板块）
           - **实时层**（`live=True`）：东财「所属板块」（见 `_em_stock_boards`）
 
         三条口径说明（避免过度承诺）：
@@ -7898,7 +7899,7 @@ class Api:
                "profile": None, "profile_pending": False,
                "boards_note": "东财口径；行业/概念/地域按板块名启发式划分"}
         try:
-            jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+            jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
             info = jy.get(str(code).split("_")[0]) if isinstance(jy, dict) else None
             if isinstance(info, dict):
                 out["name"] = info.get("name")
@@ -7906,16 +7907,16 @@ class Api:
                 sec = str(info.get("sector") or "").strip()
                 out["sector"] = sec
                 out["sector_list"] = [s.strip() for s in sec.split("/") if s.strip()]
-                out["local_concepts"] = [s for s in _jiuyan_concepts(info).split("|") if s]
+                out["local_concepts"] = [s for s in _concept_concepts(info).split("|") if s]
                 # 2026-10-19：概念注释 {概念: 解释} 下发（前端 chip 悬停显示，医药板块起）
-                out["concept_descs"] = _jiuyan_concept_descs(info, out["local_concepts"])
+                out["concept_descs"] = _concept_concept_descs(info, out["local_concepts"])
                 # 2026-10-24：逐股「为什么算这个概念」（数据要素板块起），资料面板 chip 悬停用
-                out["concept_reasons"] = _jiuyan_concept_reasons(info, out["local_concepts"])
+                out["concept_reasons"] = _concept_concept_reasons(info, out["local_concepts"])
                 # 2026-10-20：研究核实的静态 龙头/中军（机器人/军工板块整治起）——资料面板徽章
-                _role = str(info.get("jiuyan_role") or "").strip()
+                _role = str(info.get("role") or "").strip()
                 if _role in ("龙头", "中军"):
                     out["local_role"] = _role
-                    out["local_role_reason"] = str(info.get("jiuyan_role_reason") or "").strip()
+                    out["local_role_reason"] = str(info.get("role_reason") or "").strip()
             out["ok"] = True
         except Exception as e:
             out["error"] = f"读取本地资料失败: {e}"
@@ -8546,7 +8547,7 @@ class Api:
         try:
             from modules.push_feishu import build_build_candidates, send_build_candidates
             import modules.data_loader as _hdl
-            _cfg = _hdl.DataLoader._load_config()
+            _cfg = _hdl.load_config()
             if not (_cfg.get("feishu", {}) or {}).get("push_build_signals", True):
                 print("[建仓推送] 已由配置关闭（feishu.push_build_signals=false），跳过")
                 return
@@ -8799,7 +8800,7 @@ class Api:
         return result
 
     def _score_dims(self, sm):
-        """韭研 D1~D11 打分 → {短名: 分}（只留**非零**维度 + 大成交额）。
+        """概念 D1~D11 打分 → {短名: 分}（只留**非零**维度 + 大成交额）。
 
         短名取 `D<数字>` 前缀（"D11刚站上5日线" → "D11"）；"大成交额额外加分" → "大额"。
         全池均值仅 ~0.8，绝大多数票为空 ⇒ 只传非零项，payload 体积可忽略。
@@ -8857,7 +8858,7 @@ class Api:
                 # ⚠️ 2026-10-21：这里原来写的是 `log.warning(...)`，而 gui.py **没有 `log`**
                 # （没有模块级 logger）⇒ 这条"加载失败"分支自己会抛 NameError，把
                 # `out["error"]` 的干净返回变成异常。本文件日志口径是 print(flush=True)。
-                watchlist_path = HUNTER_DIR / "watchlist_jiuyan.json"
+                watchlist_path = HUNTER_DIR / "watchlist_concept.json"
                 print("[HUNTER] watchlist 加载失败", flush=True)
                 print(f"  - watchlist_path: {watchlist_path}", flush=True)
                 print(f"  - exists: {watchlist_path.exists()}", flush=True)
@@ -8871,7 +8872,7 @@ class Api:
                 out["error"] = f"watchlist 加载失败 (path: {watchlist_path}, exists: {watchlist_path.exists()})"
                 return out
 
-            df_pool = watchlist[watchlist["韭研概念"].str.strip().ne("")].copy()
+            df_pool = watchlist[watchlist["概念板块"].str.strip().ne("")].copy()
             codes = list(dict.fromkeys(df_pool["代码"].astype(str).tolist()))
 
             st_codes = set()
@@ -8913,7 +8914,7 @@ class Api:
                 watchlist = watchlist.merge(market_df, on="代码", how="left")
                 loader.set_watchlist(watchlist)
                 # 用含行情数据的 watchlist 重建 pool
-                df_pool = watchlist[watchlist["韭研概念"].str.strip().ne("")].copy()
+                df_pool = watchlist[watchlist["概念板块"].str.strip().ne("")].copy()
 
             # 打分（含行情数据的 pool）
             dims = hunter_cfg.get("scoring", {}).get("dimensions", [])
@@ -8952,10 +8953,10 @@ class Api:
             top5_ranker = Top5Ranker()
             # 2026-10-11 删除空循环：原为 `for _, row in df_pool.iterrows(): pass`
             # ——遍历整个猎手池、逐行构造 Series，循环体是 `pass`，纯浪费（删后行为零变化）。
-            # 按韭研分类聚合并选 TOP5
-            for category in sorted(df_pool["韭研分类"].unique()):
+            # 按概念分类聚合并选 TOP5
+            for category in sorted(df_pool["概念分类"].unique()):
                 if not category: continue
-                cat_df = df_pool[df_pool["韭研分类"] == category]
+                cat_df = df_pool[df_pool["概念分类"] == category]
                 stocks = []
                 for _, row in cat_df.iterrows():
                     d = row.to_dict()
@@ -9007,9 +9008,9 @@ class Api:
             # 板块→个股明细（D5/D6 异常信息）
             sector_stocks = {}
             try:
-                for category in sorted(df_pool["韭研分类"].unique()):
+                for category in sorted(df_pool["概念分类"].unique()):
                     if not category: continue
-                    cat_df = df_pool[df_pool["韭研分类"] == category]
+                    cat_df = df_pool[df_pool["概念分类"] == category]
                     stocks = []
                     for _, row in cat_df.iterrows():
                         d = row.to_dict()
@@ -9027,14 +9028,14 @@ class Api:
                         except: d6 = 0
                         try: d9 = int(float(d9))
                         except: d9 = 0
-                        # 2026-10-17：逐只 D1~D11 打分明细（韭研原始评分，与「得分」列的
+                        # 2026-10-17：逐只 D1~D11 打分明细（概念原始评分，与「得分」列的
                         # 建仓综合得分 0~100 是两回事）。此前只带 d5/d6/d9、且只用于板块级
                         # 「D5×N」计数 ⇒ 展开个股后看不到明细，表尾却在解释 D5/D6/D9。
                         stocks.append({
                             "name": d.get("名称", ""), "code": code,
                             "dims": self._score_dims(sm),
-                            # 细分（韭研概念，| 分隔多分类）——供前端展开板块后按下一级分类分组
-                            "concepts": [c.strip() for c in str(d.get("韭研概念", "") or "").split("|") if c.strip()],
+                            # 细分（概念板块，| 分隔多分类）——供前端展开板块后按下一级分类分组
+                            "concepts": [c.strip() for c in str(d.get("概念板块", "") or "").split("|") if c.strip()],
                             "score": total, "d5": d5, "d6": d6, "d9": d9,
                             "change_pct": round(float(d.get("涨跌幅", 0) or 0), 2) if str(d.get("涨跌幅")) not in ("nan", "None", "") else 0.0,
                             "limit_up": int(float(d.get("涨停", 0) or 0)) if str(d.get("涨停")) not in ("nan", "None", "") else 0,
@@ -9052,13 +9053,13 @@ class Api:
             for _cat, _ss in sector_stocks.items():
                 _tier_sector_stocks(_ss)
             # 2026-11-08 owner：「电力运营每支股一个标签：火电/核电/水电/储能相关？」
-            # 发电方式写在 watchlist 的 `jiuyan_power_type`（tag_power_type_20261108.py），
+            # 发电方式写在 watchlist 的 `power_type`（tag_power_type_20261108.py），
             # 这里随个股行下发，前端在名字后面显示小徽章。
             try:
-                _wl_raw = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {}) or {}
+                _wl_raw = _load_json(HUNTER_DIR / "watchlist_concept.json", {}) or {}
                 for _ss in sector_stocks.values():
                     for _s in _ss:
-                        _t = str((_wl_raw.get(str(_s.get("code"))) or {}).get("jiuyan_power_type") or "")
+                        _t = str((_wl_raw.get(str(_s.get("code"))) or {}).get("power_type") or "")
                         if _t:
                             _s["power_type"] = _t
             except Exception:
@@ -9188,7 +9189,7 @@ class Api:
             out["build_n"] = _build_n
             out["build_total"] = len(codes)
             out["concept_trends"] = concept_trends
-            # 2026-10-24：板块生命周期阶段（首现/发酵/高潮/退潮/扩散）——数据源 = 韭研复盘广度
+            # 2026-10-24：板块生命周期阶段（首现/发酵/高潮/退潮/扩散）——数据源 = 概念复盘广度
             # （stock_hunter/data/sector_breadth.json），与「每日复盘 → 主线广度」同一真源。
             # 取不到/没录入当日复盘时返回 {}，前端回退到原来的趋势阶段，不影响渲染。
             try:
@@ -9196,15 +9197,15 @@ class Api:
                 out["sector_phase"] = all_category_phases(date)
             except Exception:
                 out["sector_phase"] = {}
-            # 2026-10-19：韭研二级概念注释 {概念: 解释} 全局下发——前端细分分组头/概念列
+            # 2026-10-19：概念二级概念注释 {概念: 解释} 全局下发——前端细分分组头/概念列
             # 悬停显示「这个标签是什么意思」（医药板块 13 个二级概念起，后续板块沿用同字段）。
-            out["concept_descs"] = _jiuyan_all_concept_descs()
+            out["concept_descs"] = _concept_all_concept_descs()
             # 2026-10-24：逐股理由 {概念: [[名称, 理由], ...]} ——二级分组头 tooltip 里列本组成员为什么入选
-            out["concept_reasons"] = _jiuyan_all_concept_reasons()
+            out["concept_reasons"] = _concept_all_concept_reasons()
             # 一级板块科普指南 {板块: {标题, 内容}}，与二级概念说明互不混用。
             out["category_guides"] = CATEGORY_GUIDES
             # 2026-10-24：逐股判词 {代码: [核心/相关/边缘/错标, 理由]}——个股行名字后直接显示小标
-            out["tag_verdicts"] = _jiuyan_tag_verdicts()
+            out["tag_verdicts"] = _concept_tag_verdicts()
             out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
             try:
                 from modules.market_data import MARKET_PROGRESS as _MP
@@ -9402,7 +9403,7 @@ class Api:
           · 人气板块 = `stock_hunter/history/daily_summary.json` 里 **≤ date 的最近一日**，按
             `平均分` 降序（与「选股猎手」GUI 板块表同口径）；`top_n=None/0` ⇒ **全部板块**
             （owner 2026-10-13：不再只取前 N）。
-          · 成分股 = `_jiuyan_board()`（韭研主板块，与 `prescreen.sym2board_map()` 同口径）。
+          · 成分股 = `_concept_board()`（概念主板块，与 `prescreen.sym2board_map()` 同口径）。
           · 每只的 涨幅/成交额 从**本地日线缓存**算（零网络）——`_tier_sector_stocks` 只用
             `amount` 参与**比值**（板块中位数 × 5），故单位因子整体约掉，不必纠结手/股。
           · 代表公司 = **龙头(全部) + 中军(全部)**（owner 2026-10-13 明确：中军不做截断）。
@@ -9527,12 +9528,12 @@ class Api:
                        key=lambda x: -(x.get("平均分") or 0))
         if top_n:
             _rank = _rank[:max(1, int(top_n))]
-        bmap = _jiuyan_board()
+        bmap = _concept_board()
         members = defaultdict(list)
         for c, b in bmap.items():
             if b:
                 members[b].append(c)
-        names = _jiuyan_names()
+        names = _concept_names()
 
         def _daily_stats(code):
             """→ (change_pct 百分数, amount)。读不到 → (None, None)（`_tier_sector_stocks` 会跳过）。
@@ -10777,12 +10778,12 @@ class Api:
     _GM_BATCH_RETRY_WAIT = 8
 
     def _breakout_pool_codes(self):
-        """扫描池 = watchlist_jiuyan.json 的**全部** 6 位码。
+        """扫描池 = watchlist_concept.json 的**全部** 6 位码。
 
-        2026-09-29 改：去掉 `_jiuyan_concepts(i).strip()` 过滤。原过滤把 5041 只砍到 **1258 只**
+        2026-09-29 改：去掉 `_concepts(i).strip()` 过滤。原过滤把 5041 只砍到 **1258 只**
         （多数条目没有概念字段），与 owner「扫该文件里出现的所有股票」的要求不符。
         """
-        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
         return [c for c, i in jy.items() if isinstance(i, dict) and c.isdigit()]
 
     _BK_CACHE_DIR = BASE / "t_io" / "cache" / "daily_kline"
@@ -10972,7 +10973,7 @@ class Api:
 
     def _scan_breakout(self, codes, state, date=None):
         """注入批量 daily_many 与缓存数据源，调用 core.scanners 完成扫描。"""
-        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
         from core.market_data.facade import get_provider
         from core.market_data.codec import market_of
         result = _scanners._scan_breakout(
@@ -10984,7 +10985,7 @@ class Api:
             cache_last=self._bk_cache_last, cached_df=self._bk_cached_df,
             probe_one=self._breakout_probe_one,
             stock_concepts=_stock_concepts, stock_industry=_stock_industry,
-            concept_descs=_jiuyan_concept_descs,
+            concept_descs=_concept_concept_descs,
             em_boards=lambda code: _em_boards_disk_cached(self, code),
             batch=self._BK_BATCH, scan_bars=self._BK_SCAN_BARS,
             retry_wait=self._GM_BATCH_RETRY_WAIT)
@@ -11161,7 +11162,7 @@ class Api:
 
     def _scan_reclaim(self, codes, state, date=None):
         """注入批量 daily_many；state 进度与 fetch_failed 结构保持不变。"""
-        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
         from core.market_data.facade import get_provider
         from core.market_data.codec import market_of
         return _scanners._scan_reclaim(
@@ -11170,7 +11171,7 @@ class Api:
                 chunk, days=self._RC_BARS),
             market_of=market_of, probe_one=self._reclaim_probe_one,
             stock_concepts=_stock_concepts, stock_industry=_stock_industry,
-            concept_descs=_jiuyan_concept_descs,
+            concept_descs=_concept_concept_descs,
             em_boards=lambda code: _em_boards_disk_cached(self, code),
             batch=self._RC_BATCH, retry_wait=self._GM_BATCH_RETRY_WAIT)
 
@@ -11576,15 +11577,15 @@ class Api:
                     "趋势": s.get("趋势", ""),
                     "前三强": "",
                 })
-            # 板块→成分股（从 watchlist_jiuyan.json 静态筛选，非实时价）
+            # 板块→成分股（从 watchlist_concept.json 静态筛选，非实时价）
             sector_stocks = {}
             try:
-                jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+                jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
                 for code, info in jy.items():
                     if not isinstance(info, dict):
                         continue
-                    # sector 字段 + 韭研概念（含编号字段）双源匹配（覆盖更全）
-                    concepts = _jiuyan_concepts(info) or str(info.get("概念", ""))
+                    # sector 字段 + 概念板块（含编号字段）双源匹配（覆盖更全）
+                    concepts = _concept_concepts(info) or str(info.get("概念", ""))
                     sector_field = str(info.get("sector", ""))
                     nm = info.get("name", info.get("名称", code))
                     all_text = (sector_field + "_" + concepts).replace("|", "_").replace("/", "_")
@@ -11597,8 +11598,8 @@ class Api:
                                       for p in parts)
                         if matched:
                             # 2026-10-20：历史视图无实时价、不走 _tier_sector_stocks，
-                            # 静态 龙头/中军（jiuyan_role）直接落到 tier 字段，前端徽章照出。
-                            _role = str(info.get("jiuyan_role") or "").strip()
+                            # 静态 龙头/中军（role）直接落到 tier 字段，前端徽章照出。
+                            _role = str(info.get("role") or "").strip()
                             _stk = {"code": code, "name": nm,
                                     "concepts": [c.strip() for c in str(concepts).split("|") if c.strip()],
                                     "score": 0, "d5": 0, "d6": 0,
@@ -11606,7 +11607,7 @@ class Api:
                             if _role in ("龙头", "中军"):
                                 _stk["tier"] = _role
                                 _stk["tier_static"] = True
-                                _rsn = str(info.get("jiuyan_role_reason") or "").strip()
+                                _rsn = str(info.get("role_reason") or "").strip()
                                 if _rsn:
                                     _stk["tier_reason"] = _rsn
                             sector_stocks.setdefault(sector, []).append(_stk)
@@ -11625,7 +11626,7 @@ class Api:
             except Exception:
                 out["sector_phase"] = {}
             # 2026-10-19：历史视图同样下发概念注释（细分分组头 tooltip 与「今日数据」一致）
-            out["concept_descs"] = _jiuyan_all_concept_descs()
+            out["concept_descs"] = _concept_all_concept_descs()
             # 历史快照也使用当前一级板块指南，保证今日/历史口径一致。
             out["category_guides"] = CATEGORY_GUIDES
             # 2026-10-16：历史视图**没有** build_* 字段（`sector_stocks` 是现搭的），
@@ -11645,7 +11646,7 @@ class Api:
         历史 10 个交易日已由 `scripts/backfill_sector_subdetail.py` 回填）。
         返回每天该板块的 排名/平均分/涨停数/股票数 + 细分列表；前端用「最新 vs 前一日」算 Δ。
 
-        ⚠️ 一只票可同时计入多个细分（`韭研概念` 用 | 分隔）⇒ 各细分「股票数」之和
+        ⚠️ 一只票可同时计入多个细分（`概念板块` 用 | 分隔）⇒ 各细分「股票数」之和
         **≥** 板块股票数；「得分和」同理，不要当成互斥拆分去加总。
         """
         try:
@@ -11910,7 +11911,7 @@ class Api:
         return {"dates": dates}
 
     def get_sector_breadth(self, days=25, asof=None):
-        """韭研复盘广度/阶段（2026-10-24）。
+        """概念复盘广度/阶段（2026-10-24）。
 
         数据源 `stock_hunter/data/sector_breadth.json`（每日复盘入口：
         `scripts/daily_recap_ingest.py`）。供**每日复盘页的主线广度表**与
@@ -12017,7 +12018,7 @@ class Api:
         ⚠️ `fills.summary.candidates` = `len(picks)`，**不是**盘前候选数，别用。
         """
         date = str(date or datetime.now().strftime("%Y-%m-%d"))
-        names = _jiuyan_names()
+        names = _concept_names()
         rec = _load_json(OSC_BOOK / f"decision_{date}.json", None)
         pre = _load_json(OSC_BOOK / f"prescreen_{date}.json", None)
         fills = _load_json(OSC_BOOK / f"fills_{date}.json", None) or {}
@@ -12223,8 +12224,8 @@ class Api:
         """账本体（纯函数式磁盘读，无副作用）。"""
         _DAILY_CACHE_DIR = _DAILY_KLINE_DIR   # 本地常量（2026-10-11）：原 import 会连带 pandas 进首帧
         # 名称源三层（后者覆盖前者，最权威的放最后）：
-        #   韭研 watchlist（5382 码，最广）→ NAMES 常量 → holdings_auto.json（用户自己的名字）
-        names = dict(_jiuyan_names())
+        #   概念 watchlist（5382 码，最广）→ NAMES 常量 → holdings_auto.json（用户自己的名字）
+        names = dict(_concept_names())
         names.update(NAMES)
         try:
             for code, h in (_load_json(STATE_DIR / "holdings_auto.json", {}) or {}).items():
@@ -13081,10 +13082,10 @@ class Api:
                     results.append({"code": query, "name": snap[query]["name"]})
             except Exception:
                 pass
-        # 2. 名称模糊: 从 watchlist_jiuyan.json 匹配（{code: {name,...}} 或 list）
+        # 2. 名称模糊: 从 watchlist_concept.json 匹配（{code: {name,...}} 或 list）
         if not results:
             try:
-                jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+                jy = _load_json(HUNTER_DIR / "watchlist_concept.json", {})
                 if isinstance(jy, dict):
                     for code, info in jy.items():
                         name = str(info.get("名称", "") if isinstance(info, dict) else "")
@@ -13128,16 +13129,16 @@ class Api:
             return False
 
     def abnormal_pool_add(self, text):
-        """按 6 位代码或名称加入异常监控池。名称在韭研表中模糊匹配，唯一才加。"""
+        """按 6 位代码或名称加入异常监控池。名称在概念表中模糊匹配，唯一才加。"""
         t = str(text or "").strip()
         if not t:
             return {"ok": False, "error": "请输入代码或名称"}
-        names = _jiuyan_names()
+        names = _concept_names()
         code = t if (len(t) == 6 and t.isdigit()) else ""
         if not code:
             hits = [c for c, n in names.items() if str(n) == t] or                    [c for c, n in names.items() if t in str(n)]
             if not hits:
-                return {"ok": False, "error": f"没找到「{t}」（韭研表里没有）"}
+                return {"ok": False, "error": f"没找到「{t}」（概念表里没有）"}
             if len(hits) > 1:
                 return {"ok": False, "error": f"「{t}」匹配到多只，请输入完整代码："
                                               + "、".join(hits[:8])}
@@ -13206,7 +13207,7 @@ class Api:
             return {"ok": False, "date": d,
                     "error": f"{d} 既没有市场快照（market_{d.replace('-', '')}.csv），"
                              f"复盘库里也没有这天的成员。可用市场快照：{near}"}
-        names = _jiuyan_names()
+        names = _concept_names()
         stocks = self._abn_read()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # 以 CSV 的「数据日期」为准（周末补跑的 market_20261031.csv 实际装的是 10-30 行情）
@@ -13265,7 +13266,7 @@ class Api:
                "pool": len(stocks), "time_filled": time_filled, "tdx_last": tdx_last}
         if src == "recap":
             out["note"] = (f"{d} 的市场快照尚未生成（猎手今天还没跑扫描），"
-                           f"已用**韭研复盘名单**兜底（{len(lst)} 只；板数取「N天M板」的 M）")
+                           f"已用**概念复盘名单**兜底（{len(lst)} 只；板数取「N天M板」的 M）")
         elif data_date != d:
             out["note"] = f"所选 {d} 的快照实际是 {data_date} 的行情（周末补跑），已按 {data_date} 计板数"
         if tdx_last and tdx_last < data_date:
@@ -13394,7 +13395,7 @@ class Api:
             _tags_map = (self.load_stock_tags_batch(codes, offline=True, date=date) or {}).get("tags") or {}
         except Exception:
             _tags_map = {}
-        names = _jiuyan_names()
+        names = _concept_names()
         rows = []
         for c in codes:
             meta = stocks.get(c) or {}
@@ -13534,7 +13535,7 @@ class Api:
 
     # ---------- 周线 MACD 翻红 · 全池轮巡（2026-10-31 owner）----------
     def start_weekly_macd_scan(self, codes=None, mode="red"):
-        """一键轮巡：所有（韭研）板块的票算周线 MACD，翻红的自动标重点（紫色）。
+        """一键轮巡：所有（概念）板块的票算周线 MACD，翻红的自动标重点（紫色）。
 
         只加不删；已在关注里的票跳过（不重复计数）。**后台线程**跑，接口立即返回；
         前端轮询 `weekly_macd_status()` 拿进度/结果。零网络（只读本地日线缓存）。
@@ -13546,10 +13547,10 @@ class Api:
             pool = codes
             if not pool:
                 try:
-                    wl = _load_json(BASE / "stock_hunter" / "watchlist_jiuyan.json", {}) or {}
+                    wl = _load_json(BASE / "stock_hunter" / "watchlist_concept.json", {}) or {}
                     pool = [c for c, e in wl.items()
                             if isinstance(e, dict) and str(c)[:1].isdigit()
-                            and (e.get("jiuyan_category") or e.get("jiuyan_category1"))]
+                            and (e.get("category") or e.get("category1"))]
                 except Exception:
                     pool = []
             pool = [str(c).split("_")[0] for c in dict.fromkeys(pool or [])]
@@ -13755,7 +13756,7 @@ class Api:
                 nm = (info or {}).get("name")
                 if not nm:
                     if not _names:
-                        _names.update(_jiuyan_names())
+                        _names.update(_concept_names())
                     nm = _names.get(c) or c
                 out.append({"code": c, "name": nm})
             return out
@@ -13825,8 +13826,8 @@ class Api:
 
     @staticmethod
     def _link_meta():
-        """韭研档里的概念/行业标签 {code: {"concepts": [...], "sector": str}}（按 mtime 记忆）。"""
-        fp = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+        """概念档里的概念/行业标签 {code: {"concepts": [...], "sector": str}}（按 mtime 记忆）。"""
+        fp = BASE / "stock_hunter" / "watchlist_concept.json"
         try:
             mt = fp.stat().st_mtime
         except OSError:
@@ -13844,7 +13845,7 @@ class Api:
                 if len(c) != 6 or not c.isdigit():
                     continue
                 tags = []
-                for f in ("jiuyan_concept1", "jiuyan_concept2", "jiuyan_concept3"):
+                for f in ("concept1", "concept2", "concept3"):
                     t = v.get(f)
                     if isinstance(t, str) and t.strip():
                         tags.append(t.strip())
@@ -13858,13 +13859,13 @@ class Api:
     def load_linked_stocks(self, code, days=120, top=25):
         """一只股票的**联动股**：全池过去 `days` 日收益相关性降序（只取正相关）。
 
-        `code` 可以是 6 位代码，也可以是名称（走韭研名表，必须唯一命中）。
+        `code` 可以是 6 位代码，也可以是名称（走概念名表，必须唯一命中）。
         """
         import numpy as np
         raw = str(code or "").strip()
         base = raw.split("_")[0]
         if not (len(base) == 6 and base.isdigit()):
-            hits = [k for k, v in _jiuyan_names().items() if str(v) == raw]
+            hits = [k for k, v in _concept_names().items() if str(v) == raw]
             if len(hits) != 1:
                 return _clean({"available": False,
                                "error": (f"「{raw}」没匹配到唯一一只，请输完整代码"
@@ -13910,7 +13911,7 @@ class Api:
         same_day = np.where(cnt > 0, same / np.maximum(cnt, 1), np.nan)
         # 只留正相关、非自身、有足够样本
         order = np.argsort(-corr)
-        names = _jiuyan_names()
+        names = _concept_names()
         meta = self._link_meta()
         tgt = meta.get(base) or {}
         rows = []
@@ -13946,13 +13947,13 @@ class Api:
         t = str(code or "").strip()
         if not t:
             return {"ok": False, "error": "请输入代码或名称"}
-        names = _jiuyan_names()
+        names = _concept_names()
         c = str(t).split("_")[0]
         if not (len(c) == 6 and c.isdigit()):
             hits = [k for k, n in names.items() if str(n) == t] or \
                    [k for k, n in names.items() if t in str(n)]
             if not hits:
-                return {"ok": False, "error": f"没找到「{t}」（韭研表里没有）"}
+                return {"ok": False, "error": f"没找到「{t}」（概念表里没有）"}
             if len(hits) > 1:
                 return {"ok": False, "error": f"「{t}」匹配到多只，请输入完整代码："
                                               + "、".join(hits[:8])}

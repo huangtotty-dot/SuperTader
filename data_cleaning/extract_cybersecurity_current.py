@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(r"E:\superTrader")
-SRC = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
+SRC = ROOT / "stock_hunter" / "watchlist_concept.json"
 OUT = ROOT / "data_cleaning" / "cybersecurity_current_20261027.json"
 data = json.loads(SRC.read_text(encoding="utf-8"))
 
@@ -22,19 +22,19 @@ for code, rec in data.items():
     matched = False
     for i in list(range(1, 10)) + [0]:
         suffix = "" if i == 0 else str(i)
-        ck, nk = "jiuyan_category" + suffix, "jiuyan_concept" + suffix
+        ck, nk = "category" + suffix, "concept" + suffix
         for cat in toks(rec.get(ck)):
             for concept in toks(rec.get(nk)):
                 pairs.append({"category": cat, "concept": concept, "slot": i})
                 matched = matched or cat == "网络安全"
     if not matched:
         continue
-    reasons = rec.get("jiuyan_concept_reason") if isinstance(rec.get("jiuyan_concept_reason"), dict) else {}
+    reasons = rec.get("concept_reason") if isinstance(rec.get("concept_reason"), dict) else {}
     rows.append({
         "code": code,
         "name": rec.get("name"),
         "pairs": pairs,
-        "verdict": rec.get("jiuyan_tag_verdict", ""),
+        "verdict": rec.get("tag_verdict", ""),
         "reasons": reasons,
         "business_summary": rec.get("business_summary", ""),
         "sector": rec.get("sector", ""),

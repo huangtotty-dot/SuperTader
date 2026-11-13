@@ -9,7 +9,7 @@
   · `ranking.sector_sort_keys` 第一键 = **原始涨停家数** ⇒ 大板块天然占优。
 
 本实验对同一批板块、同一批日期，比较 8 种打分法对**次日前向收益**的预测力。
-板块→成分股：`watchlist_jiuyan.json` 的 `jiuyan_category`（单名类目 22 个，尺寸 12~150）。
+板块→成分股：`watchlist_concept.json` 的 `category`（单名类目 22 个，尺寸 12~150）。
 
 ⚠️ 必读局限：成分股用**当前** watchlist 回溯历史 ⇒ 有前视/幸存偏差。它对所有打分法
    **同等作用**，故"哪种口径更准"的比较有效；"绝对收益水平"不可外推。
@@ -53,12 +53,12 @@ def spearman(a, b):
 
 
 # ---------- 1) 板块 → 成分股 ----------
-wl = json.loads((BASE / "stock_hunter" / "watchlist_jiuyan.json").read_text(encoding="utf-8"))
+wl = json.loads((BASE / "stock_hunter" / "watchlist_concept.json").read_text(encoding="utf-8"))
 cat = {}
 for c, v in wl.items():
     if not isinstance(v, dict):
         continue
-    k = (v.get("jiuyan_category") or "").strip()
+    k = (v.get("category") or "").strip()
     if not k or "|" in k:
         continue
     cat.setdefault(k, []).append(c)

@@ -113,13 +113,16 @@ class TestObM30(unittest.TestCase):
         r = self.api.load_ob_analysis()
         dt = _time.perf_counter() - t0
         self.assertLess(dt, 0.5, f"冷启动阻塞 {dt:.2f}s：主线程不应算 30min（应只读缓存）")
-        self.assertTrue(r.get("m30_pending"), "未热时应置 m30_pending 供前端快速重拉")
-        self.assertEqual(r["stocks"][0]["verdict"]["level"], "pending")
+        self.assertTrue(r.get("pending"), "冷启动应返回 pending 占位")
+        # 30min 判定语义在纯函数 impl 里：2026-10-10 起 wrapper 只做 SWR，冷启动返空 stocks
+        ri = self.api._load_ob_analysis_impl()
+        self.assertTrue(ri.get("m30_pending"), "未热时应置 m30_pending 供前端快速重拉")
+        self.assertEqual(ri["stocks"][0]["verdict"]["level"], "pending")
 
     def test_01b_warm_computes_verdict(self):
         gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
         self._warm()
-        r = self.api.load_ob_analysis()
+        r = self.api._load_ob_analysis_impl()
         s = r["stocks"][0]
         self.assertIsNone(r.get("m30_pending"), "已热不应再有 m30_pending")
         self.assertEqual(s.get("trend_src"), "30min", "趋势应来自 30min")
@@ -130,7 +133,7 @@ class TestObM30(unittest.TestCase):
     def test_02_30min_absent_falls_back_daily(self):
         gui._fetch_min_bars_disk = lambda ts_code, freq: _empty_df()
         self._warm(_empty_df())                       # 无数据 → 快照为 {}（已热但空）
-        r = self.api.load_ob_analysis()
+        r = self.api._load_ob_analysis_impl()
         s = r["stocks"][0]
         self.assertEqual(s.get("trend_src"), "daily", "无 30min 数据 → 趋势回退日线")
         self.assertFalse(s.get("top_features", {}).get("ok"), "无 30min → 顶部特征不可用")
@@ -138,7 +141,7 @@ class TestObM30(unittest.TestCase):
     def test_03_trend_agrees_with_tags(self):
         gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
         self._warm()
-        s = self.api.load_ob_analysis()["stocks"][0]
+        s = self.api._load_ob_analysis_impl()["stocks"][0]
         label = s["tags"][0]["label"] if s.get("tags") else None      # 首个标签 = 上行/下行/震荡
         m = {"up": "上行", "down": "下行", "flat": "震荡"}
         self.assertEqual(label, m[s["trend"]], "趋势列与行内趋势标签必须同源一致")

@@ -47,13 +47,13 @@ class TestHunterCandidateFilter(unittest.TestCase):
             (self._tmp / f"{code}.json").write_text(
                 json.dumps({"rows": _series(growth=g)}, ensure_ascii=False), encoding="utf-8")
         wl = {
-            "000001": {"name": "a", "jiuyan_category": "半导体", "jiuyan_concept": "设备"},
-            "000002": {"name": "b", "jiuyan_category": "半导体", "jiuyan_concept": "设备"},
-            "000003": {"name": "c", "jiuyan_category": "半导体", "jiuyan_concept": "设备"},
-            "000004": {"name": "d", "jiuyan_category": "半导体", "jiuyan_concept": "设备"},
-            "000009": {"name": "no-concept", "jiuyan_category": "", "jiuyan_concept": ""},
+            "000001": {"name": "a", "category": "半导体", "concept": "设备"},
+            "000002": {"name": "b", "category": "半导体", "concept": "设备"},
+            "000003": {"name": "c", "category": "半导体", "concept": "设备"},
+            "000004": {"name": "d", "category": "半导体", "concept": "设备"},
+            "000009": {"name": "no-concept", "category": "", "concept": ""},
         }
-        self._wl_fp = self._tmp / "watchlist_jiuyan.json"
+        self._wl_fp = self._tmp / "watchlist_concept.json"
         self._wl_fp.write_text(json.dumps(wl, ensure_ascii=False), encoding="utf-8")
         HP._WATCHLIST_FP = str(self._wl_fp)
 
@@ -83,7 +83,7 @@ class TestHunterCandidateFilter(unittest.TestCase):
         (self._tmp / "000006.json").write_text(
             json.dumps({"rows": _series(n=70, growth=0.0015)}), encoding="utf-8")
         wl = json.loads(self._wl_fp.read_text(encoding="utf-8"))
-        wl["000006"] = {"name": "short", "jiuyan_concept": "设备"}
+        wl["000006"] = {"name": "short", "concept": "设备"}
         self._wl_fp.write_text(json.dumps(wl, ensure_ascii=False), encoding="utf-8")
         HP._POOL_CACHE.update({"mtime": None, "codes": None})
         HP._CAND_CACHE.update({"date": None, "codes": None, "total": 0})

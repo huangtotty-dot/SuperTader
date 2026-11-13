@@ -130,12 +130,12 @@ class ExcelReporter(ReporterBase):
             ["指标", "结果", "备注", ""],
             ["报告日期", stats.get('report_date', '-'), "命令传入或默认的日期", ""],
             ["实际数据日期", stats.get('actual_data_dates', '-'), "行情数据实际使用的K线日期（如与报告日期不一致请警惕）", ""],
-            ["韭研标签标的", f"{stats.get('pool_count', '-')} 只", "带韭研概念标签的打分池数量", ""],
+            ["概念标签标的", f"{stats.get('pool_count', '-')} 只", "带概念板块标签的打分池数量", ""],
             ["行情数据成功", f"{stats.get('market_success', '-')}/{stats.get('pool_count', '-')} 只",
              (f"{stats.get('market_failed', '-')} 只失败: {', '.join(stats.get('failed_codes', [])[:20])}{'...' if len(stats.get('failed_codes', [])) > 20 else ''}" if stats and stats.get('market_failed') and stats.get('failed_codes') else f"{stats.get('market_failed', '-')} 只失败，已跳过" if stats and stats.get('market_failed') else ""), ""],
 
-            ["概念总排名", f"{stats.get('sector_count', '-')} 个板块", "按韭研分类拆分后的大板块数", ""],
-            ["子概念排名", f"{stats.get('detail_count', '-')} 只标的", "按韭研概念细分后的标的人数", ""],
+            ["概念总排名", f"{stats.get('sector_count', '-')} 个板块", "按概念分类拆分后的大板块数", ""],
+            ["子概念排名", f"{stats.get('detail_count', '-')} 只标的", "按概念板块细分后的标的人数", ""],
             ["TOP5", f"{stats.get('top5_count', '-')} 只，{stats.get('top5_sectors', '-')} 个板块",
              "多样性通过" if stats and stats.get('top5_diversity_ok') else "", ""],
             ["验证结果", stats.get('validate_result', '-'), "", ""],
@@ -410,7 +410,7 @@ class ExcelReporter(ReporterBase):
         title_row = 1
         self.styler.merge_and_title(ws, title_row, 1, 16, f"=== {sector_name} 子概念排名（按平均分）===")
 
-        # 计算子概念排名（按 子概念 分组，即 jiuyan_concept 按 - 拆分后的前半部分）
+        # 计算子概念排名（按 子概念 分组，即 concept 按 - 拆分后的前半部分）
         # P1: 涨停统计统一用 market_data 已判定的"涨停"字段，删 >=9.9 重算
         zt_field = "涨停" if "涨停" in df_sector.columns else None
         if zt_field:
@@ -670,7 +670,7 @@ class ReportBuilder:
             from datetime import datetime
             date_str = datetime.now().strftime("%Y%m%d")
             output_dir = self.config.get("base_dir", ".") + "/" + self.config.get("output_dir", "output")
-            output_path = os.path.join(output_dir, f"韭研概念打分报告_{date_str}.xlsx")
+            output_path = os.path.join(output_dir, f"概念板块打分报告_{date_str}.xlsx")
 
         data = {
             "summary": df_summary,
@@ -689,7 +689,7 @@ class ReportBuilder:
 #     def build(self, data, output_path):
 #         from reportlab.pdfgen import canvas
 #         c = canvas.Canvas(output_path)
-#         c.drawString(100, 800, "韭研概念打分报告")
+#         c.drawString(100, 800, "概念板块打分报告")
 #         c.save()
 #
 # 使用方式：

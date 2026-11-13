@@ -56,7 +56,7 @@ class TestParseMarketCsv(unittest.TestCase):
             lst = gui._limitup_from_market_csv(fp)
         self.assertEqual([x["code"] for x in lst], ["000002", "600000", "300001"])
         self.assertEqual([x["board"] for x in lst], [3, 2, 1])
-        self.assertEqual(lst[2]["name"], "", "CSV 名称列常为空，名称由韭研表兜底")
+        self.assertEqual(lst[2]["name"], "", "CSV 名称列常为空，名称由概念表兜底")
         self.assertEqual(lst[1]["limit_price"], 10.0, "涨停价要一起解析出来（涨停时间要用）")
 
     def test_文件缺失返回空(self):
@@ -74,10 +74,10 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         self.tmp = Path(self._td.name)
         self.csv = {}
         self._old_fp = gui._market_csv_fp
-        self._old_names = gui._jiuyan_names
+        self._old_names = gui._concept_names
         # 与生产一致：合法日期永远给出一条路径（文件不存在由解析函数返回 []）
         gui._market_csv_fp = lambda d: self.tmp / f"market_{str(d)[:10].replace('-', '')}.csv"
-        gui._jiuyan_names = lambda: {"600000": "浦发银行", "300001": "特锐德"}
+        gui._concept_names = lambda: {"600000": "浦发银行", "300001": "特锐德"}
         self.api = gui.Api()
         self.api._ABN_FP = self.tmp / "abnormal_pool.json"
         # 测试禁网：腾讯兜底默认返回空，个别用例再覆盖
@@ -88,7 +88,7 @@ class TestAddLimitupAccumulates(unittest.TestCase):
 
     def tearDown(self):
         gui._market_csv_fp = self._old_fp
-        gui._jiuyan_names = self._old_names
+        gui._concept_names = self._old_names
         gui._limitup_from_recap = self._old_recap
         self._td.cleanup()
 
@@ -108,7 +108,7 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         p = self._pool()
         self.assertEqual(p["600000"]["limit_board"], 2)
         self.assertEqual(p["300001"]["limit_board"], 1)
-        self.assertEqual(p["600000"]["name"], "浦发银行", "名称用韭研表兜底")
+        self.assertEqual(p["600000"]["name"], "浦发银行", "名称用概念表兜底")
 
         # 手动填的涨停原因不能被累加覆盖
         self.api.abnormal_pool_set_reason("600000", "银行+国资")
@@ -195,7 +195,7 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         api = self.api
         api._hunter_build_conformance = lambda codes, date: {}
         api.load_stock_tags_batch = lambda *a, **k: {"tags": {}}
-        api._jiuyan_names = lambda: {"601398": "工商银行"}
+        api._concept_names = lambda: {"601398": "工商银行"}
         rows = api._pool_rows(api._abn_read(), "2026-11-02", "")["rows"]
         self.assertEqual([r["code"] for r in rows], ["300001", "600000", "000002", "601398"])
 
@@ -363,9 +363,9 @@ class TestFallbacks(unittest.TestCase):
                 {"date": "2026-10-30", "close": 10.0}, {"date": "2026-11-02", "close": 11.0},
                 {"date": "2026-11-03", "close": 12.0}]}), encoding="utf-8")
             old_dir = gui._DAILY_KLINE_DIR
-            old_names = gui._jiuyan_names
+            old_names = gui._concept_names
             gui._DAILY_KLINE_DIR = d
-            gui._jiuyan_names = lambda: {"600000": "浦发银行"}
+            gui._concept_names = lambda: {"600000": "浦发银行"}
             try:
                 api = gui.Api()
                 assert api._limit_price_guess("600000", "2026-11-02") == 11.0   # 10.0×1.1
@@ -373,7 +373,7 @@ class TestFallbacks(unittest.TestCase):
                 assert api._limit_price_guess("600000", "2026-10-30") == 0.0    # 没有昨收
             finally:
                 gui._DAILY_KLINE_DIR = old_dir
-                gui._jiuyan_names = old_names
+                gui._concept_names = old_names
 
 
 class TestFrontendTime(unittest.TestCase):

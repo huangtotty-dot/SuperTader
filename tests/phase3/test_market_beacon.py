@@ -6,12 +6,12 @@
 风向标 = 「人气概念板块 × 代表的龙头/中军」，列沿用建仓信号扫描。它踩在三块**别处已经存在**
 的东西上，任一块漂移都会让面板**静默变错**（不报错、只是显示成别的意思）：
 
-1. **`_jiuyan_board()` 是「主板块」口径的第二份实现。** 真源是策略包的
+1. **`_concept_board()` 是「主板块」口径的第二份实现。** 真源是策略包的
    `oversold_gap_confirm.prescreen.sym2board_map()`，但 gui **不该 import 策略包**
    （`execution/auto/` 是实盘宿主目录、且策略包只存在于某一个部署里）。⇒ 刻意复制一份，
    由本文件**逐码比对**守卫 —— 这是 2026-10-13 那次「背离判定副本漂移、同一个 bug 发作第二次」
    的教训：**副本可以存在，但必须有机械闸**。
-2. **`daily_summary.json` 的板块名必须能 join 上韭研表的主板块名**。join 不上时
+2. **`daily_summary.json` 的板块名必须能 join 上概念表的主板块名**。join 不上时
    `load_market_beacon` 会「该板块一只成分股都没有」⇒ 面板**静默少几行**，看起来像"今天没热度"。
    实测 20/20 全中，但它是**跨两个子系统的隐含契约**，必须钉住。
 3. **`_tier_sector_stocks` 的入参字段名**是 `change_pct`(百分数) / `amount`。传错名字不会报错，
@@ -36,16 +36,16 @@ import gui                                              # noqa: E402
 
 
 class TestBoardMapSingleSource(unittest.TestCase):
-    """`_jiuyan_board()` 必须与策略包的 `sym2board_map()` **逐码一致**。
+    """`_concept_board()` 必须与策略包的 `sym2board_map()` **逐码一致**。
 
-    两者都在「韭研主板块」这一个概念上，**改任一侧都要同步另一侧**。
+    两者都在「概念主板块」这一个概念上，**改任一侧都要同步另一侧**。
     """
 
     @classmethod
     def setUpClass(cls):
         from oversold_gap_confirm import prescreen
         cls.ref = prescreen.sym2board_map()
-        cls.mine = gui._jiuyan_board()
+        cls.mine = gui._concept_board()
 
     def test_same_codes(self):
         self.assertEqual(set(self.ref), set(self.mine),
@@ -59,13 +59,13 @@ class TestBoardMapSingleSource(unittest.TestCase):
 
     def test_nonempty_boards_exist(self):
         n = sum(1 for v in self.mine.values() if v)
-        self.assertGreater(n, 1000, f"有板块归属的码只有 {n} 个 —— 韭研表可能没读到")
+        self.assertGreater(n, 1000, f"有板块归属的码只有 {n} 个 —— 概念表可能没读到")
         self.assertIn("医药", set(self.mine.values()),
                       "MERGES 生效时应有「医药」（创新药/中药 合并而来）")
 
 
 class TestSectorJoin(unittest.TestCase):
-    """`daily_summary.json` 的板块名 ⇄ 韭研主板块名 —— 面板能不能出行全靠这个 join。"""
+    """`daily_summary.json` 的板块名 ⇄ 概念主板块名 —— 面板能不能出行全靠这个 join。"""
 
     def test_top_sectors_all_joinable(self):
         fp = _ROOT / "stock_hunter" / "history" / "daily_summary.json"
@@ -74,7 +74,7 @@ class TestSectorJoin(unittest.TestCase):
         s = json.loads(fp.read_text(encoding="utf-8"))
         days = sorted(k for k in s if s.get(k))
         self.assertTrue(days, "daily_summary 里没有非空日")
-        bmap = gui._jiuyan_board()
+        bmap = gui._concept_board()
         from collections import Counter
         cnt = Counter(v for v in bmap.values() if v)
         missing = [x.get("板块") for x in (s[days[-1]] or [])[:20]

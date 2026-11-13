@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-daily_sentiment.py — V3.0 大盘热度 × 韭研TOP3 每日热度推送与做T策略决策模块
+daily_sentiment.py — V3.0 大盘热度 × 概念TOP3 每日热度推送与做T策略决策模块
 ================================================================================
 
 职责：
   1. 每日 14:30（盘中 mode="tail"，含 forming bar，estimate）合成：
        大盘态势（index_regime：regime / 综合分 S / K-day / E5 跌停 / 持续天数）
-       + 韭研TOP3 板块热度（复用 E:\\04_实战资料\\report_gen 的 ConceptScorer +
-         MarketDataFetcher + watchlist_jiuyan.json，板块平均分取 TOP3 均值）
+       + 概念TOP3 板块热度（复用 E:\\04_实战资料\\report_gen 的 ConceptScorer +
+         MarketDataFetcher + watchlist_concept.json，板块平均分取 TOP3 均值）
        + z 归一化（z_S / z_top3，60 日滚动，窗口不足回退 108 日常量）
        + 决策矩阵 t_decision（正T/反T/不做T + 仓位系数 + 理由）
        + 系统性风险预警（z_S≤-1.5 且 [E5 跌停潮 或 指数跌≥2%]）
@@ -24,13 +24,13 @@ daily_sentiment.py — V3.0 大盘热度 × 韭研TOP3 每日热度推送与做T
   - 独立模式：自动加载 E:\\06_T\\index_regime.py（importlib 按文件路径），自建 log/_now/
     feishu 辅助函数；--no-push 时不读取 webhook、不发送任何网络推送。
 
-打分口径（与 workspace\\jiuyan_backtest\\v2\\run_backtest_v2.py 完全一致）：
-  池 = watchlist_jiuyan.json 中 韭研概念 非空的行（多分类股拆多行）；
+打分口径（与独立回测脚本 run_backtest_v2.py 完全一致）：
+  池 = watchlist_concept.json 中 概念板块 非空的行（多分类股拆多行）；
   行情 = MarketDataFetcher.fetch_for_date(codes, date)（腾讯 fqkline 150 日历史 +
          当日 forming bar，含 近5日涨幅/近5,10,20,150日最高/首板涨停/连板天数/
          一字板涨停/近10日涨停/成交额 等派生字段）；
   打分 = ConceptScorer（config.json scoring.dimensions 全 9 维）；
-  板块平均分 = 该 韭研分类 下全部行 总得分 的简单均值（注意：非成交额加权，
+  板块平均分 = 该 概念分类 下全部行 总得分 的简单均值（注意：非成交额加权，
          历史 108 日回测口径即简单均值，归一化常量均基于此口径校准）；
   top3_avg = 板块平均分降序前 3 名的均值；top3_names = 前 3 名板块名。
 
@@ -548,7 +548,7 @@ def _overheat_streak(history: List[Dict[str, Any]], today_z: float, exclude_date
 
 
 # ============================================================================
-# 韭研 TOP3 板块热度（复用 report_gen 打分链，口径对齐 run_backtest_v2.py）
+# 概念 TOP3 板块热度（复用 report_gen 打分链，口径对齐 run_backtest_v2.py）
 # ============================================================================
 
 _RG_MOD_CACHE: Dict[str, Any] = {}
@@ -578,8 +578,8 @@ def _load_report_gen_modules(report_gen_dir: str) -> Dict[str, Any]:
     return mods
 
 
-def compute_jiuyan_top3(date_str: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """计算指定日期的韭研板块平均分 / TOP3 均值（口径与 108 日回测完全一致）"""
+def compute_concept_top3(date_str: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """计算指定日期的概念板块平均分 / TOP3 均值（口径与 108 日回测完全一致）"""
     p = params or sentiment_params()
     rg_dir = str(p["report_gen_dir"])
     mods = _load_report_gen_modules(rg_dir)
@@ -600,10 +600,10 @@ def compute_jiuyan_top3(date_str: str, params: Optional[Dict[str, Any]] = None) 
     loader = DataLoader(config={})
     watchlist_df = loader.load_watchlist()
     if watchlist_df is None or watchlist_df.empty:
-        raise RuntimeError("watchlist_jiuyan.json 加载失败或为空")
-    df_pool = watchlist_df[watchlist_df["韭研概念"].str.strip().ne("")].copy()
+        raise RuntimeError("watchlist_concept.json 加载失败或为空")
+    df_pool = watchlist_df[watchlist_df["概念板块"].str.strip().ne("")].copy()
     codes = list(dict.fromkeys(df_pool["代码"].astype(str).tolist()))
-    _log.info(f"📊 韭研打分池: {len(df_pool)} 行 / {len(codes)} 只标的，获取 {date_str} 行情...")
+    _log.info(f"📊 概念打分池: {len(df_pool)} 行 / {len(codes)} 只标的，获取 {date_str} 行情...")
 
     fetcher = MarketDataFetcher()
     market_df = fetcher.fetch_for_date(codes, date_str)
@@ -616,7 +616,7 @@ def compute_jiuyan_top3(date_str: str, params: Optional[Dict[str, Any]] = None) 
         if "名称" in market_df.columns:
             market_df = market_df.drop(columns=["名称"])
         merged_pool = df_pool.merge(market_df, on="代码", how="left")
-        merged_pool = merged_pool[merged_pool["韭研概念"].str.strip().ne("")].copy()
+        merged_pool = merged_pool[merged_pool["概念板块"].str.strip().ne("")].copy()
 
     # —— score_stocks 口径（setdefault 不覆盖已有键，与生产 main.py / run_backtest_v2 一致）——
     scorer = ConceptScorer(dimensions=dimensions if dimensions else None)
@@ -628,7 +628,7 @@ def compute_jiuyan_top3(date_str: str, params: Optional[Dict[str, Any]] = None) 
         stock.setdefault("领涨天数", 0)
         stock.setdefault("突破", 1 if abs(row.get("涨跌幅", 0) or 0) > 5 else 0)
         stock.setdefault("封单质量", 0)
-        stock.setdefault("暗线概念数", len(str(stock.get("韭研概念", "")).split("_")))
+        stock.setdefault("暗线概念数", len(str(stock.get("概念板块", "")).split("_")))
         stock.setdefault("量比", float(row.get("量比", 1.0)) if _pd.notna(row.get("量比")) else 1.0)
         stock.setdefault("板块涨停家数", 0)
         stock.setdefault("近5日振幅", float(row.get("振幅", 5.0)) if _pd.notna(row.get("振幅")) else 5.0)
@@ -639,10 +639,10 @@ def compute_jiuyan_top3(date_str: str, params: Optional[Dict[str, Any]] = None) 
 
     # —— 板块聚合（load_concept_summary 口径：简单均值）——
     sector_avgs: Dict[str, Dict[str, Any]] = {}
-    for category in sorted(scored_df["韭研分类"].unique()):
+    for category in sorted(scored_df["概念分类"].unique()):
         if not category:
             continue
-        cat_df = scored_df[scored_df["韭研分类"] == category]
+        cat_df = scored_df[scored_df["概念分类"] == category]
         sector_avgs[str(category)] = {
             "avg": round(float(cat_df["总得分"].fillna(0).mean()), 2),
             "n": int(len(cat_df)),
@@ -732,7 +732,7 @@ def _board_index_of_code(code: str) -> str:
 # ============================================================================
 
 def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> Dict[str, Any]:
-    """合成大盘热度 × 韭研TOP3 × 决策矩阵，返回完整结果 dict。"""
+    """合成大盘热度 × 概念TOP3 × 决策矩阵，返回完整结果 dict。"""
     p = sentiment_params()
     t0 = _time_mod.time()
 
@@ -754,10 +754,10 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
     except Exception:
         regime_name = regime
 
-    # 2) 韭研 TOP3 板块热度
-    jiuyan = compute_jiuyan_top3(date_str, params=p)
-    top3_avg = float(jiuyan["top3_avg"])
-    top3_names = list(jiuyan["top3_names"])
+    # 2) 概念 TOP3 板块热度
+    concept = compute_concept_top3(date_str, params=p)
+    top3_avg = float(concept["top3_avg"])
+    top3_names = list(concept["top3_names"])
 
     # 3) 历史 + 滚动归一化（60 日滚动，不足回退 108 日常量）
     history = load_sentiment_history()
@@ -825,7 +825,7 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
     # 7) 汇总理由
     reasons = [
         f"大盘{regime_name}(持续{days_in_regime}日) S={score_S:.2f} z_S={z_S:+.2f}({src_S})",
-        f"韭研TOP3: {'/'.join(top3_names)} 均值={top3_avg:.2f} z_top3={z_top3:+.2f}({src_t}) {decision['heat_cn']}",
+        f"概念TOP3: {'/'.join(top3_names)} 均值={top3_avg:.2f} z_top3={z_top3:+.2f}({src_t}) {decision['heat_cn']}",
         f"决策: {decision['mode_cn']} ×{decision['pos_factor']} — {decision['reason']}",
     ]
     if k_day_type:
@@ -858,11 +858,11 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
         "z_top3": z_top3,
         "z_top3_src": src_t,
         "top3_names": top3_names,
-        "sector_avgs": jiuyan["sector_avgs"],
-        "pool_rows": jiuyan["pool_rows"],
-        "pool_codes": jiuyan["pool_codes"],
-        "fetch_ok": jiuyan["fetch_ok"],
-        "fetch_failed_n": len(jiuyan["fetch_failed"]),
+        "sector_avgs": concept["sector_avgs"],
+        "pool_rows": concept["pool_rows"],
+        "pool_codes": concept["pool_codes"],
+        "fetch_ok": concept["fetch_ok"],
+        "fetch_failed_n": len(concept["fetch_failed"]),
         "k_day_type": k_day_type,
         "prev_k_down": prev_k_down,
         "overheat_streak": overheat_streak,
@@ -953,7 +953,7 @@ def build_sentiment_card(result: Dict[str, Any]) -> dict:
     if result.get("systemic_risk"):
         title_tag = "🚨"
     est_tag = "（盘中预判 estimate）" if result.get("estimate") else ""
-    title = f"{title_tag} 大盘热度×韭研TOP3 {date_s}{est_tag} - {_FEISHU_KEYWORD}"
+    title = f"{title_tag} 大盘热度×概念TOP3 {date_s}{est_tag} - {_FEISHU_KEYWORD}"
 
     lines: List[str] = []
     lines.append(
@@ -971,7 +971,7 @@ def build_sentiment_card(result: Dict[str, Any]) -> dict:
         avg = (sector_avgs.get(name) or {}).get("avg", "?")
         top3_bits.append(f"{name}({avg})")
     lines.append(
-        f"**韭研TOP3**：{' / '.join(top3_bits)} → 均值 {result.get('top3_avg')}"
+        f"**概念TOP3**：{' / '.join(top3_bits)} → 均值 {result.get('top3_avg')}"
         f"｜z_top3={float(result.get('z_top3') or 0):+.2f}（{decision.get('heat_cn', '')}，{result.get('z_top3_src')}）")
 
     lines.append(
@@ -1022,7 +1022,7 @@ _push_lock = threading.Lock()
 
 
 def push_daily_sentiment(now: Optional[datetime] = None) -> bool:
-    """14:30 热度计算 + 落盘（飞书推送已删除——2026-09-01 owner 判定「大盘热度×韭研TOP3」推送属无用信息；
+    """14:30 热度计算 + 落盘（飞书推送已删除——2026-09-01 owner 判定「大盘热度×概念TOP3」推送属无用信息；
     计算/落盘保留，供每日复盘 §4 引用）。由 main.py _maybe_push_index_regime_eod 钩子调用。
     后台线程执行；返回 True 表示任务已启动。"""
     global _push_thread_running
@@ -1057,7 +1057,7 @@ def push_daily_sentiment(now: Optional[datetime] = None) -> bool:
 
 def _cli() -> None:
     ap = argparse.ArgumentParser(
-        description="V3.0 大盘热度×韭研TOP3 每日热度推送与做T策略决策（daily_sentiment）")
+        description="V3.0 大盘热度×概念TOP3 每日热度推送与做T策略决策（daily_sentiment）")
     ap.add_argument("--date", default=None, help="评估日期 YYYY-MM-DD，默认今天")
     ap.add_argument("--mode", default="tail", choices=["eod", "morning", "tail"],
                     help="大盘态势评估时点，默认 tail（盘中含 forming bar）")
@@ -1082,8 +1082,8 @@ def _cli() -> None:
         payload = build_sentiment_card(result)
         _ds_send_feishu(
             payload=payload,
-            success_log=f"✅ 大盘热度×韭研TOP3已推送: {result.get('date')}",
-            error_prefix="大盘热度×韭研TOP3推送",
+            success_log=f"✅ 大盘热度×概念TOP3已推送: {result.get('date')}",
+            error_prefix="大盘热度×概念TOP3推送",
             trigger_urgent_alarm_after_success=bool(result.get("systemic_risk")),
         )
 

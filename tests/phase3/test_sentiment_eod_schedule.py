@@ -43,7 +43,9 @@ class TestSentimentEodSchedule(unittest.TestCase):
     def test_gm_main_never_passes_invalid_mode(self):
         """index_regime 只接受 eod/morning/tail；旧的 `"live"` 会 ValueError 且被外层吞掉。"""
         self.assertNotIn('_ir_mode = "live"', _GM_SRC)
-        self.assertIn('_ir_mode = "eod" if now.time() >= dtime(15, 5) else "morning"', _GM_SRC)
+        # 2026-11 起给非 live 模式（回测/回放）也加了兜底 `if context.mode == MODE_LIVE else "eod"`，
+        # 且首段三元加了括号续行；只钉 eod/morning 的 15:05 分界仍在。
+        self.assertIn('_ir_mode = ("eod" if now.time() >= dtime(15, 5) else "morning")', _GM_SRC)
 
 
 if __name__ == "__main__":

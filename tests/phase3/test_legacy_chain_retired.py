@@ -187,7 +187,9 @@ class TestSurvivingGuardsStillHold(unittest.TestCase):
         """成交入账与"回调失效轮询兜底"是共享件（超跌跳空确认的成交也走 on_order_status）。"""
         self.assertIn("write_fill(", self.src)
         self.assertIn("_poll_pending_recon(context, now)", self.src)
-        self.assertIn("_pending_recon_close(context, symbol)", self.src)
+        # 2026-11 起 `_pending_recon_close` 多带 order_id=/side= 两个 kwarg（按单过滤对账），
+        # 旧字符串带右括号已不匹配；只断言调用名 + 宿主参数仍存在。
+        self.assertIn("_pending_recon_close(context, symbol", self.src)
 
     def test_kill_switch_still_guards_the_only_open_path(self):
         """KILL_SWITCH 原先只有旧引擎读；旧引擎删除后由**超跌跳空确认买侧**（唯一开仓路径）承接。

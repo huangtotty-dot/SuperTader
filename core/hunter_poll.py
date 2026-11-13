@@ -51,7 +51,7 @@ _DEDUP_KEEP = 10             # 去重文件保留最近 N 天
 # 五线≤3% 或 短线5/10/20≤2%）。用**完成日线**（不含今日盘中形成根）判，日线同日不变 ⇒ 按日缓存。
 _CAND_CACHE = {"date": None, "codes": None, "total": 0}
 _POOL_CACHE = {"mtime": None, "codes": None}
-_WATCHLIST_FP = os.path.join(_HUNTER_DIR, "watchlist_jiuyan.json")
+_WATCHLIST_FP = os.path.join(_HUNTER_DIR, "watchlist_concept.json")
 
 # 管线 stdout 里**已知常驻**的噪声：北交所日线四源全不通（见 memory/文档），每轮必然出现
 # 若干条 "920xxx 获取失败"，报警它 = 每轮永久噪声。证据：2026-10-12 三次观测中出现的
@@ -94,7 +94,7 @@ def _ensure_path() -> None:
 
 
 def _hunter_pool_codes() -> list:
-    """猎手打分池的代码（`watchlist_jiuyan.json` 里**韭研概念非空**的票）。
+    """猎手打分池的代码（`watchlist_concept.json` 里**概念板块非空**的票）。
 
     与 `DataLoader` 的列口径一致（概念为空的行不进池）；按文件 mtime 缓存。
     """
@@ -114,7 +114,7 @@ def _hunter_pool_codes() -> list:
     for code, info in (wl or {}).items():
         if not isinstance(info, dict):
             continue
-        has = any(str(info.get("jiuyan_concept" + ("" if k == 0 else str(k))) or "").strip()
+        has = any(str(info.get("concept" + ("" if k == 0 else str(k))) or "").strip()
                   for k in range(10))
         if has:
             codes.append(str(code))
@@ -266,8 +266,8 @@ def _coverage(watchlist_df) -> float:
     try:
         import pandas as pd
         df = watchlist_df.copy()
-        if "韭研概念" in df.columns:
-            df = df[df["韭研概念"].astype(str).str.strip().ne("")]
+        if "概念板块" in df.columns:
+            df = df[df["概念板块"].astype(str).str.strip().ne("")]
         if df.empty:
             return 0.0
         ok = 0
@@ -365,7 +365,7 @@ def poll_once(date_str: str = None) -> dict:
 
     wl = data.get("watchlist")
     if wl is None or getattr(wl, "empty", True):
-        _bad("empty_watchlist", "watchlist_jiuyan.json 未加载或为空")
+        _bad("empty_watchlist", "watchlist_concept.json 未加载或为空")
         return res
     cov = _coverage(wl)
     res["stats"]["coverage"] = round(cov, 3)

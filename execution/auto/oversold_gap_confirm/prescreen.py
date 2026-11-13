@@ -13,10 +13,10 @@
     → 10:00 棒 {code: low/close/amount/volume} → 交同包的 `decision.evaluate`。
 
 **宇宙 = 全市场（2026-10-14 owner 决策，原「猎手板块范围内」扩展）**：
-候选宇宙从「猎手表（watchlist_jiuyan.json）里有韭研主板块的 ~1550 只」扩到
+候选宇宙从「猎手表（watchlist_concept.json）里有概念主板块的 ~1550 只」扩到
 **全 A 股**（`t_io/rotation/industry_map.csv` 申万口径 ~5000 只，剔 ST/退市/北交所/B股）。
-板块强度排名保留、但按全市场口径现算；板块标签 = 猎手表韭研主板块**优先**
-（猎手池口径不变式），无韭研分类的票回退申万一级行业（见 `universe_board_map`）。
+板块强度排名保留、但按全市场口径现算；板块标签 = 猎手表概念主板块**优先**
+（猎手池口径不变式），无概念分类的票回退申万一级行业（见 `universe_board_map`）。
 
 ⚠️ **标定失效警告**：exp24 的 86% 触发率、exp9 的 Sharpe 顶点（osc_top_n=4）、
 exp15 的板块排名口径，**全部基于猎手池宇宙标定**。宇宙扩展到全市场后，
@@ -34,7 +34,7 @@ import os
 # 仓库根：本文件在 execution/auto/oversold_gap_confirm/ ⇒ 上溯 3 层
 _ROOT = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-_WL_FP = os.path.join(_ROOT, "stock_hunter", "watchlist_jiuyan.json")
+_WL_FP = os.path.join(_ROOT, "stock_hunter", "watchlist_concept.json")
 # 全市场申万一级行业映射（代码/名称/行业名称，~5.6k 行；scripts/p2_aux/fetch_industry.py 产出）
 _INDUSTRY_MAP_FP = os.environ.get("OSC_INDUSTRY_MAP_FP") or os.path.join(
     _ROOT, "t_io", "rotation", "industry_map.csv")
@@ -63,7 +63,7 @@ def default_provider():
 
 
 def sym2board_map() -> dict:
-    """6位代码 -> 主板块（第一个韭研分类，含 merge；与 exp12 同口径，单一真源）。"""
+    """6位代码 -> 主板块（第一个概念分类，含 merge；与 exp12 同口径，单一真源）。"""
     try:
         with open(_WL_FP, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -75,13 +75,13 @@ def sym2board_map() -> dict:
             continue
         cats = []
         for i in range(1, 10):
-            c = str(info.get(f"jiuyan_category{i}", "") or "").strip()
+            c = str(info.get(f"category{i}", "") or "").strip()
             if c:
                 cats.append(MERGES.get(c, c))
         if not cats:
-            c = str(info.get("jiuyan_category", "") or "").strip()
+            c = str(info.get("category", "") or "").strip()
             cats = [MERGES.get(cc.strip(), cc.strip()) for cc in c.split("|") if cc.strip()]
-        # 2026-10-25：与 gui._jiuyan_board 同口径——「北交所/央企」是机构标签不是题材
+        # 2026-10-25：与 gui._concept_board 同口径——「北交所/央企」是机构标签不是题材
         cats = [c for c in cats if c not in ("北交所", "央企")]
         m[str(code)] = cats[0] if cats else ""
     return m
@@ -123,9 +123,9 @@ def full_market_meta() -> dict:
 def universe_board_map(full_market: bool = True) -> dict:
     """**全市场口径** code -> 板块标签（2026-10-14 宇宙扩展）。
 
-    两层来源，**韭研主板块优先**：
+    两层来源，**概念主板块优先**：
       1. 全 A 股（剔 ST/退市/北交所/B股）→ 申万一级行业（`full_market_meta`）；
-      2. 猎手表韭研主板块（`sym2board_map`，exp12 同口径）**覆盖**其上
+      2. 猎手表概念主板块（`sym2board_map`，exp12 同口径）**覆盖**其上
          —— 猎手池内的票的板块标签与扩展前**逐码一致**（行为不变式）。
 
     ⚠️ **㉚ 修复（2026-11-13，11-11 *ST返利 600228 实买红线）**：猎手表覆盖
@@ -135,7 +135,7 @@ def universe_board_map(full_market: bool = True) -> dict:
     该"口径不变式的代价"在 11-11 变成真实买入红线，已废止。
     industry_map 缺失/读坏（meta 为空）⇒ 退化为猎手池旧行为（文档化口径，非 fail-closed）。
 
-    注意：这制造了两个标签命名空间（韭研板块名 vs 申万行业名），同一只票只取其一；
+    注意：这制造了两个标签命名空间（概念板块名 vs 申万行业名），同一只票只取其一；
     涨停家数按各自标签计数，top-N 排名在两个命名空间混排 —— 这是「猎手池口径不变 +
     全市场扩展」的保守折中，exp15 的板块排名口径结论需在全市场下重验证（见模块 docstring）。
 
@@ -152,7 +152,7 @@ def universe_board_map(full_market: bool = True) -> dict:
                 continue
             if meta and code not in meta:
                 continue            # ㉚：覆盖只改标签，不扩大合法宇宙（fail-closed）
-            m[code] = board         # 韭研主板块优先（合法票的猎手池口径不变式）
+            m[code] = board         # 概念主板块优先（合法票的猎手池口径不变式）
     else:
         m = {}
         for c, b in _jy.items():
@@ -180,8 +180,8 @@ def premarket_candidates(top_n: int, date: str = None, provider=None,
     涨停数两种真实排名在 top-4 组合都塌成负 Sharpe，只有从日线 bar 现算的涨停家数替身通过。
 
     **宇宙（2026-10-14 owner 决策扩展为全市场）**：候选池 = 全 A 股（剔 ST/退市/北交所/B股），
-    板块强度排名按**全市场口径**现算（`universe_board_map`：韭研主板块优先、申万行业回退）。
-    扩展前只有「猎手表里有韭研主板块」的 ~1550 只参与；扩展后 ~5000 只参与。
+    板块强度排名按**全市场口径**现算（`universe_board_map`：概念主板块优先、申万行业回退）。
+    扩展前只有「猎手表里有概念主板块」的 ~1550 只参与；扩展后 ~5000 只参与。
     ⚠️ exp24 的 86% 触发率、exp9 的 Sharpe 顶点均基于**猎手池**标定，
     宇宙扩展后原标定结论需重验证（osc_top_n / osc_board_top_n 最优点可能漂移）。
 

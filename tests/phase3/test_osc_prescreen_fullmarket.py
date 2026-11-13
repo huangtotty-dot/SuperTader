@@ -3,13 +3,13 @@
 
 ## 钉什么
 
-owner 2026-10-14 决策：OSC 选股宇宙从「猎手表里有韭研主板块的 ~1550 只」扩到
+owner 2026-10-14 决策：OSC 选股宇宙从「猎手表里有概念主板块的 ~1550 只」扩到
 **全 A 股**（剔 ST/退市/北交所/B股），板块强度排名保留但按全市场口径现算。
 本文件钉住这次扩展的**边界条件**（扩展错了就是买错票）：
 
   1. `full_market_meta` 剔除规则：ST / 退市 / 北交所(4/8/920) / B股(200/900) 不进宇宙；
-  2. `universe_board_map` 标签优先级：猎手表韭研主板块**覆盖**申万行业（猎手池口径不变式），
-     无韭研分类的票回退申万一级行业；
+  2. `universe_board_map` 标签优先级：猎手表概念主板块**覆盖**申万行业（猎手池口径不变式），
+     无概念分类的票回退申万一级行业；
   3. `premarket_candidates` 扩展生效：不在猎手表里的全市场票，其申万行业进 top-N 且超跌
      ⇒ **必须进候选**（这是扩展存在的意义）；被剔除类别（ST/北交所）即使超跌也**不得**进候选；
   4. 退化路径：industry_map.csv 缺失 ⇒ 行为**逐码退回**扩展前的猎手池旧口径（不崩、不扩）。
@@ -79,7 +79,7 @@ class _Sandbox(unittest.TestCase):
         ("200004", "深B甲", "交通运输"),
         ("900005", "沪B乙", "轻工制造"),
     ]
-    WL = {"300001": "锂电池", "300004": "化工"}     # 猎手表（含一只 ST 股有韭研板块）
+    WL = {"300001": "锂电池", "300004": "化工"}     # 猎手表（含一只 ST 股有概念板块）
 
     def setUp(self):
         self._tmp = tempfile.mkdtemp(prefix="osc_um_")
@@ -116,9 +116,9 @@ class TestFullMarketMeta(_Sandbox):
 
 
 class TestUniverseBoardMap(_Sandbox):
-    def test_jiuyan_board_wins_over_sw(self):
+    def test_concept_board_wins_over_sw(self):
         m = prescreen.universe_board_map()
-        self.assertEqual(m["300001"], "锂电池", "猎手表韭研主板块必须覆盖申万行业（口径不变式）")
+        self.assertEqual(m["300001"], "锂电池", "猎手表概念主板块必须覆盖申万行业（口径不变式）")
 
     def test_non_watchlist_falls_back_to_sw(self):
         m = prescreen.universe_board_map()
@@ -130,7 +130,7 @@ class TestUniverseBoardMap(_Sandbox):
         for bad in ("300005", "830001", "430002", "920003", "200004", "900005"):
             self.assertNotIn(bad, m)
         # ㉚（2026-11-13 修复，11-11 *ST返利 600228 实买红线）：300004 是 ST、
-        # 被 industry_map 剔除，即使它在猎手表里有韭研板块也**不得**再被覆盖带入。
+        # 被 industry_map 剔除，即使它在猎手表里有概念板块也**不得**再被覆盖带入。
         # 旧实现把它放回来并称之为「猎手池口径不变式的代价」——该代价已变成真实红线，废止。
         # 覆盖只改板块标签，不扩大合法宇宙；口径不变式只对**合法票**成立。
         self.assertNotIn("300004", m, "猎手表里的 ST 股不得借覆盖重新进入宇宙")

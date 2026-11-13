@@ -735,7 +735,7 @@ def build_position_gap(total_capital: float, raw_list: list, default_pct: float 
     return {"ratio_sum": ratio_sum, "rows": rows}
 
 
-# ==================== V3.0: 大盘热度×韭研TOP3 联动（daily_sentiment.py） ====================
+# ==================== V3.0: 大盘热度×概念TOP3 联动（daily_sentiment.py） ====================
 # daily_sentiment.py 的 sentiment_params() 通过 globals().get("SENTIMENT_PARAMS") 合并本 dict
 # 覆盖模块内 DEFAULT_SENTIMENT_PARAMS 默认值。归一化常量口径：108 日窗（2026-02~2026-07）
 # z_S=(S+4.41)/31.82；z_top3=(top3_avg-5.05)/2.34；生产 60 日滚动、样本不足回退常量。

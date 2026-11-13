@@ -4,7 +4,7 @@
 需求：「龙江交通在公司资料中补充为什么它跟冰雪经济相关」。
 
 实现：
-  · 数据源 = `watchlist_jiuyan.json` 的 `jiuyan_concept_reason`（逐概念理由，
+  · 数据源 = `watchlist_concept.json` 的 `concept_reason`（逐概念理由，
     2026-10-24 起写入），由 `tag_longjiang_snow_reason_20261108.py` 更新；
   · 后端 `load_stock_profile` 已下发 `concept_reasons`（原先只给 chip 悬停用）；
   · 前端 `renderStockProfile` 增加「题材关联」一栏，把理由**直接铺开**，不再只藏在 tooltip。

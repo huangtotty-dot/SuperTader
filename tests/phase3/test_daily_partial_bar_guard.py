@@ -32,6 +32,12 @@ _TODAY = datetime.now().strftime("%Y-%m-%d")
 _YDAY = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
+def _d(days_back: int) -> str:
+    """相对今天往前推 N 天。`has_impossible_gap` 有 20 自然日新鲜度闸（末根比它旧就跳过），
+    硬编码 10-20/21 的用例会随日期腐烂而**假绿/假红** —— 一律改用相对日期。"""
+    return (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+
+
 def _rows(*pairs):
     """[(date, open, close), …] → 缓存 rows（high/low 取 o/c 的包络，够判跳空用）。"""
     return [{"date": d, "open": o, "close": c, "high": max(o, c), "low": min(o, c),
@@ -40,18 +46,18 @@ def _rows(*pairs):
 
 class TestGapDetector:
     def test_normal_days_pass(self):
-        rows = _rows(("2026-10-16", 10.0, 10.5), ("2026-10-19", 10.5, 10.2),
-                     ("2026-10-20", 10.2, 10.9))
+        rows = _rows((_d(4), 10.0, 10.5), (_d(3), 10.5, 10.2),
+                     (_d(2), 10.2, 10.9))
         assert tp.has_impossible_gap(rows, "600900") is False
 
     def test_limit_up_gap_is_fine(self):
         """主板 +10% 的隔夜跳空是合法的（涨停开盘），不能误判。"""
-        rows = _rows(("2026-10-19", 10.0, 10.0), ("2026-10-20", 11.0, 11.0))
+        rows = _rows((_d(2), 10.0, 10.0), (_d(1), 11.0, 11.0))
         assert tp.has_impossible_gap(rows, "600900") is False
 
     def test_15pct_gap_on_main_board_flagged(self):
         """002929 现场：前收 46.10（错的快照根）→ 次日开 53.12 = +15.2%。"""
-        rows = _rows(("2026-10-20", 46.40, 46.10), ("2026-10-21", 53.12, 56.14))
+        rows = _rows((_d(2), 46.40, 46.10), (_d(1), 53.12, 56.14))
         assert tp.has_impossible_gap(rows, "002929") is True
 
     def test_stale_history_not_flagged(self):
@@ -67,16 +73,16 @@ class TestGapDetector:
         assert tp._limit_pct("600900") == 10.0
         # 科创板 15% 跳空合法
         assert tp.has_impossible_gap(
-            _rows(("2026-10-20", 100.0, 100.0), ("2026-10-21", 115.0, 115.0)), "688018") is False
+            _rows((_d(2), 100.0, 100.0), (_d(1), 115.0, 115.0)), "688018") is False
         # 科创板 25% 跳空非法
         assert tp.has_impossible_gap(
-            _rows(("2026-10-20", 100.0, 100.0), ("2026-10-21", 125.0, 125.0)), "688018") is True
+            _rows((_d(2), 100.0, 100.0), (_d(1), 125.0, 125.0)), "688018") is True
 
     def test_only_tail_is_checked(self):
         """很久以前的除权跳空不该让整档永久不可用（只看最近 n+1 根）。"""
-        rows = _rows(("2026-09-01", 10.0, 10.0), ("2026-09-02", 20.0, 20.0),
-                     ("2026-10-17", 20.0, 20.0), ("2026-10-20", 20.0, 20.0),
-                     ("2026-10-21", 20.5, 21.0))
+        rows = _rows((_d(40), 10.0, 10.0), (_d(39), 20.0, 20.0),
+                     (_d(3), 20.0, 20.0), (_d(2), 20.0, 20.0),
+                     (_d(1), 20.5, 21.0))
         assert tp.has_impossible_gap(rows, "600900") is False
 
     def test_never_raises_on_garbage(self):
@@ -102,13 +108,14 @@ def _write(dirpath, code, rows, forming=None, saved_at=None):
 
 class TestReadersRejectPoison:
     def test_daily_cache_rejects_gap(self, cache_dir):
-        _write(cache_dir, "002929", _rows(("2026-10-20", 46.40, 46.10),
-                                          ("2026-10-21", 53.12, 56.14)))
+        # 用相对日期：末根==今天 ⇒ 绕开「陈旧」闸，真正走到「不可能跳空」闸。
+        _write(cache_dir, "002929", _rows((_YDAY, 46.40, 46.10),
+                                          (_TODAY, 53.12, 56.14)))
         assert tp.TencentProvider().daily_cache("002929") is None
 
     def test_display_read_rejects_gap(self, cache_dir):
-        _write(cache_dir, "002929", _rows(("2026-10-20", 46.40, 46.10),
-                                          ("2026-10-21", 53.12, 56.14)))
+        _write(cache_dir, "002929", _rows((_YDAY, 46.40, 46.10),
+                                          (_TODAY, 53.12, 56.14)))
         assert cc.load_daily_display("002929") is None
 
     def test_healthy_cache_still_reads(self, cache_dir):

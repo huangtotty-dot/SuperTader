@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""按 owner 的 2026-10-28 午盘涨停复盘简图，给涨停个股补韭研概念标签。
+"""按 owner 的 2026-10-28 午盘涨停复盘简图，给涨停个股补概念板块标签。
 
-**铁律：只增不改**（见 memory `jiuyan_tagging_convention`）
+**铁律：只增不改**（见 memory `concept_tagging_convention`）
   · 任何槽位已经有的值**一律不动**；
-  · 主字段 (`jiuyan_category` / `jiuyan_concept`) 全空才写主字段，否则写到
-    **最后一个非空槽之后**的空槽，且 `jiuyan_categoryN` / `jiuyan_conceptN` **必须成对写**
+  · 主字段 (`category` / `concept`) 全空才写主字段，否则写到
+    **最后一个非空槽之后**的空槽，且 `categoryN` / `conceptN` **必须成对写**
     （只写半边会让这只票整个掉出猎手池 —— lowalt 那次伤过 8 只）；
-  · 只补「今天涨停的关键词里有、而韭研标签里没有」的题材；纯业绩/股权转让这类
+  · 只补「今天涨停的关键词里有、而概念标签里没有」的题材；纯业绩/股权转让这类
     **非题材**不写（与 MERGES 把 公告/其他 视为非题材的惯例一致）。
 
 运行：python scripts/tag_limitup_20261028.py            # 预演，只打印
@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
-FP = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+FP = BASE / "stock_hunter" / "watchlist_concept.json"
 NOTE = "owner 2026-10-28 午盘涨停复盘简图"
 
 # ⚠️ **刻意不补**（2026-10-27 的清洗审计已按「仅研发/送样、无量产收入」摘除，
@@ -87,13 +87,13 @@ ADD = [
 def _slots(e: dict):
     """返回 (已有 cat 值集合, 已有 con 值集合, 最大已用槽位号)。"""
     cats, cons = [], []
-    if e.get("jiuyan_category"):
-        cats.append(str(e["jiuyan_category"]))
-    if e.get("jiuyan_concept"):
-        cons.append(str(e["jiuyan_concept"]))
+    if e.get("category"):
+        cats.append(str(e["category"]))
+    if e.get("concept"):
+        cons.append(str(e["concept"]))
     top = 0
     for i in range(1, 12):
-        c, n = e.get(f"jiuyan_category{i}"), e.get(f"jiuyan_concept{i}")
+        c, n = e.get(f"category{i}"), e.get(f"concept{i}")
         if c or n:
             top = max(top, i)
         if c:
@@ -121,20 +121,20 @@ def main() -> int:
             skipped += 1
             rows.append((code, name, "已覆盖，跳过", f"{cat}|{con}", ""))
             continue
-        if have_cat and top == 0 and not e.get("jiuyan_category"):
+        if have_cat and top == 0 and not e.get("category"):
             # 主字段空但槽位 0 已用（不可能，兜底）
             pass
         if not cats and not cons:
-            e["jiuyan_category"] = cat
-            e["jiuyan_concept"] = con
+            e["category"] = cat
+            e["concept"] = con
             slot_txt = "主字段"
         else:
             i = top + 1
-            e[f"jiuyan_category{i}"] = cat
-            e[f"jiuyan_concept{i}"] = con
+            e[f"category{i}"] = cat
+            e[f"concept{i}"] = con
             slot_txt = f"槽位{i}"
         e["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        e["jiuyan_tag_source"] = NOTE
+        e["tag_source"] = NOTE
         changed += 1
         rows.append((code, name, slot_txt, f"{cat}|{con}", why))
 

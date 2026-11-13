@@ -13,10 +13,10 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(r"E:\superTrader")
-SRC = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
+SRC = ROOT / "stock_hunter" / "watchlist_concept.json"
 AUDIT = ROOT / "data_cleaning" / "dataelement_audit_20261027.json"
-BAK = ROOT / "stock_hunter" / "watchlist_jiuyan.json.bak_20261027_dataelement_deep"
-PREVIEW = ROOT / "data_cleaning" / "watchlist_jiuyan_cleaned_20261027.json"
+BAK = ROOT / "stock_hunter" / "watchlist_concept.json.bak_20261027_dataelement_deep"
+PREVIEW = ROOT / "data_cleaning" / "watchlist_concept_cleaned_20261027.json"
 MARK = "2026-10-27 08:11:00"
 DATE = "2026-10-27"
 
@@ -47,7 +47,7 @@ def toks(value):
 
 
 def slot_names(i):
-    return ("jiuyan_category", "jiuyan_concept") if i == 0 else (f"jiuyan_category{i}", f"jiuyan_concept{i}")
+    return ("category", "concept") if i == 0 else (f"category{i}", f"concept{i}")
 
 
 def slots(rec):
@@ -120,7 +120,7 @@ def main():
         add_slot(rec, row["category"], row["concepts"])
         current = set(active_concepts(rec))
 
-        reasons = rec.get("jiuyan_concept_reason")
+        reasons = rec.get("concept_reason")
         if not isinstance(reasons, dict):
             reasons = {}
         for key in list(reasons):
@@ -129,11 +129,11 @@ def main():
         for concept in row["concepts"]:
             reasons[concept] = row["reason"]
         if reasons:
-            rec["jiuyan_concept_reason"] = reasons
+            rec["concept_reason"] = reasons
         else:
-            rec.pop("jiuyan_concept_reason", None)
+            rec.pop("concept_reason", None)
 
-        descs = rec.get("jiuyan_concept_desc")
+        descs = rec.get("concept_desc")
         if not isinstance(descs, dict):
             descs = {}
         for key in list(descs):
@@ -143,31 +143,31 @@ def main():
             if concept in DESC:
                 descs[concept] = DESC[concept]
         if descs:
-            rec["jiuyan_concept_desc"] = descs
+            rec["concept_desc"] = descs
         else:
-            rec.pop("jiuyan_concept_desc", None)
+            rec.pop("concept_desc", None)
 
-        rec["jiuyan_dataelement_verdict"] = row["verdict"]
-        rec["jiuyan_dataelement_audited_at"] = DATE
-        rec["jiuyan_dataelement_evidence"] = {
+        rec["dataelement_verdict"] = row["verdict"]
+        rec["dataelement_audited_at"] = DATE
+        rec["dataelement_evidence"] = {
             "title": row["evidence_title"], "date": row["evidence_date"], "url": row["evidence_url"],
             "profile_source": "iFinD ifind_get_stock_info", "profile_asof": DATE,
         }
         if row["action"] in ("摘除", "迁出数据要素"):
-            rec["jiuyan_dataelement_removed_20261027"] = {
+            rec["dataelement_removed_20261027"] = {
                 "action": row["action"], "old_concepts": old, "reason": row["reason"],
             }
         else:
-            rec.pop("jiuyan_dataelement_removed_20261027", None)
+            rec.pop("dataelement_removed_20261027", None)
 
         if row["concepts"]:
-            rec["jiuyan_tag_verdict"] = row["verdict"]
-            rec["jiuyan_tag_evidence"] = "text"
+            rec["tag_verdict"] = row["verdict"]
+            rec["tag_evidence"] = "text"
         elif active_concepts(rec):
-            rec["jiuyan_tag_verdict"] = "已摘牌"
+            rec["tag_verdict"] = "已摘牌"
         else:
-            rec.pop("jiuyan_tag_verdict", None)
-            rec.pop("jiuyan_tag_evidence", None)
+            rec.pop("tag_verdict", None)
+            rec.pop("tag_evidence", None)
         rec["updated_at"] = MARK
         counts[row["action"]] += 1
         print(f"{code} {row['name']:<7s} {row['action']:<8s} {row['verdict']}  {','.join(row['concepts']) or '—'}")

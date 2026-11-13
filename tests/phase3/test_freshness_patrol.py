@@ -129,13 +129,30 @@ class TestSurveyAgainstRealCache(unittest.TestCase):
             self.assertNotIn(a["name"], [])
 
     def test_finds_known_fake_forming_payloads(self):
-        """真实磁盘上确实还留着 10-09 盘前造的假当日根（自愈只在读端做，文件没重写）。
+        """巡检的**实证价值**：盘前快照造的假当日根（O=H=L=C 且 volume=0）此前没有任何巡检能发现。
 
-        这是本巡检的**实证价值**：这些坏件此前没有任何巡检能发现。
+        不再断言真实磁盘（10-09 那批已随月度刷新被覆盖 ⇒ 断言会随数据漂移腐烂），
+        改为把 `survey_payload` 指向一个含假根的临时 payload 目录，端到端验证检测链
+        （glob → `_is_fake_forming` → 计数/样例）。
         """
-        st = fp.survey_payload()
+        tmp = tempfile.TemporaryDirectory()
+        fake_dir = Path(tmp.name)
+        rec = {"saved_at": "2026-11-13 09:17:39", "last_daily_date": "2026-11-13",
+               "daily_rows": [{"date": "2026-11-12", "open": 1, "high": 2, "low": 0.5,
+                               "close": 1.5, "volume": 100},
+                              {"date": "2026-11-13", "open": 64.5, "high": 64.5, "low": 64.5,
+                               "close": 64.5, "volume": 0.0}]}
+        (fake_dir / "688003.json").write_text(json.dumps(rec), encoding="utf-8")
+        orig = fp._PAYLOAD_DIR
+        fp._PAYLOAD_DIR = fake_dir
+        try:
+            st = fp.survey_payload()
+        finally:
+            fp._PAYLOAD_DIR = orig
+            tmp.cleanup()
         self.assertGreaterEqual(st["fake_forming"], 1,
-                                "磁盘上应仍存在假当日根 payload（10-09 那批）")
+                                "含假当日根的 payload 应被巡检识别")
+        self.assertIn("688003", st["fake_examples"])
 
 
 class TestIdempotence(unittest.TestCase):

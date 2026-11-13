@@ -31,12 +31,30 @@ def _load_gm_index_regime():
     name = "_w45_test_gm_index_regime"
     if name in sys.modules:
         return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(
-        name, _GM / "analysis" / "index_regime.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    # 全量跑时，仓库根 `config.py`（普通模块、非包）可能已被 test_main_import_identity
+    # 等测试缓存进 sys.modules['config']；而 _gm/analysis/index_regime.py 用绝对导入
+    # `from config.params import ...`（生产侧 gm_main.py 靠 _GM_DIR 压到 sys.path[0] 让
+    # `config` 命中 _gm/config 冻结包）。这里在 exec 期间把 `config` 临时钉到
+    # _gm/config，exec 完还原，否则撞「'config' is not a package」。
+    saved_config = sys.modules.get("config")
+    try:
+        cfg_spec = importlib.util.spec_from_file_location(
+            "config", _GM / "config" / "__init__.py",
+            submodule_search_locations=[str(_GM / "config")])
+        cfg = importlib.util.module_from_spec(cfg_spec)
+        sys.modules["config"] = cfg
+        cfg_spec.loader.exec_module(cfg)
+        spec = importlib.util.spec_from_file_location(
+            name, _GM / "analysis" / "index_regime.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)   # 成功后才注册，失败不留半成品坏模块
+        sys.modules[name] = mod
+        return mod
+    finally:
+        if saved_config is None:
+            sys.modules.pop("config", None)
+        else:
+            sys.modules["config"] = saved_config
 
 
 class TestFormingBarInputAudit(unittest.TestCase):
@@ -162,15 +180,19 @@ def build_real_cache_forming_replay():
 class TestRealCacheFormingReplay(unittest.TestCase):
     def test_1105_1106_regime_score_version_effective_date_and_temp_artifact(self):
         payload = build_real_cache_forming_replay()
+        # ⚠️ input_version 是对「按 as_of 切片的实际输入 CSV」的 sha256：历史行被
+        # daily_repair / 通达信校准重写时会漂移（不是生产缺陷，是数据内容变了）。
+        # regime/score/effective_date 仍钉死 —— 它们从同一份输入算出，若这三者也变才是真坏。
+        # 哈希漂移时按本文件 docstring 的方式重跑 `build_real_cache_forming_replay` 重基线即可。
         expected = {
             ("2026-11-05", "morning"): ("uni_up", -7.643999999999998, "2026-11-04",
-                                        "e913b1b6050cbd2a5b0cc961c39dbe7c2a654d392af6f8d87096bb759949899a"),
+                                        "d12cdc4d04560c0ecf243044f087447854ba3ab3581f73238b7036f116220597"),
             ("2026-11-05", "eod"): ("uni_up", 25.515272727272727, "2026-11-05",
-                                    "e913b1b6050cbd2a5b0cc961c39dbe7c2a654d392af6f8d87096bb759949899a"),
+                                    "d12cdc4d04560c0ecf243044f087447854ba3ab3581f73238b7036f116220597"),
             ("2026-11-06", "morning"): ("uni_up", 25.515272727272727, "2026-11-05",
-                                        "9d58ad18a1ec2d1d9ff946b7a110fdaf2cefaacd523496e796a7b37fc3a5394a"),
+                                        "b2db8f25ad276fe4765bc47d68708819ca4ed7d49e507a8ba1ef93e323eabe7e"),
             ("2026-11-06", "eod"): ("uni_down", -7.643999999999998, "2026-11-06",
-                                    "9d58ad18a1ec2d1d9ff946b7a110fdaf2cefaacd523496e796a7b37fc3a5394a"),
+                                    "b2db8f25ad276fe4765bc47d68708819ca4ed7d49e507a8ba1ef93e323eabe7e"),
         }
         for (day, mode), (regime, score, effective, version) in expected.items():
             with self.subTest(day=day, mode=mode):

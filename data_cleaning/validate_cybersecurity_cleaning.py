@@ -8,9 +8,9 @@ from openpyxl import load_workbook
 
 ROOT = Path(r"E:\superTrader")
 DC = ROOT / "data_cleaning"
-SRC = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
-BAK = ROOT / "stock_hunter" / "watchlist_jiuyan.json.bak_20261027_cybersecurity_deep"
-PREVIEW = DC / "watchlist_jiuyan_cybersecurity_cleaned_20261027.json"
+SRC = ROOT / "stock_hunter" / "watchlist_concept.json"
+BAK = ROOT / "stock_hunter" / "watchlist_concept.json.bak_20261027_cybersecurity_deep"
+PREVIEW = DC / "watchlist_concept_cybersecurity_cleaned_20261027.json"
 XLSX = DC / "网络安全概念深度清洗_20261027.xlsx"
 AUDIT = DC / "cybersecurity_audit_20261027.json"
 OUT = DC / "cybersecurity_validation_20261027.json"
@@ -55,25 +55,25 @@ for row in audit:
     got = []
     for i in list(range(1, 10)) + [0]:
         suffix = "" if i == 0 else str(i)
-        if rec.get("jiuyan_category" + suffix) == "网络安全":
-            value = rec.get("jiuyan_concept" + suffix, "")
+        if rec.get("category" + suffix) == "网络安全":
+            value = rec.get("concept" + suffix, "")
             values = value if isinstance(value, list) else [x for x in str(value).split("|") if x]
             got.extend(("网络安全", c) for c in values)
     assert got == expected, (row["code"], got, expected)
     for _, concept in expected:
-        assert rec["jiuyan_concept_reason"].get(concept) == row["reason"]
-        assert rec["jiuyan_concept_desc"].get(concept)
+        assert rec["concept_reason"].get(concept) == row["reason"]
+        assert rec["concept_desc"].get(concept)
     old_forbidden = {"其他", "国家队", "字节生态", "AI应用", "SaaS软件与服务"}
     assert not old_forbidden.intersection(c for _, c in got)
 
 loader = WatchlistLoader()
 after_df = loader.load(str(SRC))
 before_df = loader.load(str(BAK))
-after_counts = Counter(after_df["韭研分类"])
-before_counts = Counter(before_df["韭研分类"])
+after_counts = Counter(after_df["概念分类"])
+before_counts = Counter(before_df["概念分类"])
 category_differences = {c: [before_counts[c], after_counts[c]] for c in set(before_counts) | set(after_counts) if before_counts[c] != after_counts[c]}
 assert category_differences == {"": [3079, 3085], "网络安全": [45, 38]}, category_differences
-network_codes = set(after_df.loc[after_df["韭研分类"] == "网络安全", "代码"])
+network_codes = set(after_df.loc[after_df["概念分类"] == "网络安全", "代码"])
 assert len(network_codes) == 38
 loader_counts = {c: after_counts[c] for c in ["网络安全", "AI应用", "物理AI", "数据要素"]}
 

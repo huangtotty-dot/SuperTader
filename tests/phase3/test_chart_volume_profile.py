@@ -222,6 +222,8 @@ class TestMultiWindowOptionBehavior(unittest.TestCase):
         js = (
             "global.buildGapAreas=()=>[]; global._mwBoxMarkAreas=()=>[];\n"
             "global.buildIntradayVwapZero=()=>({vwap:[],zero:[]});\n"
+            # _mwOption 里读 `document.getElementById("tgGaps"/"tgTrades")` 的开关状态
+            "global.document={getElementById:()=>({checked:false})};\n"
             "global.VOL_MA_BASE=60; global.MW_TAIL=96; let mwPeriod='min5';\n"
             f"let _vpOn={'true' if vp_on else 'false'};\n"
             + _extract_fn("buildVolumeProfile") + "\n"

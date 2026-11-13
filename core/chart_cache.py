@@ -670,8 +670,8 @@ def small_pool_codes() -> list:
 
 
 def full_pool_codes() -> list:
-    """全池 = watchlist_jiuyan 全部 6 位码（对齐 gui._breakout_pool_codes）。"""
-    jy = _read_json(_HUNTER_DIR / "watchlist_jiuyan.json", {}) or {}
+    """全池 = watchlist_concept 全部 6 位码（对齐 gui._breakout_pool_codes）。"""
+    jy = _read_json(_HUNTER_DIR / "watchlist_concept.json", {}) or {}
     return _dedup_valid(list(jy.keys()))
 
 

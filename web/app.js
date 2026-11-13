@@ -2859,7 +2859,7 @@ function renderSectorMaBreadth(d) {
       + `缓存停在 T-1 的按最后状态顺延到今天）`
       + (d.computed_at ? ` · 计算于 ${esc(d.computed_at)}` : "")
       + `<br>口径：站上 N 日线 = 当日收盘 &gt; N 日简单均线（含当日），与得分里 −70 悬崖 / 20日线观察列同源；`
-      + `每只个股只归一个韭研主板块，不重复计数。`
+      + `每只个股只归一个概念主板块，不重复计数。`
       + `<br><span style="color:${SECMA_BULL}">▬</span> 多头占比 = 当日该板块里 <b>MA60 近 20 交易日上涨 &gt; 3%</b>（日线三态的「多头」）的个股占比`
       + `<br><span style="color:${SECMA_CONV}">▬</span> 均线粘合 = 当日该板块里 <b>五线(5/10/20/30/60)离散度 ≤3% 或 短线(5/10/20)≤2%</b> 的个股占比`
       + `（与「均线粘合」技术标签同源；分母只算有 60 根以上历史的票）。`
@@ -4902,7 +4902,7 @@ async function searchLinkage() {
 
 /* 概念名徽章：`tagBadge` 收的是对象 {label,color}，概念是纯字符串 ⇒ 单独一个渲染器 */
 function _conceptChip(x) {
-  return `<span class="badge chop" title="韭研概念：${esc(x)}">${esc(x)}</span>`;
+  return `<span class="badge chop" title="概念板块：${esc(x)}">${esc(x)}</span>`;
 }
 
 function _linkCorrBar(c) {
@@ -4953,7 +4953,7 @@ function renderLinkage(d) {
   el.innerHTML = `<div class="card" style="overflow-x:auto"><table><thead><tr>
       <th>联动股</th><th class="num" title="过去 120 个交易日日收益的皮尔逊相关（0~1）">相关性</th>
       <th class="num" title="同向涨跌的天数占比">同涨同跌</th>
-      <th title="与目标共享的韭研概念标签（只作解释，不参与筛选）">共同概念</th>
+      <th title="与目标共享的概念板块标签（只作解释，不参与筛选）">共同概念</th>
       <th class="num">上日涨幅</th><th></th>
     </tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -6663,7 +6663,7 @@ async function openStockChart(code, name) {
   try { apiCall("warm_stock_profile", code).catch(() => {}); } catch (e) { /* 忽略 */ }
 }
 /* ---- 手动盘「K线速查」（2026-10-18）----
-   输入公司/基金/指数名称或代码 → 后端 search_instrument（本地韭研名表优先 + 腾讯 smartbox）
+   输入公司/基金/指数名称或代码 → 后端 search_instrument（本地概念名表优先 + 腾讯 smartbox）
    → 可画 K 线的标的列表。场外基金/港美股无 K 线，后端过滤并在 hint 里注明条数。 */
 async function searchKlineInstrument() {
   const inp = document.getElementById("klQuery");
@@ -6837,7 +6837,7 @@ function renderStockProfile(body, d, live) {
   if (d && d.profile_pending) _scheduleBizProfileRetry(d.code || stockChartCode);
   h += `<div class="prof-sec"><b>所属行业/板块</b>：`
      + ((d.sector_list && d.sector_list.length) ? chips(d.sector_list) : none) + "</div>";
-  h += `<div class="prof-sec"><b>韭研概念</b>：`
+  h += `<div class="prof-sec"><b>概念板块</b>：`
      // 2026-10-20：研究核实的静态 龙头/中军徽章（机器人/军工板块整治起），悬停显示定性理由
      + (d.local_role ? `<span style="display:inline-block;margin-right:6px;padding:1px 8px;border-radius:10px;font-weight:700;font-size:11px;letter-spacing:1px;`
        + (d.local_role === "龙头"
@@ -6846,7 +6846,7 @@ function renderStockProfile(body, d, live) {
        + `" title="${esc("【研究定性·" + d.local_role + "】" + (d.local_role_reason ? d.local_role_reason + "。" : "") + "按产业链地位核实，与当日涨跌无关。")}">◆${esc(d.local_role)}</span>` : "")
      + ((d.local_concepts && d.local_concepts.length) ? chips(d.local_concepts, d.concept_descs) : none) + "</div>";
   // 2026-11-08 owner：「在公司资料中补充为什么它跟冰雪经济相关」——
-  // 把逐股「为什么算这个概念」的理由（watchlist.jiuyan_concept_reason）直接铺在资料面板，
+  // 把逐股「为什么算这个概念」的理由（watchlist.concept_reason）直接铺在资料面板，
   // 不再只藏在 chip 的悬停提示里。来源与口径由研究/对账写入（例：龙江交通 601188）。
   const _rs = (d && d.concept_reasons) || {};
   const _rsKeys = Object.keys(_rs).filter(k => String(_rs[k] || "").trim());
@@ -9655,7 +9655,7 @@ const TAG_DESC = {
     + "⚠️ 这是**日线**的10日线，不是30分钟图上的 MA10。",
 };
 /* 2026-11-08：电力运营的发电方式徽章（水电/火电/核电/风光/热电联产…），
-   数据来自猎手个股行的 `power_type`（后端从 watchlist `jiuyan_power_type` 注入）。 */
+   数据来自猎手个股行的 `power_type`（后端从 watchlist `power_type` 注入）。 */
 const POWER_TYPE_COLORS = {
   "水电": "#1f6feb", "火电": "#bc4c00", "核电": "#8250df", "风光": "#1a7f37",
   "光伏": "#9a6700", "热电联产": "#a40e26", "供热": "#57606a",
@@ -10006,7 +10006,7 @@ function applySectorTags(tbody, category) {
     }
   });
   // 板块阶段判定（用 trend）
-  // 2026-10-24：若后端已下发韭研广度阶段（data-breadth=1），**不要**用个股趋势覆盖它——
+  // 2026-10-24：若后端已下发概念广度阶段（data-breadth=1），**不要**用个股趋势覆盖它——
   // 两者口径不同：breadth=板块涨停家数生命周期；trend=板块内个股趋势占比。后者只是兜底。
   if (stageEl && stageEl.dataset && stageEl.dataset.breadth === "1") return;
   const vals = Object.values(tagsMap).map(x => x && x.trend).filter(Boolean);
@@ -10744,7 +10744,7 @@ function renderBreakout(b) {
     <th class="num">现价</th><th class="num">超出</th><th>标签</th><th>概念</th>
   </tr></thead>${bodyHtml}</table>
   <div class="cell-dim" style="font-size:10px;margin-top:3px">共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按质量分排序（缩量>放量、小幅>大幅）· 双击看技术分析</div>
-  <div class="cell-dim" style="font-size:10px;margin-top:2px">概念为离线口径（韭研概念 + 东财板块概念段），仅覆盖约一半股票；无概念的显示「—」，双击看技术分析可点「📋 公司资料」拉东财全量板块</div>
+  <div class="cell-dim" style="font-size:10px;margin-top:2px">概念为离线口径（概念板块 + 东财板块概念段），仅覆盖约一半股票；无概念的显示「—」，双击看技术分析可点「📋 公司资料」拉东财全量板块</div>
   ${bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${bjNd} 只北交所股无日线、未参与判定（当前环境取不到）</div>` : ""}
   ${restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">⚠ 另有 ${restNd} 只非北交所取数失败、未参与判定，结果可能漏报</div>` : ""}`;
 }
@@ -10755,7 +10755,7 @@ function toggleBkGroup(headEl) {
   const arrow = headEl.querySelector(".bk-arrow");
   if (arrow) arrow.textContent = collapsed ? "▸" : "▼";
 }
-// 概念列（2026-09-30）。离线口径（韭研概念 + 东财板块概念段）只盖约一半股票 ⇒
+// 概念列（2026-09-30）。离线口径（概念板块 + 东财板块概念段）只盖约一半股票 ⇒
 // 没数据时显示「—」而不是空白，避免看起来像渲染失败；全量概念在 title 里，
 // 想要东财全量可用双击弹窗的「📋 公司资料」。
 function conceptsCell(s) {
@@ -10778,7 +10778,7 @@ function conceptsCell(s) {
   }).join('<span class="cell-dim"> · </span>');
   return `<span class="bk-concepts" title="${esc(full)}">${inner}</span>`;
 }
-/* 韭研 D1~D11 打分规则（2026-10-17 显示到面板上）。
+/* 概念 D1~D11 打分规则（2026-10-17 显示到面板上）。
    真源 = `stock_hunter/modules/reporter.py` 的「0-说明」表 + `stock_hunter/config.json`
    的 `scoring.dimensions`（D3/D10 未启用，故不出现在这里）。改口径时**两处一起改**。 */
 const DIM_RULES = [
@@ -10873,7 +10873,7 @@ function renderHunter(h) {
     // 2026-10-24：逐股判词 {代码: [判词, 理由]}——直接把「标签与主营的相关度」标在个股名字后面，
     // 不用展开面板就能一眼看出这只票是核心还是蹭概念。
     const tagVerdicts = h.tag_verdicts || {};
-    // 2026-10-24：板块生命周期阶段（后端 modules/sector_phase.py 计算，韭研复盘广度驱动）
+    // 2026-10-24：板块生命周期阶段（后端 modules/sector_phase.py 计算，概念复盘广度驱动）
     const sectorPhase = h.sector_phase || {};
     // 概念键匹配：精确 → 「-」前段 → 「_」末段（数据要素_数据存储 ↔ 分组名 数据存储）
     const _keyIn = (obj, gk) => {
@@ -10922,7 +10922,7 @@ function renderHunter(h) {
     }
     const firstLevelCount = _fl.size;
 
-    // 展开的个股明细（全部成分股，分页50），按细分（韭研概念）分组显示下一级分类
+    // 展开的个股明细（全部成分股，分页50），按细分（概念板块）分组显示下一级分类
     const PAGE = 50;
     const pageIdx = window._hunterPage && window._hunterPage[category] || 0;
     const allStocks = stocks;
@@ -11034,7 +11034,7 @@ function renderHunter(h) {
     const stockRows = gPaged.map(gk => {
       const gs = subGroups[gk];
       // 2026-10-12 owner：「二级板块没有显示得分情况」。根因=原来的 **`gAvg` 取的是 `s.score`**，
-      // 那是**韭研 D1–D11 总得分**（全池均值仅 ~0.8）⇒ 组头显示"均分1"，
+      // 那是**概念 D1–D11 总得分**（全池均值仅 ~0.8）⇒ 组头显示"均分1"，
       // 与它正下方那一列「得分」（建仓综合得分 0~100）**根本不是同一个数**，看着就像没得分。
       // 改为取**行内同一个 `build_score`**，并显式区分「还没算到(⏳)」与「算了但无值(—)」。
       const _scored = gs.filter(s => typeof s.build_score === "number");
@@ -11098,7 +11098,7 @@ function renderHunter(h) {
     const heatBarW = Math.max(2, Math.min(100, heatVal));
 
     // 板块内 D 维度「突出项」（2026-10-18 owner：每个板块打出分后要显示哪些 D 项突出）。
-    // 数据 = 每只票的 `dims`（韭研 D1~D12 的**非零项**）；板块均分就是这些分的平均。
+    // 数据 = 每只票的 `dims`（概念 D1~D12 的**非零项**）；板块均分就是这些分的平均。
     // 排序：先按**贡献总分**（对均分影响最大），再按命中只数（广度），取前 3。
     const _dimHits = {}, _dimPts = {};
     let _hasAnyDims = false;
@@ -11152,7 +11152,7 @@ function renderHunter(h) {
         <div class="hunter-meta2">
           ${(() => {
             const p = sectorPhase[category];
-            if (!p) return '<span class="h-stage-badge cell-dim" title="尚未录入该板块的韭研复盘广度（每日复盘上传后自动生成）">阶段…</span>';
+            if (!p) return '<span class="h-stage-badge cell-dim" title="尚未录入该板块的概念复盘广度（每日复盘上传后自动生成）">阶段…</span>';
             const cls = PHASE_CLS[p.phase] || "p-none";
             const tip = `${p.phase} · 今日${p.count}只 · 3日${p.delta3 >= 0 ? "+" : ""}${p.delta3} · 5日峰值${p.peak5} · 最高${p.max_board}板\n${p.reason || ""}`;
             return `<span class="h-stage-badge ${cls}" data-breadth="1" title="${esc(tip)}">${esc(p.phase)}</span>`;
@@ -11193,7 +11193,7 @@ function renderHunter(h) {
             <th class="num" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。与「价」同一轮 10s 刷新；取不到显示 ⏳。⚠️ 历史 market_{date}.csv 里没有换手率可反推，只能走实时快照">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
             <th title="板块内梯队（**描述性方位标签，非信号**）：龙头=本板块当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余；板块<8只不标。⚠️ 实测该分层无前瞻区分度（四种定义×四个持有期≈全无差异、分半窗符号翻转、效应量远低于交易成本）⇒ 只看方位，不参与任何判定与排序。依据 doc/research/2026-10-11_板块内龙头中军杂毛_分层实验.md">梯队</th>
             <th title="与建仓信号扫描同口径（go→signal / approaching / watch_signal / weak）">判定</th>
-                        <th class="num" title="韭研 D1~D12 打分合计（选股猎手的原始评分，满分 47；D3/D10 未在 config 启用）。⚠️ 与左边「得分」不是一回事：那个是建仓综合得分 0~100。下方小字＝命中的维度与分数。&#10;D1 强势形态且新高 8 · D2 强势形态 6 · D4 首板资金池 3 · D5 潜在突破10日 2 · D6 潜在突破5日 1 · D7 持续性(二板+) 5 · D8 情绪分数(一字板) 6 · D9 活跃程度(近10日有涨停) 3 · D11 刚站上5日线 2 · D12 趋势性(站上20日线) 8 · 大额(成交额≥50亿) 3">D分<br><span style="font-size:9px;opacity:.6">D1~D12</span></th>
+                        <th class="num" title="概念 D1~D12 打分合计（选股猎手的原始评分，满分 47；D3/D10 未在 config 启用）。⚠️ 与左边「得分」不是一回事：那个是建仓综合得分 0~100。下方小字＝命中的维度与分数。&#10;D1 强势形态且新高 8 · D2 强势形态 6 · D4 首板资金池 3 · D5 潜在突破10日 2 · D6 潜在突破5日 1 · D7 持续性(二板+) 5 · D8 情绪分数(一字板) 6 · D9 活跃程度(近10日有涨停) 3 · D11 刚站上5日线 2 · D12 趋势性(站上20日线) 8 · 大额(成交额≥50亿) 3">D分<br><span style="font-size:9px;opacity:.6">D1~D12</span></th>
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
             <th title="日线三态（描述状态，紧挨得分/通过便于对照）：多头=MA60 近20个交易日上涨>3%；空头=MA60 近20日下跌>3%；震荡=其余（60日线走平）。⚠️ 实测(977只×2017-2026/156万股票·日)：分布 多头31%/震荡39%/空头30%；未来20日超额 多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)，H=5/10/20 排序一致。仅作状态描述，不是买卖信号。⚠️ 得分里的阶段项**仍是旧四阶段口径**（三态映射会让得分 IC 变负）">日线阶段</th>
                                     <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
@@ -11274,7 +11274,7 @@ function renderHunter(h) {
 
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
       <div class="card-title">📐 D1~D12 打分规则
-        <span class="cell-dim" style="font-weight:normal;font-size:11px">韭研原始评分（满分 47 · D3/D10 未启用）· 与「得分」列的建仓综合得分 0~100 是两套口径</span>
+        <span class="cell-dim" style="font-weight:normal;font-size:11px">概念原始评分（满分 47 · D3/D10 未启用）· 与「得分」列的建仓综合得分 0~100 是两套口径</span>
       </div>
       <div class="d-rules-grid">${DIM_RULES.map(r => `<span class="d-rule" title="${esc(r[3])}"><b>${r[0]}</b>${r[1]}<i>${r[2]}</i></span>`).join("")}</div>
       <div class="cell-dim" style="margin-top:4px;font-size:11px">
@@ -11290,7 +11290,7 @@ function renderHunter(h) {
     </div>
     <div class="hunter-grid">${sumBody}</div>
 
-    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击方格展开个股明细(D5/D6异常) · 热度趋势vs前日</div>`;
+    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (概念板块打分) · 点击方格展开个股明细(D5/D6异常) · 热度趋势vs前日</div>`;
 
 
   // 分页/重渲染后恢复此前展开的板块（避免跳页收起），并重填已缓存的技术标签
@@ -12004,7 +12004,7 @@ function renderZtDtPanel(emo, hist) {
   });
 }
 
-/* ===== 主线广度（2026-10-24）：韭研复盘 → 每日复盘页 ===== */
+/* ===== 主线广度（2026-10-24）：概念复盘 → 每日复盘页 ===== */
 function _breadthShade(v, vmax) {
   if (!v) return { bg: "", fg: "var(--text-faint)" };
   const t = Math.min(1, v / Math.max(1, vmax));
@@ -12103,7 +12103,7 @@ async function loadReviewBreadth(date) {
   try {
     const r = await apiCall("get_sector_breadth", 500, date || null);
     if (!r || r.error || !((r.dates || []).length)) {
-      body.innerHTML = `<div class="empty">暂无复盘广度数据。上传当日韭研涨停图后运行 `
+      body.innerHTML = `<div class="empty">暂无复盘广度数据。上传当日概念涨停图后运行 `
         + `<code>python scripts/daily_recap_ingest.py --file tmp/recap_YYYYMMDD.json</code> 入库。</div>`;
       if (meta) meta.textContent = (r && r.error) ? r.error : "";
       return;
@@ -12132,7 +12132,7 @@ async function loadReviewBreadth(date) {
       <div class="cell-dim" style="font-size:10px;margin-top:6px">
         数字=当日该板块涨停家数；<b>空白=该交易日未录入复盘图（不是0）</b>；
         阶段＝首现/发酵/高潮/退潮/扩散（口径见 <code>modules/sector_phase.py</code>）。
-        数据源：韭研公社全天涨停复盘简图。
+        数据源：概念公社全天涨停复盘简图。
       </div>`;
     // 默认滚到最右（最新交易日），向左滚动看历史；首列冻结
     body.querySelectorAll('div[title="横向滚动查看更早的交易日"]').forEach(w => {
@@ -12156,7 +12156,7 @@ async function refreshDailyReview() {
     renderDataHealth(health);                      // 数据健康条
     renderZtDtPanel(emo, hist);                    // 涨停/跌停面板
     renderMarginBalance(margin);                   // 两融余额面板（独立刷新，不依赖 LLM）
-    loadReviewBreadth(date);                       // 主线广度（韭研复盘，独立刷新）
+    loadReviewBreadth(date);                       // 主线广度（概念复盘，独立刷新）
     if (r && r.exists) {
       renderSummary(r.text);                     // 复盘总结卡（置顶）
       renderReviewCharts(r.text, r.data || {});   // 可视化（玻璃卡 + 条形图 + 关键位）
@@ -12431,7 +12431,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261104b", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261113k", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

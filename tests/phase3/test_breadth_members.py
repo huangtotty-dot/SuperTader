@@ -10,6 +10,7 @@
   · 前端 `renderBreadthTable` 的格子加 onclick → `showBreadthMembers()` 弹出浮层
     （复用星轨图的浮层节点，关闭走 hideStarContribPop）。
 """
+import re
 import sys
 from pathlib import Path
 
@@ -83,10 +84,15 @@ def test_今日列也可点():
 
 def test_appjs版本号已刷新():
     """改 app.js 必须同步 bump index.html 的 ?v=，否则 WebView2 命中旧缓存，
-    新功能"看不见"（本次点击无反应的真凶之一）。"""
+    新功能"看不见"（本次点击无反应的真凶之一）。
+
+    不再硬编码具体版本（每次 bump 都会腐烂）：只钉「版本号存在且不早于本功能上线日」。
+    """
     html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-    assert "app.js?v=20261109b" in html
-    assert "app.js?v=20261104b" not in html
+    m = re.search(r"app\.js\?v=(\d{8}\w)", html)
+    assert m, "index.html 必须带 app.js 版本号"
+    assert m.group(1) >= "20261109", f"app.js 版本号不得早于 20261109（实际 {m.group(1)}）"
+    assert "app.js?v=20261104b" not in html, "不得回退到旧缓存版本"
 
 
 def test_面板改名为持仓股():
@@ -94,4 +100,3 @@ def test_面板改名为持仓股():
     html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
     assert "<h2>持仓股" in html
     assert "持仓 30 分钟风险体检（30min 顶部特征" not in html
-    assert "app.js?v=20261109b" in html

@@ -190,7 +190,9 @@ class TestScanApi(unittest.TestCase):
         self.assertEqual(st.get("hits"), ["603028"])
         saved = json.loads(self.tg._FOCUS_FP.read_text(encoding="utf-8"))
         ent = saved["codes"]["603028"]
-        self.assertEqual(ent.get("ago"), 8, "翻红 8 周 ⇒ ago=8（前端据此加深紫色）")
+        # ago 必须等于**真实数据**算出的 flip_bars_ago（不硬编码几周，随周数漂移）
+        _expected = self.tg._wm_state_of_code("603028")["flip_bars_ago"]
+        self.assertEqual(ent.get("ago"), _expected, "命中时须把 flip_bars_ago 写进关注表（前端据此加深紫色）")
         self.assertTrue(str(ent.get("src")).startswith("weekly_macd:"))
 
         # 再跑一次：不算新增，但 ago 仍然刷新
@@ -200,7 +202,7 @@ class TestScanApi(unittest.TestCase):
             st2 = self._wait()
         self.assertEqual(st2.get("hits"), [], "已标记的不重复计入新增")
         saved = json.loads(self.tg._FOCUS_FP.read_text(encoding="utf-8"))
-        self.assertEqual(saved["codes"]["603028"].get("ago"), 8)
+        self.assertEqual(saved["codes"]["603028"].get("ago"), _expected)
 
     def test_不动手工标记(self):
         self.api.toggle_focus("600362")               # 手工
@@ -230,7 +232,9 @@ class TestBeaconWm(unittest.TestCase):
         self.assertIsInstance(st, dict)
         self.assertTrue(st["red"])
         self.assertFalse(st["flip"])
-        self.assertEqual(st["flip_bars_ago"], 8)
+        # 603028 很久前就翻红 ⇒ flip_bars_ago 是随周数漂移的真实值，只钉"非负整数"不钉具体周数
+        self.assertIsInstance(st["flip_bars_ago"], int)
+        self.assertGreaterEqual(st["flip_bars_ago"], 0)
         st2 = gui._wm_state_of_code("603028")
         self.assertEqual(st, st2)
         self.assertIsNone(gui._wm_state_of_code("999999"))

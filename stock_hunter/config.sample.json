@@ -12,7 +12,7 @@
   },
   "data_source": {
     "type": "watchlist_json",
-    "file": "watchlist_jiuyan.json",
+    "file": "watchlist_concept.json",
     "read_from": "script_dir"
   },
   "style": {

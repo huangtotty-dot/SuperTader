@@ -37,18 +37,18 @@ from modules.data_loader import DEFAULT_CATEGORY_MERGE, WatchlistLoader  # noqa:
 
 # 三只样本：中药（多细标签）、创新药（单细标签）、半导体（未命中，作对照）
 SAMPLE = {
-    "000538": {"name": "云南白药", "jiuyan_category": "中药",
-               "jiuyan_concept": "种植|民族药|百年老字号|中药饮片", "sector": "医药行业"},
-    "300204": {"name": "舒泰神", "jiuyan_category": "创新药",
-               "jiuyan_concept": "创新药", "sector": "医药行业"},
-    "600584": {"name": "长电科技", "jiuyan_category": "半导体",
-               "jiuyan_concept": "封测|先进封装", "sector": "半导体行业"},
+    "000538": {"name": "云南白药", "category": "中药",
+               "concept": "种植|民族药|百年老字号|中药饮片", "sector": "医药行业"},
+    "300204": {"name": "舒泰神", "category": "创新药",
+               "concept": "创新药", "sector": "医药行业"},
+    "600584": {"name": "长电科技", "category": "半导体",
+               "concept": "封测|先进封装", "sector": "半导体行业"},
 }
 
 
 def _loader(merge=None):
     with tempfile.TemporaryDirectory() as td:
-        fp = os.path.join(td, "watchlist_jiuyan.json")
+        fp = os.path.join(td, "watchlist_concept.json")
         with open(fp, "w", encoding="utf-8") as f:
             json.dump(SAMPLE, f, ensure_ascii=False)
         return WatchlistLoader(category_merge=merge).load(fp)
@@ -66,47 +66,47 @@ class TestCategoryMerge(unittest.TestCase):
         df = _loader()
         by_code = {r["代码"]: r for _, r in df.iterrows()}
         for code, orig in (("000538", "中药"), ("300204", "创新药")):
-            self.assertEqual(by_code[code]["韭研分类"], "医药", f"{code} 应并入医药")
+            self.assertEqual(by_code[code]["概念分类"], "医药", f"{code} 应并入医药")
             self.assertEqual(by_code[code]["原分类"], orig, f"{code} 原分类应保留 {orig}")
         # 未命中的板块不该被动
-        self.assertEqual(by_code["600584"]["韭研分类"], "半导体")
+        self.assertEqual(by_code["600584"]["概念分类"], "半导体")
         self.assertEqual(by_code["600584"]["原分类"], "")
 
     def test_original_concept_text_kept_for_explanation(self):
-        """细标签要留在「韭研概念」里做解释，不能被丢掉。"""
+        """细标签要留在「概念板块」里做解释，不能被丢掉。"""
         df = _loader()
         row = df[df["代码"] == "000538"].iloc[0]
-        self.assertIn("百年老字号", row["韭研概念"])
+        self.assertIn("百年老字号", row["概念板块"])
 
     def test_custom_mapping_overrides_default(self):
         df = _loader({"中药": "中医药", "创新药": "生物医药"})
-        cats = set(df["韭研分类"])
+        cats = set(df["概念分类"])
         self.assertIn("中医药", cats)
         self.assertIn("生物医药", cats)
         self.assertNotIn("医药", cats, "自定义映射应覆盖默认（否则说明默认被无条件叠加）")
 
     def test_coalchem_merges_into_chem(self):
         """owner 2026-11-08：「煤化工合入到化工板块」——原分类=煤化工 作子概念。"""
-        sample = {"600001": {"name": "煤化A", "jiuyan_category": "煤化工",
-                             "jiuyan_concept": "煤化工", "sector": "化工行业"},
-                  "600002": {"name": "化工B", "jiuyan_category": "化工",
-                             "jiuyan_concept": "基础化工", "sector": "化工行业"}}
+        sample = {"600001": {"name": "煤化A", "category": "煤化工",
+                             "concept": "煤化工", "sector": "化工行业"},
+                  "600002": {"name": "化工B", "category": "化工",
+                             "concept": "基础化工", "sector": "化工行业"}}
         with tempfile.TemporaryDirectory() as td:
-            fp = os.path.join(td, "watchlist_jiuyan.json")
+            fp = os.path.join(td, "watchlist_concept.json")
             with open(fp, "w", encoding="utf-8") as f:
                 json.dump(sample, f, ensure_ascii=False)
             df = WatchlistLoader().load(fp)
         by_code = {r["代码"]: r for _, r in df.iterrows()}
-        assert by_code["600001"]["韭研分类"] == "化工"
+        assert by_code["600001"]["概念分类"] == "化工"
         assert by_code["600001"]["原分类"] == "煤化工"
-        assert by_code["600002"]["韭研分类"] == "化工"
-        assert "煤化工" not in set(df["韭研分类"])
+        assert by_code["600002"]["概念分类"] == "化工"
+        assert "煤化工" not in set(df["概念分类"])
 
     def test_data_loader_subconcept_is_original_category(self):
         """端到端：DataLoader 的板块明细里，医药的子概念应为 创新药/中药 两个。"""
         from modules.data_loader import DataLoader
         with tempfile.TemporaryDirectory() as td:
-            fp = os.path.join(td, "watchlist_jiuyan.json")
+            fp = os.path.join(td, "watchlist_concept.json")
             with open(fp, "w", encoding="utf-8") as f:
                 json.dump(SAMPLE, f, ensure_ascii=False)
             dl = DataLoader(config={"category_merge": DEFAULT_CATEGORY_MERGE})

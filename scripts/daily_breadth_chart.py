@@ -191,7 +191,7 @@ def render(asof=None, days=25):
                  x=0.13, ha="left", y=0.965, fontweight="bold")
     fig.text(0.13, 0.935,
              f"AI链合计 {total['count']}（{total['phase']}） · " + _core_txt
-             + f" ｜ 数据：韭研公社涨停复盘（{len(dates)}个交易日；空白=未录入）",
+             + f" ｜ 数据：概念公社涨停复盘（{len(dates)}个交易日；空白=未录入）",
              fontsize=9.6, color=INK2, ha="left")
     fig.text(0.13, 0.035,
              "阶段口径：首现=10日内首次出现；扩散=大主题已活跃后出现的中等新分支；"

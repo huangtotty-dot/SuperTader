@@ -6,7 +6,7 @@ owner 的问题：
 
 本脚本只做**度量**，不改任何生产逻辑。口径：
   · 样本 = `stock_hunter/history/daily_summary.json` 的逐日板块排名（≥16 个板块的日子）
-  · 板块成分 = 当前 watchlist 的「韭研分类」（⚠️ 用今天的成分回溯，见 doc 的局限）
+  · 板块成分 = 当前 watchlist 的「概念分类」（⚠️ 用今天的成分回溯，见 doc 的局限）
   · 前向收益 = 板块内**等权**个股 close(t+H)/close(t)-1，H ∈ {1,3,5} 交易日
   · **超额** = 减去当日所有板块的横截面均值（去掉大盘 beta，只留"选哪个板块"的差异）
   · 统计 = 每个交易日的横截面 Spearman IC → 对日序列求均值与 t；分桶看均值与 t
@@ -39,13 +39,13 @@ def trading_days():
     return [str(r["date"])[:10] for r in rows]
 
 
-# ---------- 2) 板块 → 成分股（与猎手同源：韭研分类） ----------
+# ---------- 2) 板块 → 成分股（与猎手同源：概念分类） ----------
 def board_members():
     from modules.data_loader import DataLoader
     df = DataLoader().load_watchlist()
     out = {}
     for _, r in df.iterrows():
-        b = str(r.get("韭研分类") or "").strip()
+        b = str(r.get("概念分类") or "").strip()
         c = str(r.get("代码") or "").strip()
         if b and c.isdigit():
             out.setdefault(b, set()).add(c)

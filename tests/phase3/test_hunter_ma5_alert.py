@@ -63,7 +63,7 @@ class TestHunterHotPool(unittest.TestCase):
                                 {"板块": "冷门X", "平均分": 0.1}]},
                   open(self.h._SUMMARY_FP, "w", encoding="utf-8"), ensure_ascii=False)
         json.dump({"600001": {"name": "电力股", "sector": "电力"},
-                   "600002": {"name": "医药股", "jiuyan_concept1": "医药"},
+                   "600002": {"name": "医药股", "concept1": "医药"},
                    "600003": {"name": "无关股", "sector": "钢铁"}},
                   open(self.h._WL_FP, "w", encoding="utf-8"), ensure_ascii=False)
 

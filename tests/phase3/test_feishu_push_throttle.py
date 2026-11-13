@@ -28,7 +28,7 @@ if str(_ROOT) not in sys.path:
 
 import config  # noqa: E402
 from core import hunter_ma5_alert as ha  # noqa: E402
-from core import jiuyan_tags as core_label  # noqa: E402
+from core import concept_tags as core_label  # noqa: E402
 import core.price_alert_watch as paw  # noqa: E402  # 2026-11-13：突破预警 watcher 已抽离 main.py
 
 

@@ -82,9 +82,9 @@ class TestUp30Column(unittest.TestCase):
         # 体检
         self.assertEqual(_cols("<th>趋势(30m)</th>"), 14)
         self.assertIn('colspan="14" class="cell-dim">${esc(s.code)}', JS, "体检错误行 colspan 要跟着 14")
-        # 猎手
-        self.assertEqual(_cols('<tbody class="h-sector-group"'), 18)
-        self.assertIn('class="h-subgroup-head"><td colspan="18"', JS, "猎手子分组行 colspan 要跟着 18")
+        # 猎手（2026-11 起列数收敛到 14：判定/得分/通过X/3/日线阶段/价/标签/站上5日/up30/bias5/dev365…）
+        self.assertEqual(_cols('<tbody class="h-sector-group"'), 14)
+        self.assertIn('class="h-subgroup-head"><td colspan="14"', JS, "猎手子分组行 colspan 要跟着 14")
 
     def test_是描述列不是买卖信号(self):
         i = JS.index("function up30Tip")

@@ -7,7 +7,7 @@
 
 覆盖：
   A. 返回 {code, name}，只认 6 位数字码；
-  B. 缺 name 时用韭研名兜底；
+  B. 缺 name 时用概念名兜底；
   C. 档不存在 → 空列表（不抛）；
   D. 毫秒级（不触发任何计算/网络）。
 
@@ -57,7 +57,7 @@ class TestPoolMembers(unittest.TestCase):
 
     def test_name_fallback_and_bad_codes(self):
         self._write(gui.Api._SHELTER_FP, {
-            "600000": {},                                  # 无 name ⇒ 韭研名/代码兜底
+            "600000": {},                                  # 无 name ⇒ 概念名/代码兜底
             "ABC": {"name": "x"},                          # 非 6 位 ⇒ 丢
             "12345": {"name": "y"},                        # 5 位 ⇒ 丢
         })

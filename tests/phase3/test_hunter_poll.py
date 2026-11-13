@@ -151,6 +151,10 @@ class TestRoundHeartbeat(unittest.TestCase):
         HP._DEDUP_FP = os.path.join(self._tmp.name, "alerts.json")
         self._orig_send = config.send_feishu_payload
         self._orig_poll = HP.poll_once
+        # 2026-11-10 心跳改成可配置（feishu.notify_on_hunter_poll_heartbeat，默认关）。
+        # 本类专测心跳**内容/每轮恰好一条**语义 ⇒ 钉成开；开关本身另属配置层。
+        self._orig_hb = HP._heartbeat_enabled
+        HP._heartbeat_enabled = lambda: True
         self.calls = []
 
         def _spy(payload, success_log="", error_prefix="", *a, **k):
@@ -165,6 +169,7 @@ class TestRoundHeartbeat(unittest.TestCase):
         HP._DEDUP_FP = self._orig_fp
         config.send_feishu_payload = self._orig_send
         HP.poll_once = self._orig_poll
+        HP._heartbeat_enabled = self._orig_hb
         self._tmp.cleanup()
 
     @staticmethod
@@ -244,7 +249,7 @@ class TestHunterPollChecks(unittest.TestCase):
         rows = []
         for i in range(total):
             ok = i < cov_rows
-            rows.append({"代码": f"{i:06d}", "名称": f"n{i}", "韭研概念": "半导体",
+            rows.append({"代码": f"{i:06d}", "名称": f"n{i}", "概念板块": "半导体",
                          "成交额": (1e8 if ok else None), "涨跌幅": (1.0 if ok else None)})
         return pd.DataFrame(rows)
 
@@ -285,7 +290,11 @@ class TestHunterPollChecks(unittest.TestCase):
         import pandas as pd
         import core.hunter_poll as hp
         orig_ensure = hp._ensure_path
+        orig_cand = hp.bull_converged_codes
         hp._ensure_path = lambda: None
+        # 隔离 2026-11-04 候选池筛选：本测专测「stdout WARN→data_warn」，不依赖真实日线缓存
+        #（全量套件里别的测试会改写日线缓存，候选池变空 → poll_once 提前 return）。
+        hp.bull_converged_codes = lambda today=None: {"000000"}
         try:
             import stock_hunter.main as H
             orig_pd, orig_ss = H.prepare_data, H.score_stocks
@@ -303,6 +312,7 @@ class TestHunterPollChecks(unittest.TestCase):
                 H.prepare_data, H.score_stocks = orig_pd, orig_ss
         finally:
             hp._ensure_path = orig_ensure
+            hp.bull_converged_codes = orig_cand
         self.assertIn("data_warn", [a["kind"] for a in res["anomalies"]])
         self.assertIn("拉取超时", res["anomalies"][0]["msg"])
 
@@ -343,7 +353,10 @@ class TestHunterPollChecks(unittest.TestCase):
         import pandas as pd
         import core.hunter_poll as hp
         orig_ensure = hp._ensure_path
+        orig_cand = hp.bull_converged_codes
         hp._ensure_path = lambda: None
+        # 同 test_05：隔离候选池筛选，专测 logging→data_warn，不依赖真实日线缓存。
+        hp.bull_converged_codes = lambda today=None: {"000000"}
         try:
             import stock_hunter.main as H
             orig_pd, orig_ss = H.prepare_data, H.score_stocks
@@ -362,6 +375,7 @@ class TestHunterPollChecks(unittest.TestCase):
                 H.prepare_data, H.score_stocks = orig_pd, orig_ss
         finally:
             hp._ensure_path = orig_ensure
+            hp.bull_converged_codes = orig_cand
         self.assertIn("data_warn", [a["kind"] for a in res["anomalies"]],
                       "log.warning 的失败必须进异常（否则这类失败永远不可见）")
         self.assertIn("daily_many", res["stats"].get("log_warns", [""])[0])

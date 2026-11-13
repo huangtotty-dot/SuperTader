@@ -77,7 +77,7 @@ def _maybe_record_index_regime_eod(now: datetime) -> None:
             push_index_regime_context(ctx)                 # 更新 INDEX_REGIME_CONTEXT / SESSION_CONTEXT
         except Exception as e:
             log.warning(f"⚠️ push_index_regime_context 异常: {str(e)[:80]}")
-        # V3.0: 大盘热度×韭研TOP3 合成卡片（后台线程计算+落盘，异常自吞不阻塞主循环）
+        # V3.0: 大盘热度×概念TOP3 合成卡片（后台线程计算+落盘，异常自吞不阻塞主循环）
         # 与飞书开关解耦：关推送仍须落盘，否则复盘的情绪/板块/持仓段整段缺失
         try:
             if 'push_daily_sentiment' in globals():

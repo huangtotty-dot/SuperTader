@@ -8,10 +8,10 @@
   T2 **当日有效突破口径**（owner 2026-09-29）：昨收 ≤ 上沿 < 今价，幅度 0.3~8%。
      核心回归闸是**「陈旧突破不得再报」**：旧标签 `向上突破` 只看"当前价在箱体上沿之上"
      （无任何当日成分）⇒ 三周前突破的票每天照旧被扫出来，这正是需求 5 要改掉的。
-  T3 **池子 = watchlist 全量**：静态断言 `_jiuyan_concepts` 过滤已从 `_breakout_pool_codes`
+  T3 **池子 = watchlist 全量**：静态断言 `_concepts` 过滤已从 `_breakout_pool_codes`
      移除（原过滤把 5041 只砍到 1258 只）。
 
-铁律：**全离线**。全部用合成帧，不读 `t_io/`、不打网络、不读 `watchlist_jiuyan.json`
+铁律：**全离线**。全部用合成帧，不读 `t_io/`、不打网络、不读 `watchlist_concept.json`
 （对池子用**静态源码断言**，避免依赖会变动的本地数据文件）。
 
 运行：python tests/phase3/test_breakout_daily_breakout.py
@@ -178,7 +178,7 @@ class TestPoolAndBatching(unittest.TestCase):
         """取函数体源码，**剥掉 docstring 与注释**。
 
         不能直接在原始源码里 `assertNotIn`：本文件第一版就栽在这里——旧标识符
-        （`_jiuyan_concepts` / `load_stock_tags_batch`）恰好出现在"说明为何改掉它"的
+        （`_concepts` / `load_stock_tags_batch`）恰好出现在"说明为何改掉它"的
         docstring 里，于是断言把说明当成了代码。
         """
         import ast
@@ -195,7 +195,7 @@ class TestPoolAndBatching(unittest.TestCase):
     def test_池子已去掉概念过滤(self):
         body = self._body("_breakout_pool_codes")
         self.assertTrue(body, "_breakout_pool_codes 缺失")
-        self.assertNotIn("_jiuyan_concepts", body,
+        self.assertNotIn("_concepts", body,
                          "池子仍在按概念过滤 ⇒ 5041 只会被砍到 1258 只，与需求不符")
         self.assertIn("isdigit", body)
 

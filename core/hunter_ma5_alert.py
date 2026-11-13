@@ -3,7 +3,7 @@
 
 范围（owner 2026-10-09）：仅**猎手热门板块**内个股（默认前 5 个板块的成分股并集）。
   · 热门板块 = stock_hunter/history/daily_summary.json 最新日排名（按 平均分）前 N；
-  · 成分股   = watchlist_jiuyan.json 按 sector/韭研概念 匹配（与 gui.load_hunter_history 同款）。
+  · 成分股   = watchlist_concept.json 按 sector/概念板块 匹配（与 gui.load_hunter_history 同款）。
 判定：core/ma_reclaim.reclaim5（昨收<昨MA5 且 今价>今MA5）；取数走 daily_many 批量帧。
 去重：每只每日一次（t_io/state/hunter_ma5_pushed.json）。纯通知，不触发交易。
 """
@@ -34,7 +34,7 @@ def pool_stocks() -> dict:
     except Exception as e:
         log.warning(f"⚠️ [MA5实时] 读异常监控池失败（本轮按空池处理）: {type(e).__name__}: {str(e)[:100]}")
         return {}
-_WL_FP = os.path.join(_HUNTER_DIR, "watchlist_jiuyan.json")
+_WL_FP = os.path.join(_HUNTER_DIR, "watchlist_concept.json")
 _DEDUP_FP = os.path.join(_BASE, "t_io", "state", "hunter_ma5_pushed.json")
 _BELOW_FP = os.path.join(_BASE, "t_io", "state", "hunter_ma5_below.json")
 _TOPN_DEFAULT = 5
@@ -48,13 +48,13 @@ def _c(code) -> str:
     return str(code).split("_")[0]
 
 
-def _jiuyan_concepts(info: dict) -> str:
+def _concept_concepts(info: dict) -> str:
     out = []
     for i in range(1, 10):
-        v = info.get(f"jiuyan_concept{i}")
+        v = info.get(f"concept{i}")
         if v:
             out.append(str(v))
-    v = info.get("jiuyan_concept")
+    v = info.get("concept")
     if v:
         out.append(str(v))
     return "|".join(out)
@@ -86,7 +86,7 @@ def hot_boards(top_n: int = None, date: str = None) -> list:
 
 def hot_board_stocks(top_n: int = None, date: str = None) -> dict:
     """热门板块内个股并集 → {code: name}。板块空/无匹配返回 {}。
-    匹配口径与 gui.load_hunter_history 一致（sector 字段 + 韭研概念，双向子串）。"""
+    匹配口径与 gui.load_hunter_history 一致（sector 字段 + 概念板块，双向子串）。"""
     tops = hot_boards(top_n, date)
     if not tops:
         return {}
@@ -99,7 +99,7 @@ def hot_board_stocks(top_n: int = None, date: str = None) -> dict:
     for code, info in (jy.items() if isinstance(jy, dict) else []):
         if not isinstance(info, dict) or not str(code).isdigit():
             continue
-        concepts = _jiuyan_concepts(info) or str(info.get("概念", ""))
+        concepts = _concept_concepts(info) or str(info.get("概念", ""))
         sector_field = str(info.get("sector", ""))
         all_text = (sector_field + "_" + concepts).replace("|", "_").replace("/", "_")
         parts = [x.strip() for x in all_text.split("_") if x.strip() and len(x.strip()) >= 2]

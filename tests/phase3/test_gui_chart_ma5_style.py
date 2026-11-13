@@ -46,7 +46,9 @@ class TestNowPriceTagOutsideGrid(unittest.TestCase):
     """
 
     def test_grid_reserves_right_margin(self):
-        self.assertIn("left: 60, right: 58, top: 50", _JS)
+        # 右侧留白从固定 58 改成 `_vpRight`（量价分布开启时 112、否则 58），58 的底仍保留
+        self.assertIn("const _vpRight = _vp ? 112 : 58;", _JS)
+        self.assertIn("left: 60, right: _vpRight, top: 50", _JS)
 
     def test_markline_label_is_off(self):
         # 现价那条线只留虚线，标签交给 graphic
@@ -100,16 +102,18 @@ class TestChartMA5Style(unittest.TestCase):
     def test_ma5_special_marker_is_gone(self):
         self.assertNotIn("MA5_COLOR", _JS)
         self.assertNotIn("_isMA5", _JS)
-        self.assertNotIn("shadowBlur: 6", _JS)
         # 只查 maSeries 那一段 —— 别的图（板块星轨等）本来就在用 endLabel
         _body = _JS.split("const maSeries = period.ma.map", 1)[1].split("});", 1)[0]
         self.assertNotIn("endLabel", _body)
+        # 金线微光只查主图 maSeries 段；全文件另有一处 shadowBlur: 6 是多窗口日线参考线（2026-11-04）
+        self.assertNotIn("shadowBlur", _body)
 
     def test_ma5_still_rendered_as_normal_ma(self):
         # 均线本身还在（别把整条 MA5 也删了）
         self.assertIn("const maSeries = period.ma.map((maArr, i) => {", _JS)
-        self.assertIn("const _color = MA_COLORS[i];", _JS)
-        self.assertIn("lineStyle: { width: 1, color: _color },", _JS)
+        # 2026-11：加第 7 条 MA365 年线（_isYear）后颜色/线型改三元，MA5 仍走 1px 细线分支
+        self.assertIn("const _color = _isYear ? MA365_COLOR : MA_COLORS[i];", _JS)
+        self.assertIn("{ width: 1, color: _color }", _JS)
 
     def test_legend_color_matches_line(self):
         self.assertIn("itemStyle: { color: _color }", _JS)

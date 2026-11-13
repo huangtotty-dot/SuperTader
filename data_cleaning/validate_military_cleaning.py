@@ -8,9 +8,9 @@ from openpyxl import load_workbook
 
 ROOT = Path(r"E:\superTrader")
 DC = ROOT / "data_cleaning"
-SRC = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
-BAK = ROOT / "stock_hunter" / "watchlist_jiuyan.json.bak_20261027_military_deep"
-PREVIEW = DC / "watchlist_jiuyan_military_cleaned_20261027.json"
+SRC = ROOT / "stock_hunter" / "watchlist_concept.json"
+BAK = ROOT / "stock_hunter" / "watchlist_concept.json.bak_20261027_military_deep"
+PREVIEW = DC / "watchlist_concept_military_cleaned_20261027.json"
 XLSX = DC / "军工概念深度清洗_20261027.xlsx"
 AUDIT = DC / "military_audit_20261027.json"
 CURRENT = DC / "military_current_20261027.json"
@@ -43,8 +43,8 @@ def active_pairs(rec):
     out = []
     for i in list(range(1, 10)) + [0]:
         suffix = "" if i == 0 else str(i)
-        for cat in toks(rec.get("jiuyan_category" + suffix)):
-            for con in toks(rec.get("jiuyan_concept" + suffix)):
+        for cat in toks(rec.get("category" + suffix)):
+            for con in toks(rec.get("concept" + suffix)):
                 if (cat, con) not in out:
                     out.append((cat, con))
     return out
@@ -82,13 +82,13 @@ for row in audit:
     assert got == expected, (code, got, expected)
     assert not old_concepts.intersection(c for _, c in got)
     for _, concept in expected:
-        assert rec["jiuyan_concept_reason"].get(concept) == row["reason"]
-        assert rec["jiuyan_concept_desc"].get(concept)
+        assert rec["concept_reason"].get(concept) == row["reason"]
+        assert rec["concept_desc"].get(concept)
     before_other = [pair for pair in active_pairs(backup[code]) if pair[0] != "军工"]
     after_other = [pair for pair in pairs if pair[0] != "军工"]
     assert before_other == after_other, (code, before_other, after_other)
     for key in backup[code]:
-        if key.endswith("_verdicts") and key != "jiuyan_military_verdicts":
+        if key.endswith("_verdicts") and key != "military_verdicts":
             assert rec.get(key) == backup[code].get(key), (code, key)
 
 for code in ["002111", "300589", "688070"]:
@@ -99,8 +99,8 @@ assert next(x for x in audit if x["code"] == "601606")["evidence_url"].endswith(
 loader = WatchlistLoader()
 after_df = loader.load(str(SRC))
 before_df = loader.load(str(BAK))
-after_counts = Counter(after_df["韭研分类"])
-before_counts = Counter(before_df["韭研分类"])
+after_counts = Counter(after_df["概念分类"])
+before_counts = Counter(before_df["概念分类"])
 category_differences = {c: [before_counts[c], after_counts[c]] for c in set(before_counts) | set(after_counts) if before_counts[c] != after_counts[c]}
 assert category_differences["军工"] == [97, 89]
 assert set(category_differences) == {"军工", ""}, category_differences
@@ -108,7 +108,7 @@ for category in ["云计算", "网络安全", "AI应用", "物理AI", "数据要
     assert before_counts[category] == after_counts[category]
 assert after_counts["云计算"] == 37 and after_counts["网络安全"] == 38
 assert after_counts["AI应用"] == 84 and after_counts["物理AI"] == 54 and after_counts["数据要素"] == 77
-assert len(after_df.loc[after_df["韭研分类"] == "军工", "代码"]) == 89
+assert len(after_df.loc[after_df["概念分类"] == "军工", "代码"]) == 89
 loader_counts = {c: after_counts[c] for c in ["军工", "云计算", "网络安全", "AI应用", "物理AI", "数据要素"]}
 
 wb = load_workbook(XLSX, data_only=False)

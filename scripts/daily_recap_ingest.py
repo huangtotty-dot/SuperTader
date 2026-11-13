@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""每日韭研涨停复盘 → 广度入库 + 猎手池漏票对账（2026-10-24）
+"""每日概念涨停复盘 → 广度入库 + 猎手池漏票对账（2026-10-24）
 
 用法：
   # 1) 只入库 + 对账（推荐先跑这个）
@@ -14,7 +14,7 @@
 输入 JSON：
 {
   "date": "2026-10-24",
-  "source": "韭研公社全天涨停复盘简图",
+  "source": "概念公社全天涨停复盘简图",
   "sections": {
     "AI应用": [
       {"code": "002474", "name": "榕基软件", "board": 1},
@@ -30,7 +30,7 @@
 输出：
   · stock_hunter/data/sector_breadth.json         每日广度（cumulative）
   · stock_hunter/data/recap_reconcile_{date}.md   对账报告（漏票/错标候选）
-  · --apply 时改 stock_hunter/watchlist_jiuyan.json（改前备份 backup/）
+  · --apply 时改 stock_hunter/watchlist_concept.json（改前备份 backup/）
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ sys.path.insert(0, str(BASE / "stock_hunter"))
 
 from modules import sector_phase as sp  # noqa: E402
 
-WL_FP = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+WL_FP = BASE / "stock_hunter" / "watchlist_concept.json"
 STORE_FP = sp.FP
 BACKUP_DIR = BASE / "backup"
 DATA_DIR = BASE / "stock_hunter" / "data"
@@ -69,26 +69,26 @@ def _norm(x):
 def get_pairs(e):
     out = []
     for k in range(1, 10):
-        c = (e.get(f"jiuyan_category{k}") or "").strip()
+        c = (e.get(f"category{k}") or "").strip()
         if c:
-            out.append((c, _norm(e.get(f"jiuyan_concept{k}"))))
+            out.append((c, _norm(e.get(f"concept{k}"))))
     if out:
         return out
-    lc = (e.get("jiuyan_category") or "").strip()
-    lp = _norm(e.get("jiuyan_concept"))
+    lc = (e.get("category") or "").strip()
+    lp = _norm(e.get("concept"))
     return [(t.strip(), lp) for t in lc.split("|") if t.strip()] if lc else []
 
 
 def put_pairs(e, pairs):
     for k in range(1, 10):
-        e.pop(f"jiuyan_category{k}", None)
-        e.pop(f"jiuyan_concept{k}", None)
+        e.pop(f"category{k}", None)
+        e.pop(f"concept{k}", None)
     for k, (c, p) in enumerate(pairs, start=1):
-        e[f"jiuyan_category{k}"] = c
+        e[f"category{k}"] = c
         if p:
-            e[f"jiuyan_concept{k}"] = p
-    e["jiuyan_category"] = "|".join(c for c, _ in pairs)
-    e["jiuyan_concept"] = "|".join(p for _, p in pairs if p)
+            e[f"concept{k}"] = p
+    e["category"] = "|".join(c for c, _ in pairs)
+    e["concept"] = "|".join(p for _, p in pairs if p)
     e["updated_at"] = NOW
 
 
@@ -174,7 +174,7 @@ def reconcile(date: str, sections: dict, wl: dict, apply: bool = False) -> dict:
             pairs = get_pairs(e)
             if not pairs:
                 issues.append({"section": sec, "code": code, "name": nm, "board": board,
-                               "kind": "不在猎手池（无韭研概念）", "detail": ""})
+                               "kind": "不在猎手池（无概念板块）", "detail": ""})
                 if apply and target_cat:
                     put_pairs(e, [(target_cat, target_con)])
                     applied.append((code, nm, "新建", target_cat, target_con))
@@ -202,7 +202,7 @@ def reconcile(date: str, sections: dict, wl: dict, apply: bool = False) -> dict:
 
 def write_report(rep: dict, snap: dict) -> Path:
     p = DATA_DIR / f"recap_reconcile_{rep['date']}.md"
-    lines = [f"# 韭研复盘对账 {rep['date']}", "",
+    lines = [f"# 概念复盘对账 {rep['date']}", "",
              f"生成：{NOW}", ""]
     if rep["short"]:
         lines += ["## 录入提示", ""] + [f"- {x}" for x in rep["short"]] + [""]
@@ -218,7 +218,7 @@ def write_report(rep: dict, snap: dict) -> Path:
         lines += ["",
                   "> 注：复盘板块「AI应用」包含 AI安全 子类；安全类个股（如绿盟科技/启明星辰）"
                   "归「网络安全/AI安全」是对的，不需要补 AI应用。"
-                  "「板块缺失」只是提示该票的韭研归类与复盘板块名不同，不等于错标；"
+                  "「板块缺失」只是提示该票的概念归类与复盘板块名不同，不等于错标；"
                   "「不在猎手池」才是真正的漏票候选。"]
     if rep["applied"]:
         lines += ["", "## 已自动补板块（--apply）", "",
@@ -259,7 +259,7 @@ def main():
 
     wl = json.loads(WL_FP.read_text(encoding="utf-8"))
     if args.apply and not args.dry_run:
-        shutil.copy2(WL_FP, BACKUP_DIR / f"watchlist_jiuyan_before_recap_{date}.json")
+        shutil.copy2(WL_FP, BACKUP_DIR / f"watchlist_concept_before_recap_{date}.json")
 
     store = ingest(date, sections, raw.get("source", ""), dry_run=args.dry_run)
     rep = reconcile(date, sections, wl, apply=(args.apply and not args.dry_run))

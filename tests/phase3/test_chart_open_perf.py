@@ -34,8 +34,8 @@ class TestChartOpenPerf(unittest.TestCase):
         """分钟 Tab 只抓当前周期，不再为一个 Tab 抓三档。"""
         self.assertIn("want_min_period", _PY)
         self.assertIn("_need = period if period in", _PY)
-        self.assertIn('apiCall("load_stock_chart", stockChartCode, stockChartVersion,', _JS)
-        self.assertIn("_wantMinutes(), stockChartPeriod);", _JS)
+        self.assertIn('apiCall("load_stock_chart", stockChartCode,', _JS)
+        self.assertIn("_wantMinutes(), stockChartPeriod, !!force);", _JS)
 
     def test_daily_view_strips_minute_series(self):
         """日/周/月视图不把三档分钟序列传给前端（payload 体积 ≈ -2/3）。"""

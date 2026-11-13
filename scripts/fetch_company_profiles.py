@@ -2,7 +2,7 @@
 """预取公司简介（东财 F10「核心题材」）→ `t_io/cache/company_profile.json`。
 
 owner 2026-10-17：「点开K线图个股的业务简介太过于简单，请通过查询提前补充」。
-本地 `watchlist_jiuyan.json` 的 `business_summary` 只有一句"主营专用设备制造业"
+本地 `watchlist_concept.json` 的 `business_summary` 只有一句"主营专用设备制造业"
 （旧东财 F10 被风控 ⇒ 长期没更新），K线弹窗只能显示那一句。
 
 数据源（实测可用）：
@@ -15,7 +15,7 @@ owner 2026-10-17：「点开K线图个股的业务简介太过于简单，请通
 
 用法：
     python -I scripts/fetch_company_profiles.py            # 持仓 + 股池
-    python -I scripts/fetch_company_profiles.py --all      # 全韭研池（慢，数百次请求）
+    python -I scripts/fetch_company_profiles.py --all      # 全概念池（慢，数百次请求）
     python -I scripts/fetch_company_profiles.py --force    # 忽略 7 天新鲜度，强制重抓
 """
 import argparse
@@ -50,19 +50,19 @@ def target_codes(all_pool=False):
     wl = _load(os.path.join(ROOT, "t_io/state/watchlist_buy.json"), {}) or {}
     codes |= {str(c).split("_")[0] for c in (wl.get("stocks") or {})}
     if all_pool:
-        jy = _load(os.path.join(ROOT, "stock_hunter/watchlist_jiuyan.json"), {}) or {}
+        jy = _load(os.path.join(ROOT, "stock_hunter/watchlist_concept.json"), {}) or {}
         for c, v in jy.items():
             if not isinstance(v, dict):
                 continue
-            if (str(v.get("jiuyan_category") or "").strip()
-                    or any(str(v.get("jiuyan_category%d" % i) or "").strip() for i in range(1, 10))):
+            if (str(v.get("category") or "").strip()
+                    or any(str(v.get("category%d" % i) or "").strip() for i in range(1, 10))):
                 codes.add(str(c).split("_")[0])
     return sorted(c for c in codes if len(c) == 6 and c.isdigit())
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--all", action="store_true", help="含全韭研池（慢）")
+    ap.add_argument("--all", action="store_true", help="含全概念池（慢）")
     ap.add_argument("--force", action="store_true", help="忽略 7 天新鲜度")
     args = ap.parse_args()
 

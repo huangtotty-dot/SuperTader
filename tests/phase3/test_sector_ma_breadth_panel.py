@@ -4,7 +4,7 @@
 和站上20日线的百分比」）。
 
 契约要点：
-  · 板块 = 韭研主板块（`_jiuyan_board()`），与 daily_summary / 星空图板块名同源；
+  · 板块 = 概念主板块（`_concept_board()`），与 daily_summary / 星空图板块名同源；
   · 网格顺序 = 该日板块排名（与星空图右端直标一致，不另外维护一套排序）；
   · `end_date` 与星空图一样"只取 ≤ 该日"，窗口默认 10 天；
   · 前端一张 ECharts 里多 grid，**共享 0~100 的 y 尺度**（否则小图各自缩放不可对读）。
@@ -77,7 +77,7 @@ class TestPayload(unittest.TestCase):
 
 class TestMapping(unittest.TestCase):
     def test_every_summary_sector_has_board_codes(self):
-        """星空图里的板块名必须都能在韭研主板块映射里找到成分股，否则该格永远是空的。"""
+        """星空图里的板块名必须都能在概念主板块映射里找到成分股，否则该格永远是空的。"""
         import json
         try:
             d = json.loads((_ROOT / "stock_hunter" / "history" / "daily_summary.json")
@@ -88,10 +88,10 @@ class TestMapping(unittest.TestCase):
         # 当前主板块映射里没有它们属正常；但当日板块必须有成分股，否则那一格恒空。
         k = sorted(d)[-1]
         sectors = {str(r.get("板块") or "").strip() for r in (d[k] or []) if isinstance(r, dict)}
-        board = gui._jiuyan_board()
+        board = gui._concept_board()
         have = {v for v in board.values() if v}
         missing = sorted(s for s in sectors if s and s not in have)
-        self.assertFalse(missing, f"这些板块在 _jiuyan_board 里没有成分股：{missing}")
+        self.assertFalse(missing, f"这些板块在 _concept_board 里没有成分股：{missing}")
 
 
 class TestFrontend(unittest.TestCase):

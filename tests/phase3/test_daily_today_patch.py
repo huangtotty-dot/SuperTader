@@ -36,13 +36,25 @@ def _today():
     return datetime.now().strftime("%Y-%m-%d")
 
 
+class _FakeFri(datetime):
+    """把「今天」钉到周五 10:00（已开盘）：`_patch_daily_today` 周末/未开盘会短路，
+    而本文件多数用例要验证"真的覆盖"这条主路径 —— 跑在周末/盘前就会全部假绿。"""
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 11, 13, 10, 0, 0)      # 周五 10:00
+
+
+_TRADING_DAY = "2026-11-13"
+
+
 class TestPatchDailyToday:
-    def test_replaces_stale_close_with_live(self, api):
+    def test_replaces_stale_close_with_live(self, api, monkeypatch):
         """末根==今天 ⇒ 用快照的 OHLCV 覆盖那根半成品（这就是"站上10日线却显示在下方"的修复）。"""
-        live = {"date": _today(), "open": 61.73, "high": 67.98, "low": 60.61,
+        monkeypatch.setattr(gui, "datetime", _FakeFri)
+        live = {"date": _TRADING_DAY, "open": 61.73, "high": 67.98, "low": 60.61,
                 "close": 66.42, "volume": 6549107.0}
         api._today_forming_bar = lambda code, allow_network=True: live
-        out = api._patch_daily_today(_df(_today(), 61.08), "688003")
+        out = api._patch_daily_today(_df(_TRADING_DAY, 61.08), "688003")
         row = out.iloc[-1]
         assert float(row["close"]) == pytest.approx(66.42)
         assert float(row["high"]) == pytest.approx(67.98)
@@ -70,10 +82,11 @@ class TestPatchDailyToday:
         out = api._patch_daily_today(_df(_today(), 61.08), "688003")
         assert float(out.iloc[-1]["close"]) == pytest.approx(61.08)
 
-    def test_memo_avoids_repeat_snapshot(self, api):
+    def test_memo_avoids_repeat_snapshot(self, api, monkeypatch):
         """同票 20 秒内复用快照 —— 体检会逐只调本函数，不能每次都打一次网络。"""
+        monkeypatch.setattr(gui, "datetime", _FakeFri)
         calls = {"n": 0}
-        live = {"date": _today(), "open": 61.73, "high": 67.98, "low": 60.61,
+        live = {"date": _TRADING_DAY, "open": 61.73, "high": 67.98, "low": 60.61,
                 "close": 66.42, "volume": 1.0}
 
         def _snap(code, allow_network=True):
@@ -81,7 +94,7 @@ class TestPatchDailyToday:
             return live
         api._today_forming_bar = _snap
         for _ in range(3):
-            api._patch_daily_today(_df(_today(), 61.08), "688003")
+            api._patch_daily_today(_df(_TRADING_DAY, 61.08), "688003")
         assert calls["n"] == 1
 
     def test_weekend_short_circuits(self, api, monkeypatch):

@@ -71,9 +71,9 @@ class TestLinkedStocks(unittest.TestCase):
 
     def test_name_resolution(self):
         self._build()
-        # 名称走韭研名表：老接口 _jiuyan_names 里有"华工科技"这类，这里用注入的方式验证分支
-        old = gui._jiuyan_names
-        gui._jiuyan_names = lambda: {"688001": "甲科技", "688002": "乙科技", "688009": "甲科技"}
+        # 名称走概念名表：老接口 _concept_names 里有"华工科技"这类，这里用注入的方式验证分支
+        old = gui._concept_names
+        gui._concept_names = lambda: {"688001": "甲科技", "688002": "乙科技", "688009": "甲科技"}
         try:
             d = self.api.load_linked_stocks("乙科技", 60)
             self.assertTrue(d["available"])
@@ -85,7 +85,7 @@ class TestLinkedStocks(unittest.TestCase):
             d3 = self.api.load_linked_stocks("不存在的名字", 60)
             self.assertFalse(d3["available"])
         finally:
-            gui._jiuyan_names = old
+            gui._concept_names = old
 
     def test_missing_matrix_is_warming(self):
         gui.Api._LINK_BUILD = {"running": False, "at": 0.0}

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-数据加载模块 —— 以 watchlist_jiuyan.json 为唯一数据源
-职责：从脚本目录下的 watchlist_jiuyan.json 读取，生成概念总排名、详细个股排名、板块明细
+数据加载模块 —— 以 watchlist_concept.json 为唯一数据源
+职责：从脚本目录下的 watchlist_concept.json 读取，生成概念总排名、详细个股排名、板块明细
 扩展接口：继承 DataLoaderBase 可接入新数据源（数据库、API 等）
 """
 import os
@@ -31,8 +31,8 @@ class DataLoaderBase(ABC):
 
 
 class WatchlistLoader(DataLoaderBase):
-    """watchlist_jiuyan.json 专用加载器
-    支持多 category/concept 对：jiuyan_category1/concept1, jiuyan_category2/concept2, ...
+    """watchlist_concept.json 专用加载器
+    支持多 category/concept 对：category1/concept1, category2/concept2, ...
     每个 category/concept 对生成一行，确保统计时精确对应
 
     category_merge：{子板块: 父板块} 映射。命中的板块名会被改写为父板块，
@@ -62,9 +62,9 @@ class WatchlistLoader(DataLoaderBase):
                     return ",".join(str(v) for v in val)
                 return str(val)
 
-            # 概念字段规范化为 "|" 连接串（2026-10-19：医药板块整合后 jiuyan_concept
+            # 概念字段规范化为 "|" 连接串（2026-10-19：医药板块整合后 concept
             # 允许 list 多标签；直接 str(list) 会把 Python repr（"['临床CRO', …]"）
-            # 漏进猎手池「韭研概念」列和 GUI 面板，显示成乱串）。
+            # 漏进猎手池「概念板块」列和 GUI 面板，显示成乱串）。
             def _concept_str(val):
                 if val is None:
                     return ""
@@ -78,7 +78,6 @@ class WatchlistLoader(DataLoaderBase):
                 "名称": _safe_str(info.get("name", "")),
                 "板块": _safe_str(info.get("sector", "")),
                 "主营业务": _safe_str(info.get("business_summary", "")),
-                "概念板块": _safe_str(info.get("concept_boards", [])),
                 "行业板块": _safe_str(info.get("industry_boards", [])),
                 "来源": _safe_str(info.get("primary_source", "")),
                 "更新时间": _safe_str(info.get("updated_at", "")),
@@ -88,8 +87,8 @@ class WatchlistLoader(DataLoaderBase):
             pairs = []
             has_multi_fields = False
             for i in range(1, 10):  # 最多支持 9 个 category
-                cat_key = f"jiuyan_category{i}"
-                concept_key = f"jiuyan_concept{i}"
+                cat_key = f"category{i}"
+                concept_key = f"concept{i}"
                 cat = info.get(cat_key, "")
                 concept = info.get(concept_key, "")
                 if cat and str(cat).strip():
@@ -103,9 +102,9 @@ class WatchlistLoader(DataLoaderBase):
                     has_multi_fields = True
 
             if not pairs:
-                # 回退到旧字段：单个 jiuyan_category / jiuyan_concept
-                cat = info.get("jiuyan_category", "")
-                concept = info.get("jiuyan_concept", "")
+                # 回退到旧字段：单个 category / concept
+                cat = info.get("category", "")
+                concept = info.get("concept", "")
                 if cat and str(cat).strip():
                     # 按 | 拆分 category（兼容旧数据）
                     cats = [c.strip() for c in str(cat).split("|") if c.strip()]
@@ -116,27 +115,27 @@ class WatchlistLoader(DataLoaderBase):
             if pairs:
                 for cat, concept in pairs:
                     record = base_record.copy()
-                    record["韭研分类"], record["原分类"] = self._apply_merge(cat)
-                    record["韭研概念"] = concept
+                    record["概念分类"], record["原分类"] = self._apply_merge(cat)
+                    record["概念板块"] = concept
                     records.append(record)
             else:
-                # 回退到旧字段：单个 jiuyan_category / jiuyan_concept
-                cat = info.get("jiuyan_category", "")
-                concept = info.get("jiuyan_concept", "")
+                # 回退到旧字段：单个 category / concept
+                cat = info.get("category", "")
+                concept = info.get("concept", "")
                 if cat and str(cat).strip():
                     # 按 | 拆分 category（兼容旧数据）
                     cats = [c.strip() for c in str(cat).split("|") if c.strip()]
                     for c in cats:
                         record = base_record.copy()
-                        record["韭研分类"], record["原分类"] = self._apply_merge(c)
-                        record["韭研概念"] = _concept_str(concept)
+                        record["概念分类"], record["原分类"] = self._apply_merge(c)
+                        record["概念板块"] = _concept_str(concept)
                         records.append(record)
                 else:
-                    # 无韭研概念，保留一行（空值）
+                    # 无概念板块，保留一行（空值）
                     record = base_record.copy()
-                    record["韭研分类"] = ""
+                    record["概念分类"] = ""
                     record["原分类"] = ""
-                    record["韭研概念"] = ""
+                    record["概念板块"] = ""
                     records.append(record)
 
         return pd.DataFrame(records)
@@ -161,7 +160,7 @@ def load_config() -> dict:
 
 class DataLoader:
     """
-    统一数据加载入口 —— 以 watchlist_jiuyan.json 为唯一数据源
+    统一数据加载入口 —— 以 watchlist_concept.json 为唯一数据源
     """
 
     def __init__(self, data_dir: str = None, config: dict = None):
@@ -170,7 +169,7 @@ class DataLoader:
         self.config = config
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # = stock_hunter/
         self.data_dir = data_dir or config.get("base_dir", ".") + "/" + config.get("data_dir", "data")
-        self._watchlist_path = os.path.join(self.base_dir, "watchlist_jiuyan.json")
+        self._watchlist_path = os.path.join(self.base_dir, "watchlist_concept.json")
         self._watchlist_df: Optional[pd.DataFrame] = None
 
     def _load_watchlist(self) -> pd.DataFrame:
@@ -180,16 +179,16 @@ class DataLoader:
 
         if not os.path.exists(self._watchlist_path):
             raise FileNotFoundError(
-                f"watchlist_jiuyan.json 未在脚本目录找到: {self._watchlist_path}\n"
+                f"watchlist_concept.json 未在脚本目录找到: {self._watchlist_path}\n"
                 f"请确保文件已拷贝到脚本同级目录。"
             )
 
         loader = WatchlistLoader(category_merge=self.config.get("category_merge"))
         self._watchlist_df = loader.load(self._watchlist_path)
-        print(f"  [OK] watchlist_jiuyan.json 加载完成: {len(self._watchlist_df)} 只标的")
-        # 统计有韭研概念的标的数量
-        has_concept = self._watchlist_df["韭研概念"].str.strip().ne("").sum()
-        print(f"     含韭研概念标签: {has_concept} 只（进入打分池）")
+        print(f"  [OK] watchlist_concept.json 加载完成: {len(self._watchlist_df)} 只标的")
+        # 统计有概念板块的标的数量
+        has_concept = self._watchlist_df["概念板块"].str.strip().ne("").sum()
+        print(f"     含概念板块标签: {has_concept} 只（进入打分池）")
         return self._watchlist_df
 
     def set_watchlist(self, df: pd.DataFrame):
@@ -218,35 +217,35 @@ class DataLoader:
     def load_concept_summary(self) -> pd.DataFrame:
         """
         生成 Sheet 1: 概念总排名
-        按 jiuyan_category 分组统计，使用总得分计算平均分
+        按 category 分组统计，使用总得分计算平均分
         注意：WatchlistLoader 已将多 category 股票拆分为多行，每行对应一个精确的 category/concept 对
         """
         df = self._load_watchlist()
-        df_pool = df[df["韭研概念"].str.strip().ne("")].copy()
+        df_pool = df[df["概念板块"].str.strip().ne("")].copy()
 
         if df_pool.empty:
             return pd.DataFrame()
 
         summary_rows = []
         # 2026-11-08：二级细分拆解（星轨图「板块贡献度」用）。口径与 sub_concepts 一致：
-        # 合并板块用「原分类」当细分子概念，其余按韭研概念 | 拆分；一只票可同时计入多个细分
+        # 合并板块用「原分类」当细分子概念，其余按概念板块 | 拆分；一只票可同时计入多个细分
         #（所以各细分之和 ≥ 板块股票数）。落在 `summary_df.attrs["sub_details"]`，
         # 不新增列 ⇒ 不影响 Excel/前端现有表结构。
         sub_details = {}
-        # 直接按韭研分类分组（已精确拆分，无需 explode）
-        for category in sorted(df_pool["韭研分类"].unique()):
+        # 直接按概念分类分组（已精确拆分，无需 explode）
+        for category in sorted(df_pool["概念分类"].unique()):
             if not category:
                 continue
-            cat_df = df_pool[df_pool["韭研分类"] == category].copy()
+            cat_df = df_pool[df_pool["概念分类"] == category].copy()
             # 收集该分类下的细分概念（去重）。
-            # 合并板块（医药）用「原分类」当子概念（创新药/中药）；其余沿用韭研概念细标签。
+            # 合并板块（医药）用「原分类」当子概念（创新药/中药）；其余沿用概念板块细标签。
             sub_concepts = set()
             for _, _r in cat_df.iterrows():
                 _orig = str(_r.get("原分类", "") or "").strip()
                 if _orig:
                     sub_concepts.add(_orig)
                     continue
-                for c in str(_r.get("韭研概念", "") or "").split("|"):
+                for c in str(_r.get("概念板块", "") or "").split("|"):
                     c = c.strip()
                     if c:
                         sub_concepts.add(c)
@@ -259,7 +258,7 @@ class DataLoader:
             for _, _r in cat_df.iterrows():
                 _orig = str(_r.get("原分类", "") or "").strip()
                 _names = ([_orig] if _orig else
-                          [c.strip() for c in str(_r.get("韭研概念", "") or "").split("|") if c.strip()])
+                          [c.strip() for c in str(_r.get("概念板块", "") or "").split("|") if c.strip()])
                 try:
                     _tot = float(_r.get("总得分", 0) or 0) if _has_score else 0.0
                 except Exception:
@@ -353,22 +352,22 @@ class DataLoader:
     def load_detail_ranking(self) -> pd.DataFrame:
         """
         生成 Sheet 2: 概念排名
-        按拆分后的韭研概念值分组（jiuyan_concept 按 | 拆分，再按 - 拆分取前半部分），按平均分排序
+        按拆分后的概念板块值分组（concept 按 | 拆分，再按 - 拆分取前半部分），按平均分排序
         列：排名 | 概念 | 股票数量 | 平均分 | 最高分 | 涨停数
         """
         df = self._load_watchlist()
-        df_pool = df[df["韭研概念"].str.strip().ne("")].copy()
+        df_pool = df[df["概念板块"].str.strip().ne("")].copy()
 
         if df_pool.empty:
             return pd.DataFrame()
 
         rows = []
         for _, row in df_pool.iterrows():
-            jiuyan_concept_raw = str(row.get("韭研概念", "")).strip()
-            if not jiuyan_concept_raw:
+            concept_concept_raw = str(row.get("概念板块", "")).strip()
+            if not concept_concept_raw:
                 continue
             # 按 | 拆分为子概念
-            sub_concepts = [c.strip() for c in jiuyan_concept_raw.split("|") if c.strip()]
+            sub_concepts = [c.strip() for c in concept_concept_raw.split("|") if c.strip()]
             # 对每个子概念按 - 拆分，取前半部分作为分类概念（如"算力芯片-GPU"→"算力芯片"）
             category_concepts = []
             for c in sub_concepts:
@@ -408,21 +407,21 @@ class DataLoader:
     def load_all_sectors(self) -> Dict[str, pd.DataFrame]:
         """
         生成各板块明细 Sheet
-        按 jiuyan_category 分组，使用精确的 jiuyan_concept 作为所属板块
+        按 category 分组，使用精确的 concept 作为所属板块
         注意：WatchlistLoader 已将多 category 股票拆分为多行，每行对应一个精确的 category/concept 对
         """
         df = self._load_watchlist()
-        df_pool = df[df["韭研概念"].str.strip().ne("")].copy()
+        df_pool = df[df["概念板块"].str.strip().ne("")].copy()
 
         if df_pool.empty:
             return {}
 
         sectors = {}
-        # 直接按韭研分类分组（已精确拆分，无需 explode）
-        for category in sorted(df_pool["韭研分类"].unique()):
+        # 直接按概念分类分组（已精确拆分，无需 explode）
+        for category in sorted(df_pool["概念分类"].unique()):
             if not category:
                 continue
-            cat_df = df_pool[df_pool["韭研分类"] == category].copy()
+            cat_df = df_pool[df_pool["概念分类"] == category].copy()
 
             # 如果有总得分数据，按总得分降序
             if "总得分" in cat_df.columns and cat_df["总得分"].notna().any():
@@ -444,17 +443,17 @@ class DataLoader:
                     limit_up = 0
                     amount = 0
 
-                # 使用拆分后的 jiuyan_concept 前半部分作为子概念分类（如"算力芯片-GPU"→"算力芯片"）
+                # 使用拆分后的 concept 前半部分作为子概念分类（如"算力芯片-GPU"→"算力芯片"）
                 # 但个股明细中保留完整概念作为解释
-                jiuyan_concept_raw = str(row.get("韭研概念", "")).strip()
-                if not jiuyan_concept_raw:
+                concept_concept_raw = str(row.get("概念板块", "")).strip()
+                if not concept_concept_raw:
                     continue
                 # 合并板块（医药）：子概念直接用「原分类」（创新药/中药），不再细分到原细标签
                 _orig = str(row.get("原分类", "") or "").strip()
                 if _orig:
                     category_concepts = [_orig]
                 else:
-                    sub_concepts = [c.strip() for c in jiuyan_concept_raw.split("|") if c.strip()]
+                    sub_concepts = [c.strip() for c in concept_concept_raw.split("|") if c.strip()]
                     category_concepts = []
                     for c in sub_concepts:
                         if "-" in c:
@@ -468,7 +467,7 @@ class DataLoader:
                         "排名": idx + 1,
                         "代码": row.get("代码", ""),
                         "名称": row.get("名称", ""),
-                        "所属板块": jiuyan_concept_raw,
+                        "所属板块": concept_concept_raw,
                         "子概念": concept,
                         "总得分": int(row.get("总得分", score)),
                         "涨跌幅": row.get("涨跌幅", 0) if pd.notna(row.get("涨跌幅")) else 0,

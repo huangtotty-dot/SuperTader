@@ -9,11 +9,11 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(r"E:\superTrader")
-SRC = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
+SRC = ROOT / "stock_hunter" / "watchlist_concept.json"
 AUDIT = ROOT / "data_cleaning" / "commercial_space_audit_20261027.json"
 CURRENT = ROOT / "data_cleaning" / "commercial_space_current_20261027.json"
-BAK = ROOT / "stock_hunter" / "watchlist_jiuyan.json.bak_20261027_commercial_space_deep"
-PREVIEW = ROOT / "data_cleaning" / "watchlist_jiuyan_commercial_space_cleaned_20261027.json"
+BAK = ROOT / "stock_hunter" / "watchlist_concept.json.bak_20261027_commercial_space_deep"
+PREVIEW = ROOT / "data_cleaning" / "watchlist_concept_commercial_space_cleaned_20261027.json"
 DATE = "2026-10-27"
 MARK = "2026-10-27 12:23:00"
 
@@ -52,7 +52,7 @@ def toks(value):
 
 
 def slot_names(i):
-    return ("jiuyan_category", "jiuyan_concept") if i == 0 else (f"jiuyan_category{i}", f"jiuyan_concept{i}")
+    return ("category", "concept") if i == 0 else (f"category{i}", f"concept{i}")
 
 
 def slots(rec):
@@ -129,7 +129,7 @@ def main():
         current_concepts = {con for _, con in active_pairs(rec)}
         old_concepts = {con for _, con in old_pairs}
 
-        reasons = rec.get("jiuyan_concept_reason") if isinstance(rec.get("jiuyan_concept_reason"), dict) else {}
+        reasons = rec.get("concept_reason") if isinstance(rec.get("concept_reason"), dict) else {}
         for key in list(reasons):
             if key in old_concepts and key not in current_concepts:
                 reasons.pop(key, None)
@@ -137,42 +137,42 @@ def main():
             for concept in pair["concepts"]:
                 reasons[concept] = row["reason"]
         if reasons:
-            rec["jiuyan_concept_reason"] = reasons
+            rec["concept_reason"] = reasons
         else:
-            rec.pop("jiuyan_concept_reason", None)
+            rec.pop("concept_reason", None)
 
-        descs = rec.get("jiuyan_concept_desc") if isinstance(rec.get("jiuyan_concept_desc"), dict) else {}
+        descs = rec.get("concept_desc") if isinstance(rec.get("concept_desc"), dict) else {}
         for key in list(descs):
             if key in old_concepts and key not in current_concepts:
                 descs.pop(key, None)
         for _, concept in new_pairs:
             descs[concept] = DESC[concept]
         if descs:
-            rec["jiuyan_concept_desc"] = descs
+            rec["concept_desc"] = descs
         else:
-            rec.pop("jiuyan_concept_desc", None)
+            rec.pop("concept_desc", None)
 
         commercial_pairs = [(cat, con) for cat, con in new_pairs if cat == "商业航天"]
         if commercial_pairs:
-            rec["jiuyan_commercial_space_verdicts"] = {"商业航天": row["verdict"]}
-            rec["jiuyan_tag_verdict"] = row["verdict"]
-            rec["jiuyan_tag_evidence"] = "text"
+            rec["commercial_space_verdicts"] = {"商业航天": row["verdict"]}
+            rec["tag_verdict"] = row["verdict"]
+            rec["tag_evidence"] = "text"
         else:
-            rec.pop("jiuyan_commercial_space_verdicts", None)
+            rec.pop("commercial_space_verdicts", None)
             if not active_pairs(rec):
-                rec.pop("jiuyan_tag_verdict", None)
-                rec.pop("jiuyan_tag_evidence", None)
-        rec["jiuyan_commercial_space_audited_at"] = DATE
-        rec["jiuyan_commercial_space_evidence"] = {
+                rec.pop("tag_verdict", None)
+                rec.pop("tag_evidence", None)
+        rec["commercial_space_audited_at"] = DATE
+        rec["commercial_space_evidence"] = {
             "title": row["evidence_title"], "date": row["evidence_date"], "url": row["evidence_url"],
             "profile_source": "iFinD ifind_get_stock_info + ifind_get_stock_business_segmentation", "profile_asof": DATE,
         }
-        rec["jiuyan_commercial_space_audit_20261027"] = {
+        rec["commercial_space_audit_20261027"] = {
             "action": row["action"], "old_pairs": old_pairs, "new_pairs": new_pairs,
             "verdict": row["verdict"], "reason": row["reason"],
         }
         if row.get("borderline_review"):
-            rec["jiuyan_commercial_space_audit_20261027"]["borderline_review"] = row["borderline_review"]
+            rec["commercial_space_audit_20261027"]["borderline_review"] = row["borderline_review"]
         rec["updated_at"] = MARK
         counts[row["action"]] += 1
 
@@ -186,8 +186,8 @@ def main():
         expected = [(p["category"], c) for p in row["pairs"] if p["category"] == "商业航天" for c in p["concepts"]]
         assert got == expected, (row["code"], got, expected)
         for cat, con in expected:
-            assert data[row["code"]]["jiuyan_concept_reason"].get(con) == row["reason"]
-            assert data[row["code"]]["jiuyan_concept_desc"].get(con) == DESC[con]
+            assert data[row["code"]]["concept_reason"].get(con) == row["reason"]
+            assert data[row["code"]]["concept_desc"].get(con) == DESC[con]
 
     PREVIEW.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     commercial_rows = [x for x in audit if any(p["category"] == "商业航天" for p in x["pairs"])]

@@ -401,7 +401,7 @@ body.mw-winmode #multiWatchWin {
 .h-top5 { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .h-top-item { font-size: 11px; background: var(--bg); border: 1px solid var(--border-soft); border-radius: 4px; padding: 2px 8px; white-space: nowrap; }
 .h-stage-badge { font-size: 12px; font-weight: 700; white-space: nowrap; }
-/* 2026-10-24 板块生命周期阶段（韭研复盘广度：首现/发酵/高潮/退潮/扩散）
+/* 2026-10-24 板块生命周期阶段（概念复盘广度：首现/发酵/高潮/退潮/扩散）
    颜色只做识别，不替代文字；判定真源在后端 modules/sector_phase.py */
 .h-stage-badge.p-first  { color: #2a78d6; }
 .h-stage-badge.p-ferment { color: #1baf7a; }

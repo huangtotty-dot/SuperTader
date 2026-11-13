@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""韭研标签的**展示用**读取（2026-11-02 owner：「飞书突破推送要注明来自韭研哪个板块」）。
+"""概念标签的**展示用**读取（2026-11-02 owner：「飞书突破推送要注明来自概念哪个板块」）。
 
-主板块选法与 `gui._jiuyan_board()` / `oversold_gap_confirm.prescreen.sym2board_map()`
-**逐码一致**（同一个 MERGES、同样剔除「北交所/央企」这类机构标签，取 `jiuyan_category{1..9}`
+主板块选法与 `gui._concept_board()` / `oversold_gap_confirm.prescreen.sym2board_map()`
+**逐码一致**（同一个 MERGES、同样剔除「北交所/央企」这类机构标签，取 `category{1..9}`
 第一个有值的）。这里是**第三份实现**，不是疏漏：
 
   · `gui` 不能 import 策略包（`execution/auto/` 只在一个部署里存在）；
   · `main.py` 不能 import `gui`（GUI 是它拉起的**子进程**，模块级副作用重）。
 
 两份既有副本由 `tests/phase3/test_market_beacon.py::TestBoardMapSingleSource` 守卫；
-本模块由 `tests/phase3/test_price_alert_jiuyan_label.py` 逐码比对 —— **改任一侧都要同步三侧**。
+本模块由 `tests/phase3/test_price_alert_concept_label.py` 逐码比对 —— **改任一侧都要同步三侧**。
 
 ⚠️ 只做展示，不参与任何判定/排序/过滤。读不到 watchlist ⇒ 返回空标签，推送照发。
 """
@@ -19,9 +19,9 @@ import json
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
-_WL_FP = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+_WL_FP = BASE / "stock_hunter" / "watchlist_concept.json"
 
-# 与 gui._jiuyan_board() / prescreen.MERGES 同步（创新药/中药 归入 医药）
+# 与 gui._concept_board() / prescreen.MERGES 同步（创新药/中药 归入 医药）
 MERGES = {"创新药": "医药", "中药": "医药"}
 # 机构/市场标签，不是题材板块
 NON_BOARD_LABELS = {"北交所", "央企"}
@@ -30,9 +30,9 @@ _CACHE = {"key": None, "map": {}}
 
 
 def _concepts(info: dict) -> list:
-    """合并 `jiuyan_concept1..9`（有编号就不再看旧字段）+ 旧 `jiuyan_concept`，去重保序。
+    """合并 `concept1..9`（有编号就不再看旧字段）+ 旧 `concept`，去重保序。
 
-    与 `gui._jiuyan_concepts` 同口径：值可以是 list/tuple，也可以是 `|` 分隔的字符串。
+    与 `gui._concepts` 同口径：值可以是 list/tuple，也可以是 `|` 分隔的字符串。
     """
     parts = []
 
@@ -45,9 +45,9 @@ def _concepts(info: dict) -> list:
             parts.append(str(v).strip())
 
     for i in range(1, 10):
-        _collect(info.get(f"jiuyan_concept{i}"))
+        _collect(info.get(f"concept{i}"))
     if not parts:
-        _collect(info.get("jiuyan_concept"))
+        _collect(info.get("concept"))
     seen, out = set(), []
     for p in parts:
         for c in p.split("|"):
@@ -75,11 +75,11 @@ def _build() -> dict:
                 continue
             cats = []
             for i in range(1, 10):
-                c = str(info.get(f"jiuyan_category{i}", "") or "").strip()
+                c = str(info.get(f"category{i}", "") or "").strip()
                 if c:
                     cats.append(MERGES.get(c, c))
             if not cats:
-                c0 = str(info.get("jiuyan_category", "") or "")
+                c0 = str(info.get("category", "") or "")
                 cats = [MERGES.get(x.strip(), x.strip()) for x in c0.split("|") if x.strip()]
             cats = [c for c in cats if c not in NON_BOARD_LABELS]
             out[str(code)] = {"board": cats[0] if cats else "",
@@ -96,7 +96,7 @@ def board_of(code) -> str:
 
 
 def concepts_of(code) -> list:
-    """该股全部韭研概念（去重保序）；无标签返回 []。"""
+    """该股全部概念板块（去重保序）；无标签返回 []。"""
     return list((_build().get(str(code).split("_")[0]) or {}).get("concepts") or [])
 
 

@@ -2,7 +2,7 @@
 """「联动股」口径研究（2026-11-13）。
 
 owner：「搜一只个股 → 找到相关的联动股票」。用什么定义"联动"？
-候选：① 过去 N 日收益相关性 ② 同韭研概念 ③ 同 legacy sector ④ 概念内再按相关
+候选：① 过去 N 日收益相关性 ② 同概念板块 ③ 同 legacy sector ④ 概念内再按相关
 验证：用**过去**窗口选 10 只，看它们与目标在**未来** 20 日的收益相关性 ——
 即"过去的联动"能不能预测"未来的联动"。
 
@@ -28,7 +28,7 @@ if sys.platform == "win32":
 
 BASE = next(p for p in pathlib.Path(__file__).resolve().parents if (p / "t_io").is_dir())
 DAILY = BASE / "t_io" / "cache" / "daily_kline"
-WL = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+WL = BASE / "stock_hunter" / "watchlist_concept.json"
 
 FORM, FUT, STEP = 60, 20, 20          # 形成窗 / 验证窗 / 每步天数
 if len(sys.argv) > 1:
@@ -88,7 +88,7 @@ def main():
     for c in codes:
         v = wl.get(c) or {}
         tags = []
-        for k in ("jiuyan_concept1", "jiuyan_concept2"):
+        for k in ("concept1", "concept2"):
             t = v.get(k)
             if isinstance(t, str) and t.strip():
                 tags.append(t.strip())

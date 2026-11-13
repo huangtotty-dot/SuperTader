@@ -9,7 +9,7 @@
     绝对广度只是大盘的影子，减掉市场才有信息。
   · 量能放大：当日成交额 / 前5日均额。资金流而非价格。
   · 龙头集中度：Top3 成员相对其余的超额（大板块可能只见龙头）。
-  · 细分层：把大类目拆到 jiuyan_concept 子概念（尺寸天然更小），取最强子概念。
+  · 细分层：把大类目拆到 concept 子概念（尺寸天然更小），取最强子概念。
 
 目标：未来 FWD 日**超额**收益（减当日横截面板块均值）。
 输出：每个度量在「小板块 / 大板块」两桶里的 IC —— 看哪个能救大板块。
@@ -53,16 +53,16 @@ def spearman(a, b):
 
 
 # ---------- 载入 ----------
-wl = json.loads((BASE / "stock_hunter" / "watchlist_jiuyan.json").read_text(encoding="utf-8"))
+wl = json.loads((BASE / "stock_hunter" / "watchlist_concept.json").read_text(encoding="utf-8"))
 cat, sub = {}, {}
 for c, v in wl.items():
     if not isinstance(v, dict):
         continue
-    k = (v.get("jiuyan_category") or "").strip()
+    k = (v.get("category") or "").strip()
     if not k or "|" in k:
         continue
     cat.setdefault(k, []).append(c)
-    sc = (v.get("jiuyan_concept") or "").strip()
+    sc = (v.get("concept") or "").strip()
     if sc:
         sub[c] = sc
 
@@ -135,7 +135,7 @@ for k in cats:
         # 龙头集中度：Top3 收益均值 − 其余均值
         srt = np.sort(rr)[::-1]
         lead = float(srt[:3].mean()) - float(srt[3:].mean()) if n > 4 else 0.0
-        # 细分层：把成分股按 jiuyan_concept 分组
+        # 细分层：把成分股按 concept 分组
         grp = {}
         sel_codes = [c for c, vv in zip(mem, v) if vv]
         for c, rv in zip(sel_codes, rr):

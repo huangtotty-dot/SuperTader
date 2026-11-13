@@ -1,6 +1,6 @@
 """复核：把板块口径从「九眼概念」换成「行业」，看 §4「信号只在小板块」是否还成立。
 
-为什么要复核：`jiuyan_category` 标签的 `updated_at` 从 2026-05-30 铺到 **2026-10-10**，
+为什么要复核：`category` 标签的 `updated_at` 从 2026-05-30 铺到 **2026-10-10**，
 其中 269 个是 2026-10-10 才加的，而回测窗口从 2024-09 起 ⇒ 头两年大部分标签**根本不存在**。
 更糟：**后加的标签恰恰是小类目**（有机硅 12、HVDC 15、超节点 24），而"信号只在小板块"
 正是待检验的结论 ⇒ **该偏差有可能凭空造出这个结论**（新标签因某板块最近热才被建）。
@@ -49,7 +49,7 @@ def spearman(a, b):
 
 
 # ---------- 载入 + 建两种成分口径 ----------
-wl = json.loads((BASE / "stock_hunter" / "watchlist_jiuyan.json").read_text(encoding="utf-8"))
+wl = json.loads((BASE / "stock_hunter" / "watchlist_concept.json").read_text(encoding="utf-8"))
 IND, CAT, SUB = {}, {}, {}
 for c, v in wl.items():
     if not isinstance(v, dict):
@@ -57,10 +57,10 @@ for c, v in wl.items():
     seg = (v.get("sector") or "").split("/")
     if seg and seg[0].strip() and seg[0].strip() not in DROP:
         IND.setdefault(seg[0].strip(), []).append(c)
-    k = (v.get("jiuyan_category") or "").strip()
+    k = (v.get("category") or "").strip()
     if k and "|" not in k:
         CAT.setdefault(k, []).append(c)
-    sc = (v.get("jiuyan_concept") or "").strip()
+    sc = (v.get("concept") or "").strip()
     if sc:
         SUB[c] = sc
 

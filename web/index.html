@@ -37,7 +37,7 @@
     </select>
     <button id="wmScanBtn" class="mini-btn" style="border-color:#8250df;color:#8250df"
             onclick="runWeeklyMacdScan()"
-            title="轮巡所有韭研板块：按左侧口径筛周线 MACD，命中的自动标成紫色重点关注（只加不删、零网络）">🟣 周线MACD轮巡</button>
+            title="轮巡所有概念板块：按左侧口径筛周线 MACD，命中的自动标成紫色重点关注（只加不删、零网络）">🟣 周线MACD轮巡</button>
     <span id="status" class="status"></span>
   </div>
 </header>
@@ -521,12 +521,12 @@
         </div>
       </div>
 
-      <!-- 主线广度（2026-10-24）：韭研涨停复盘 → 跨分类主题聚合 + 生命周期阶段。
+      <!-- 主线广度（2026-10-24）：概念涨停复盘 → 跨分类主题聚合 + 生命周期阶段。
            数据源 stock_hunter/data/sector_breadth.json；每个交易日上传复盘图后由
            scripts/daily_recap_ingest.py 入库，本卡片自动显示最近 15 个交易日。 -->
       <div class="card" id="reviewBreadthCard" style="padding:10px 14px;margin-bottom:10px">
         <div class="card-title" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-          <span>📊 主线广度（韭研涨停复盘）</span>
+          <span>📊 主线广度（概念涨停复盘）</span>
           <span id="reviewBreadthMeta" class="cell-dim" style="font-size:11px;font-weight:normal"></span>
         </div>
         <div id="reviewBreadthBody"><div class="empty">加载中…</div></div>

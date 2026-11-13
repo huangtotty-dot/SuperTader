@@ -114,7 +114,7 @@ class TestIndustryClassifier(unittest.TestCase):
 
     def test_全池未分类率不失控(self):
         """规则表退化（如被误改顺序）会让大量票掉进未分类——设上限兜住。"""
-        wl_path = os.path.join(_ROOT, "stock_hunter", "watchlist_jiuyan.json")
+        wl_path = os.path.join(_ROOT, "stock_hunter", "watchlist_concept.json")
         if not os.path.exists(wl_path):
             self.skipTest("无 watchlist（运行期数据，可能被 gitignore）")
         with open(wl_path, encoding="utf-8") as fh:
@@ -137,9 +137,9 @@ class TestStockConcepts(unittest.TestCase):
 
     def test_合并两源并去重(self):
         info = {"sector": "软件和信息技术服务业/国产软件/信创",
-                "jiuyan_concept": "人工智能|信创"}
+                "concept": "人工智能|信创"}
         got = self.c(info)
-        self.assertEqual(got[:2], ["人工智能", "信创"], "韭研概念应排在前面")
+        self.assertEqual(got[:2], ["人工智能", "信创"], "概念板块应排在前面")
         self.assertEqual(len(got), len(set(got)), "不得重复")
         self.assertIn("国产软件", got)
 
@@ -193,7 +193,7 @@ class TestStockConcepts(unittest.TestCase):
 
     def test_全池覆盖率不低于四成(self):
         """规则若被改坏（如误删源或过滤过严），覆盖率会塌——设下限兜住。"""
-        wl_path = os.path.join(_ROOT, "stock_hunter", "watchlist_jiuyan.json")
+        wl_path = os.path.join(_ROOT, "stock_hunter", "watchlist_concept.json")
         if not os.path.exists(wl_path):
             self.skipTest("无 watchlist（运行期数据，可能被 gitignore）")
         with open(wl_path, encoding="utf-8") as fh:

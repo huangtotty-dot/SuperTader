@@ -97,11 +97,6 @@ def _detect_boxes(daily):
     # 关联现价关系 + 刚突破判定（改进）
     # 刚突破的定义现在基于箱体宽度动态调整，而不是固定的20天+15%
     result = []
-    today_days = 999
-    try:
-        today_days = int(pd.Timestamp(last_date).timestamp() / 86400 - pd.Timestamp(dates[0]).timestamp() / 86400)
-    except Exception:
-        pass
     for key, b in boxes.items():
         end_date = b["end"]
         try:
@@ -130,8 +125,6 @@ def _detect_boxes(daily):
             b["rel"] = -1  # 上方历史箱体
         else:
             b["rel"] = -2  # 下方历史箱体
-        # 距现价距离（用于排序）
-        b["dist"] = abs(b["center"] if "center" in b else (b["high"] + b["low"]) / 2 - last_close)
         result.append(b)
 
     # 合并重叠箱体（P1改进：更严格的重叠条件，避免过度合并）
@@ -376,11 +369,10 @@ def _calc_support_resistance(daily):
     res_cand.sort(key=score, reverse=True)
 
     def fmt(items):
-        # 每方向只保留 score 最高的 1 个（最重要）
+        # 每方向只保留 score 最高的 1 个（最重要）——items 已按 score 降序排好
         if not items:
             return []
-        best = max(items, key=lambda it: score(it))
-        p, l, s = best
+        p, l, s = items[0]
         return [{"price": p, "label": l, "strength": s}]
 
     return {"supports": fmt(sup_cand), "resistances": fmt(res_cand)}

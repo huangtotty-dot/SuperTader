@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-韭研概念打分报告生成器 - 主入口
+概念板块打分报告生成器 - 主入口
 版本：v8.0
 用法：python main.py [--date YYYYMMDD] [--data-dir ./data] [--output ./output]
 """
@@ -44,7 +44,7 @@ def load_config(config_path: str = "config.json") -> dict:
 def prepare_data(config: dict, date_str: str, save_spot: bool = False,
                  only_codes=None) -> dict:
     """
-    以 watchlist_jiuyan.json 为唯一数据源，获取真实行情数据，生成全部报告数据
+    以 watchlist_concept.json 为唯一数据源，获取真实行情数据，生成全部报告数据
     :param date_str: 日期 'YYYY-MM-DD'（用于获取行情和保存缓存）
     :param save_spot: 是否保存行情快照到本地
     :return: {
@@ -63,7 +63,7 @@ def prepare_data(config: dict, date_str: str, save_spot: bool = False,
     # 1. 加载 watchlist（唯一数据源，从脚本自身目录读取）
     data["watchlist"] = loader.load_watchlist()
     if data["watchlist"] is None:
-        print("[ERR] 无法继续：watchlist_jiuyan.json 未在脚本目录找到")
+        print("[ERR] 无法继续：watchlist_concept.json 未在脚本目录找到")
         return data
 
     watchlist_df = data["watchlist"]
@@ -74,8 +74,8 @@ def prepare_data(config: dict, date_str: str, save_spot: bool = False,
         watchlist_df = watchlist_df[watchlist_df["代码"].astype(str).isin({str(c) for c in only_codes})].copy()
         data["watchlist"] = watchlist_df
         print(f"  [筛选] 多头+均线粘合候选 {len(watchlist_df)} 行 / 全池 {_n0} 行")
-    # 只保留带韭研概念的标的作为打分池
-    df_pool = watchlist_df[watchlist_df["韭研概念"].str.strip().ne("")].copy()
+    # 只保留带概念板块的标的作为打分池
+    df_pool = watchlist_df[watchlist_df["概念板块"].str.strip().ne("")].copy()
     codes = df_pool["代码"].astype(str).tolist()
     # 去重：多分类股票在 df_pool 中有多行，但行情只需获取一次
     codes = list(dict.fromkeys(codes))
@@ -133,7 +133,7 @@ def prepare_data(config: dict, date_str: str, save_spot: bool = False,
 
 def score_stocks(data: dict, config: dict) -> list:
     """
-    对 watchlist 中带 jiuyan_concept 的标的进行评分（使用真实行情数据）
+    对 watchlist 中带 concept 的标的进行评分（使用真实行情数据）
     :return: 评分后的股票列表（字典列表）
     """
     dimensions = config.get("scoring", {}).get("dimensions", [])
@@ -145,8 +145,8 @@ def score_stocks(data: dict, config: dict) -> list:
         print("[WARN] watchlist 为空，无法评分")
         return stock_list
 
-    # 只对有韭研概念的标的进行评分
-    df_pool = watchlist_df[watchlist_df["韭研概念"].str.strip().ne("")].copy()
+    # 只对有概念板块的标的进行评分
+    df_pool = watchlist_df[watchlist_df["概念板块"].str.strip().ne("")].copy()
     print(f"\n[评分] 评分计算中... (共 {len(df_pool)} 只带概念标的)")
 
     for _, row in df_pool.iterrows():
@@ -155,7 +155,7 @@ def score_stocks(data: dict, config: dict) -> list:
         # 真实数据字段：涨跌幅, 涨停, 成交额, 换手率, 振幅, 量比, 现价, 最高, 最低, 今开, 昨收
         stock.setdefault("涨停", int(row.get("涨停", 0)) if pd.notna(row.get("涨停")) else 0)
         stock.setdefault("连板天数", 0)
-        stock.setdefault("暗线概念数", len(str(stock.get("韭研概念", "")).split("_")))
+        stock.setdefault("暗线概念数", len(str(stock.get("概念板块", "")).split("_")))
         stock.setdefault("量比", float(row.get("量比", 1.0)) if pd.notna(row.get("量比")) else 1.0)
         stock_list.append(stock)
 
@@ -264,7 +264,7 @@ def validate_report(output_path: str, config: dict) -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="韭研概念打分报告生成器 v8.0")
+    parser = argparse.ArgumentParser(description="概念板块打分报告生成器 v8.0")
     parser.add_argument("--date", type=str, default=datetime.now().strftime("%Y%m%d"),
                         help="报告日期 (YYYYMMDD)")
     parser.add_argument("--data-dir", type=str, default=None,
@@ -287,7 +287,7 @@ def main():
         date_fmt = date_str
 
     print("=" * 60)
-    print("[报告] 韭研概念打分报告生成器 v8.0")
+    print("[报告] 概念板块打分报告生成器 v8.0")
     print("=" * 60)
 
     # 1. 加载配置
@@ -297,7 +297,7 @@ def main():
     # 2. 确定数据目录
     data_dir = args.data_dir or os.path.join(base_dir, config.get("data_dir", "data"))
     print(f"\n[目录] 脚本目录: {base_dir}")
-    print(f"   watchlist_jiuyan.json 预期路径: {os.path.join(base_dir, 'watchlist_jiuyan.json')}")
+    print(f"   watchlist_concept.json 预期路径: {os.path.join(base_dir, 'watchlist_concept.json')}")
     print(f"   输出目录: {os.path.join(base_dir, config.get('output_dir', 'output'))}")
 
     # 3. 确定输出路径
@@ -305,7 +305,7 @@ def main():
         output_path = args.output
     else:
         output_dir = os.path.join(base_dir, config.get("output_dir", "output"))
-        output_path = os.path.join(output_dir, f"韭研概念打分报告_{args.date}.xlsx")
+        output_path = os.path.join(output_dir, f"概念板块打分报告_{args.date}.xlsx")
     print(f"[文件] 输出路径: {output_path}")
 
     # 4. 加载数据（以 watchlist 为唯一数据源）+ 获取行情
@@ -403,7 +403,7 @@ def main():
 
     # 8. 收集统计指标（用于说明页）
     watchlist_df = data.get("watchlist")
-    df_pool = watchlist_df[watchlist_df["韭研概念"].str.strip().ne("")] if watchlist_df is not None else pd.DataFrame()
+    df_pool = watchlist_df[watchlist_df["概念板块"].str.strip().ne("")] if watchlist_df is not None else pd.DataFrame()
     pool_count = len(df_pool)
     market_success = df_pool["涨跌幅"].notna().sum() if watchlist_df is not None and "涨跌幅" in watchlist_df.columns else 0
     market_failed = pool_count - int(market_success)
@@ -484,13 +484,13 @@ def main():
 
     # 12. 日线 MACD 底背离飞书提醒（2026-09-19 owner 要求）
     # 放在报告推送**之后**：扫描要几十秒，不能拖慢主交付物。
-    # 覆盖全部打分池（韭研概念非空）；只推底背离（顶背离 180 天验证无区分度）。
+    # 覆盖全部打分池（概念板块非空）；只推底背离（顶背离 180 天验证无区分度）。
     # 任何失败都只打印，不影响报告结果。
     try:
         _wl = data.get("watchlist")
         _pool_codes, _name_of = [], {}
         if _wl is not None and not _wl.empty and "代码" in _wl.columns:
-            _sel = _wl[_wl["韭研概念"].astype(str).str.strip().ne("")] if "韭研概念" in _wl.columns else _wl
+            _sel = _wl[_wl["概念板块"].astype(str).str.strip().ne("")] if "概念板块" in _wl.columns else _wl
             for _, _r in _sel.iterrows():
                 _c = str(_r["代码"])
                 _pool_codes.append(_c)

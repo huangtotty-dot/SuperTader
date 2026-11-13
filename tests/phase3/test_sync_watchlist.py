@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`stock_hunter/sync_watchlist.py` 纯函数单测（2026-09-29）。
 
-只测**离线纯函数**（口径判定与合并），不打网络、不读写 `watchlist_jiuyan.json`——
+只测**离线纯函数**（口径判定与合并），不打网络、不读写 `watchlist_concept.json`——
 该文件是运行期数据（且被 gitignore），测试依赖它就会随数据漂移。
 
 守三件事：
@@ -100,7 +100,7 @@ class TestMerge(unittest.TestCase):
         self.assertEqual(e["sector"], "汽车/安徽板块")
         self.assertEqual(e["primary_source"], self.m.SOURCE_TAG)
         for k in ("business_summary", "concept_boards", "industry_boards",
-                  "jiuyan_category", "jiuyan_concept", "sector_type", "updated_at"):
+                  "category", "concept", "sector_type", "updated_at"):
             self.assertIn(k, e, f"新条目缺字段 {k}")
 
     def test_不覆盖已有条目(self):

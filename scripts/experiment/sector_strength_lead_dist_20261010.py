@@ -7,11 +7,11 @@ import json, sys
 from pathlib import Path
 import numpy as np
 BASE = Path(BASE); DAILY = BASE / "t_io" / "cache" / "daily_kline"
-wl = json.loads((BASE/"stock_hunter"/"watchlist_jiuyan.json").read_text(encoding="utf-8"))
+wl = json.loads((BASE/"stock_hunter"/"watchlist_concept.json").read_text(encoding="utf-8"))
 cat = {}
 for c, v in wl.items():
-    if isinstance(v, dict) and (v.get("jiuyan_category") or "").strip() and "|" not in v["jiuyan_category"]:
-        cat.setdefault(v["jiuyan_category"].strip(), []).append(c)
+    if isinstance(v, dict) and (v.get("category") or "").strip() and "|" not in v["category"]:
+        cat.setdefault(v["category"].strip(), []).append(c)
 def _f(x):
     try: return float(x)
     except Exception: return np.nan

@@ -52,7 +52,7 @@ def spearman(a, b):
 
 
 # ---------- 载入 ----------
-wl = json.loads((BASE / "stock_hunter" / "watchlist_jiuyan.json").read_text(encoding="utf-8"))
+wl = json.loads((BASE / "stock_hunter" / "watchlist_concept.json").read_text(encoding="utf-8"))
 IND, CAT = {}, {}
 for c, v in wl.items():
     if not isinstance(v, dict):
@@ -60,7 +60,7 @@ for c, v in wl.items():
     seg = (v.get("sector") or "").split("/")
     if seg and seg[0].strip() and seg[0].strip() not in DROP:
         IND.setdefault(seg[0].strip(), []).append(c)
-    k = (v.get("jiuyan_category") or "").strip()
+    k = (v.get("category") or "").strip()
     if k and "|" not in k:
         CAT.setdefault(k, []).append(c)
 

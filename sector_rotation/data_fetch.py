@@ -2,7 +2,7 @@
 """板块轮动数据层。
 
 维护一份全市场日线缓存（t_io/rotation/daily_cache/，每交易日一个 CSV），
-供韭研概念轮动（Part 1）与全市场行业轮动（Part 2）共用。
+供概念板块轮动（Part 1）与全市场行业轮动（Part 2）共用。
 
 行情源：腾讯（qt.gtimg.cn 批量快照 + ifzq.gtimg.cn 历史日线 qfq）。
 东财 akshare 接口在本机被 SSL 拦截，故此处直接用腾讯通道（与 stock_hunter/market_data.py 同源）。
@@ -32,7 +32,7 @@ BASE = Path(__file__).resolve().parents[1]
 ROT_DIR = BASE / "t_io" / "rotation"
 DAILY_CACHE = ROT_DIR / "daily_cache"
 INDUSTRY_MAP = ROT_DIR / "industry_map.csv"
-JIUYAN_WATCHLIST = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+CONCEPT_WATCHLIST = BASE / "stock_hunter" / "watchlist_concept.json"
 LEGACY_DB = Path(r"E:\sector-rotation-v2\sample_data.db")
 
 BOOTSTRAP_CALENDAR_DAYS = 75      # 拉取历史日历天数（约 50 个交易日，足够 20 日 RS + 10 日成交额基准）
@@ -191,11 +191,11 @@ def load_industry_map() -> pd.DataFrame:
     raise FileNotFoundError(f"行业映射缺失：{INDUSTRY_MAP} 与 {LEGACY_DB} 均不存在")
 
 
-def load_jiuyan_map() -> pd.DataFrame:
-    """韭研映射 代码/名称/行业名称=韭研分类（Part 1）。每只股票归属其第一个非空韭研分类。"""
-    if not JIUYAN_WATCHLIST.exists():
-        raise FileNotFoundError(f"韭研 watchlist 缺失：{JIUYAN_WATCHLIST}")
-    with open(JIUYAN_WATCHLIST, encoding="utf-8") as f:
+def load_concept_map() -> pd.DataFrame:
+    """概念映射 代码/名称/行业名称=概念分类（Part 1）。每只股票归属其第一个非空概念分类。"""
+    if not CONCEPT_WATCHLIST.exists():
+        raise FileNotFoundError(f"概念 watchlist 缺失：{CONCEPT_WATCHLIST}")
+    with open(CONCEPT_WATCHLIST, encoding="utf-8") as f:
         raw = json.load(f)
     records = []
     for code, info in raw.items():
@@ -203,12 +203,12 @@ def load_jiuyan_map() -> pd.DataFrame:
             continue
         category = ""
         for i in range(1, 10):
-            cat = info.get(f"jiuyan_category{i}")
+            cat = info.get(f"category{i}")
             if cat and str(cat).strip():
                 category = str(cat).split("|")[0].strip()
                 break
         if not category:
-            cat = info.get("jiuyan_category")
+            cat = info.get("category")
             if cat and str(cat).strip():
                 category = str(cat).split("|")[0].strip()
         if not category:
@@ -225,7 +225,7 @@ def full_market_codes() -> list[str]:
     except Exception:
         pass
     try:
-        codes |= set(load_jiuyan_map()["代码"])
+        codes |= set(load_concept_map()["代码"])
     except Exception:
         pass
     return sorted(c for c in codes if _is_a_share_code(c))
@@ -360,8 +360,8 @@ def ensure_cache_ready(background: bool = True) -> dict[str, Any]:
 def load_rotation_inputs(view: str, as_of: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     """按视角取 (stock_daily, stock_industry, available_dates)。"""
     daily = load_stock_daily()
-    if view == "jiuyan":
-        industry = load_jiuyan_map()
+    if view == "concept":
+        industry = load_concept_map()
     else:
         industry = load_industry_map()
     if as_of:

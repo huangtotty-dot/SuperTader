@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""watchlist_jiuyan.json 刷新脚本（2026-09-29）。
+"""watchlist_concept.json 刷新脚本（2026-09-29）。
 
 **为什么需要它**：该文件在仓库里**没有任何写入方**——是外部生成后拷进来的
 （`.gitignore:20` 还把它忽略了，改动不入库）。后果是它会自然腐坏：实测 4000/5041 条
@@ -11,7 +11,7 @@
        - **纳入** 北交所（`4xxxxx` / `8xxxxx` / `920xxx`）
        - **排除** ST / *ST / 退市（涨跌幅 5%，与突破判定的 0.3~8% 口径不可比）
   3. 新条目回填 `name` / `sector` / `sector_type` / `primary_source` / `updated_at`
-  4. 写前自动备份为 `watchlist_jiuyan.backup_YYYY-MM-DD.json`
+  4. 写前自动备份为 `watchlist_concept.backup_YYYY-MM-DD.json`
   5. **幂等**：重跑只补差集，**绝不覆盖已有条目的既有字段**
 
 **用法**：
@@ -38,7 +38,7 @@ _ROOT = os.path.dirname(_HERE)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-WATCHLIST = os.path.join(_HERE, "watchlist_jiuyan.json")
+WATCHLIST = os.path.join(_HERE, "watchlist_concept.json")
 SOURCE_TAG = "sync_20260929"
 _ST_KEYWORDS = ("ST", "*ST", "退")
 _EM_RETRIES = 8
@@ -85,8 +85,8 @@ def merge_new(store: dict, universe: dict, codes: list, sectors: dict, now: str)
             "business_summary": "",           # 见模块 docstring：东财 F10 被风控，宁可留空
             "concept_boards": [],
             "industry_boards": [],
-            "jiuyan_category": "",
-            "jiuyan_concept": "",
+            "category": "",
+            "concept": "",
             "sector": sectors.get(c, ""),
             "sector_type": SOURCE_TAG,
             "primary_source": SOURCE_TAG,
@@ -97,7 +97,7 @@ def merge_new(store: dict, universe: dict, codes: list, sectors: dict, now: str)
 
 
 def backup_path(today: str) -> str:
-    return os.path.join(_HERE, f"watchlist_jiuyan.backup_{today}.json")
+    return os.path.join(_HERE, f"watchlist_concept.backup_{today}.json")
 
 
 # ---------- 网络（仅 main 调用） ----------
@@ -139,7 +139,7 @@ def fetch_sector(code: str) -> str:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="刷新 watchlist_jiuyan.json（增量补代码）")
+    ap = argparse.ArgumentParser(description="刷新 watchlist_concept.json（增量补代码）")
     ap.add_argument("--apply", action="store_true", help="真写（缺省只干跑打印）")
     ap.add_argument("--no-sector", action="store_true", help="跳过东财板块回填（更快、无网络）")
     args = ap.parse_args(argv)

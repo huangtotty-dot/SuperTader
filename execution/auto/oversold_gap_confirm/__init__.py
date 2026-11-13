@@ -9,7 +9,7 @@
 | 文件 | 职责 | 是否 import gm.api |
 |---|---|---|
 | `decision.py` | 信号核（纯函数、零 IO）：`signal_ok` / `evaluate` | ❌ |
-| `prescreen.py` | 预筛两层漏斗：韭研板块 → 涨停家数 top-N → 昨收<MA20 | ❌（facade 绝对路径加载/注入） |
+| `prescreen.py` | 预筛两层漏斗：概念板块 → 涨停家数 top-N → 昨收<MA20 | ❌（facade 绝对路径加载/注入） |
 | `executor.py` | 买/卖/早盘卖三条腿 + 持仓账本 + 留痕（注入式网关，可干跑） | ❌ |
 | `backfill.py` | **买不进替补核**（纯函数 + 编排）：涨停价/封死判据/时效复检/额度顺移/撤单确认 | ❌ |
 | `hooks.py` | 六个时点钩子 + 每日一次状态 + `on_bar` 分发 + 当日状态落盘 | ❌ |

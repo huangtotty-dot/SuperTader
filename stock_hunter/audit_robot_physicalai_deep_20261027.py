@@ -12,10 +12,10 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(r"E:\superTrader")
-SRC = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
+SRC = ROOT / "stock_hunter" / "watchlist_concept.json"
 AUDIT = ROOT / "data_cleaning" / "robot_physicalai_audit_20261027.json"
-BAK = ROOT / "stock_hunter" / "watchlist_jiuyan.json.bak_20261027_robot_physicalai_deep"
-PREVIEW = ROOT / "data_cleaning" / "watchlist_jiuyan_robot_cleaned_20261027.json"
+BAK = ROOT / "stock_hunter" / "watchlist_concept.json.bak_20261027_robot_physicalai_deep"
+PREVIEW = ROOT / "data_cleaning" / "watchlist_concept_robot_cleaned_20261027.json"
 DATE = "2026-10-27"
 MARK = "2026-10-27 09:30:00"
 TARGETS = {"机器人", "物理AI"}
@@ -66,7 +66,7 @@ def toks(value):
 
 
 def slot_names(i):
-    return ("jiuyan_category", "jiuyan_concept") if i == 0 else (f"jiuyan_category{i}", f"jiuyan_concept{i}")
+    return ("category", "concept") if i == 0 else (f"category{i}", f"concept{i}")
 
 
 def slots(rec):
@@ -170,7 +170,7 @@ def main():
         current_concepts = set(active_concepts(rec))
         old_concepts = {con for _, con in old_pairs}
 
-        reasons = rec.get("jiuyan_concept_reason")
+        reasons = rec.get("concept_reason")
         if not isinstance(reasons, dict):
             reasons = {}
         for key in list(reasons):
@@ -183,11 +183,11 @@ def main():
                     category_reason += f" 本分类（{pair['category']}）判词为{pair_verdict(row, pair['category'])}。"
                 reasons[concept] = category_reason
         if reasons:
-            rec["jiuyan_concept_reason"] = reasons
+            rec["concept_reason"] = reasons
         else:
-            rec.pop("jiuyan_concept_reason", None)
+            rec.pop("concept_reason", None)
 
-        descs = rec.get("jiuyan_concept_desc")
+        descs = rec.get("concept_desc")
         if not isinstance(descs, dict):
             descs = {}
         for key in list(descs):
@@ -196,29 +196,29 @@ def main():
         for _, concept in new_pairs:
             descs[concept] = DESC[concept]
         if descs:
-            rec["jiuyan_concept_desc"] = descs
+            rec["concept_desc"] = descs
         else:
-            rec.pop("jiuyan_concept_desc", None)
+            rec.pop("concept_desc", None)
 
         verdicts = {p["category"]: pair_verdict(row, p["category"]) for p in row["pairs"]}
-        rec["jiuyan_robot_physicalai_verdicts"] = verdicts
-        rec["jiuyan_robot_physicalai_audited_at"] = DATE
-        rec["jiuyan_robot_physicalai_evidence"] = {
+        rec["robot_physicalai_verdicts"] = verdicts
+        rec["robot_physicalai_audited_at"] = DATE
+        rec["robot_physicalai_evidence"] = {
             "title": row["evidence_title"], "date": row["evidence_date"], "url": row["evidence_url"],
             "profile_source": "iFinD ifind_get_stock_info", "profile_asof": DATE,
         }
-        rec["jiuyan_robot_physicalai_audit_20261027"] = {
+        rec["robot_physicalai_audit_20261027"] = {
             "action": row["action"], "old_pairs": old_pairs, "new_pairs": new_pairs,
             "verdict": row["verdict"], "category_verdicts": verdicts, "reason": row["reason"],
         }
         if new_pairs:
-            rec["jiuyan_tag_verdict"] = "核心" if "核心" in verdicts.values() else "相关"
-            rec["jiuyan_tag_evidence"] = "text"
+            rec["tag_verdict"] = "核心" if "核心" in verdicts.values() else "相关"
+            rec["tag_evidence"] = "text"
         elif active_concepts(rec):
-            rec["jiuyan_tag_verdict"] = "已摘牌"
+            rec["tag_verdict"] = "已摘牌"
         else:
-            rec.pop("jiuyan_tag_verdict", None)
-            rec.pop("jiuyan_tag_evidence", None)
+            rec.pop("tag_verdict", None)
+            rec.pop("tag_evidence", None)
         rec["updated_at"] = MARK
         counts[row["action"]] += 1
 
@@ -230,8 +230,8 @@ def main():
         assert got == expected, (row["code"], got, expected)
         assert len(got) == len(set(got))
         for _, con in got:
-            assert rec["jiuyan_concept_reason"].get(con)
-            assert rec["jiuyan_concept_desc"].get(con)
+            assert rec["concept_reason"].get(con)
+            assert rec["concept_desc"].get(con)
 
     PREVIEW.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     print("动作统计：", dict(counts))

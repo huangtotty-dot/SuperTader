@@ -8,9 +8,9 @@ from openpyxl import load_workbook
 
 ROOT = Path(r"E:\superTrader")
 DC = ROOT / "data_cleaning"
-SRC = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
-BAK = ROOT / "stock_hunter" / "watchlist_jiuyan.json.bak_20261027_pcb_deep"
-PREVIEW = DC / "watchlist_jiuyan_pcb_cleaned_20261027.json"
+SRC = ROOT / "stock_hunter" / "watchlist_concept.json"
+BAK = ROOT / "stock_hunter" / "watchlist_concept.json.bak_20261027_pcb_deep"
+PREVIEW = DC / "watchlist_concept_pcb_cleaned_20261027.json"
 XLSX = DC / "PCB概念深度清洗_20261027.xlsx"
 AUDIT = DC / "pcb_audit_20261027.json"
 CURRENT = DC / "pcb_current_20261027.json"
@@ -47,8 +47,8 @@ def active_pairs(rec):
     out = []
     for i in list(range(1, 10)) + [0]:
         suffix = "" if i == 0 else str(i)
-        for cat in toks(rec.get("jiuyan_category" + suffix)):
-            for con in toks(rec.get("jiuyan_concept" + suffix)):
+        for cat in toks(rec.get("category" + suffix)):
+            for con in toks(rec.get("concept" + suffix)):
                 if (cat, con) not in out:
                     out.append((cat, con))
     return out
@@ -87,22 +87,22 @@ for row in audit:
     # “PCB设备-封装设备”本身是标准化精确概念，允许保留；其余旧粗标签不得残留。
     assert not old_concepts.intersection(c for _, c in got)
     for _, concept in expected:
-        assert rec["jiuyan_concept_reason"].get(concept) == row["reason"]
-        assert rec["jiuyan_concept_desc"].get(concept)
+        assert rec["concept_reason"].get(concept) == row["reason"]
+        assert rec["concept_desc"].get(concept)
     before_other = [pair for pair in active_pairs(backup[code]) if pair[0] != "PCB"]
     after_other = [pair for pair in pairs if pair[0] != "PCB"]
     assert before_other == after_other, (code, before_other, after_other)
     for key in backup[code]:
-        if key.endswith("_verdicts") and key != "jiuyan_pcb_verdicts":
+        if key.endswith("_verdicts") and key != "pcb_verdicts":
             assert rec.get(key) == backup[code].get(key), (code, key)
-    audit_mark = rec["jiuyan_pcb_audit_20261027"]
-    assert rec["jiuyan_pcb_audited_at"] == "2026-10-27"
+    audit_mark = rec["pcb_audit_20261027"]
+    assert rec["pcb_audited_at"] == "2026-10-27"
     assert audit_mark["reason"] == row["reason"] and audit_mark["verdict"] == row["verdict"]
-    assert rec["jiuyan_pcb_evidence"]["url"] == row["evidence_url"]
+    assert rec["pcb_evidence"]["url"] == row["evidence_url"]
     if row["verdict"] == "摘除":
-        assert "jiuyan_pcb_verdicts" not in rec
+        assert "pcb_verdicts" not in rec
     else:
-        assert rec["jiuyan_pcb_verdicts"] == {"PCB": row["verdict"]}
+        assert rec["pcb_verdicts"] == {"PCB": row["verdict"]}
 
 row = next(x for x in audit if x["code"] == "301511")
 assert row["name"] == "德福科技" and row["verdict"] == "核心"
@@ -114,8 +114,8 @@ assert Counter(x["action"] for x in audit) == {"纠错": 70, "保留": 6, "摘�
 loader = WatchlistLoader()
 after_df = loader.load(str(SRC))
 before_df = loader.load(str(BAK))
-after_counts = Counter(after_df["韭研分类"])
-before_counts = Counter(before_df["韭研分类"])
+after_counts = Counter(after_df["概念分类"])
+before_counts = Counter(before_df["概念分类"])
 category_differences = {c: [before_counts[c], after_counts[c]] for c in set(before_counts) | set(after_counts) if before_counts[c] != after_counts[c]}
 # 旧交叉槽位令Loader多加载8只：直接标签审计为161只，旧Loader口径为169只。
 assert category_differences["PCB"][1] == 76 and category_differences["PCB"][0] >= 89
@@ -124,7 +124,7 @@ for category in ["半导体", "光通信", "商业航天", "军工", "云计算"
     assert before_counts[category] == after_counts[category]
 assert after_counts["半导体"] == 153 and after_counts["光通信"] == 42 and after_counts["商业航天"] == 74 and after_counts["军工"] == 89 and after_counts["云计算"] == 37 and after_counts["网络安全"] == 38
 assert after_counts["AI应用"] == 84 and after_counts["物理AI"] == 54 and after_counts["数据要素"] == 77
-assert len(after_df.loc[after_df["韭研分类"] == "PCB", "代码"]) == 76
+assert len(after_df.loc[after_df["概念分类"] == "PCB", "代码"]) == 76
 loader_counts = {c: after_counts[c] for c in ["PCB", "半导体", "光通信", "商业航天", "军工", "云计算", "网络安全", "AI应用", "物理AI", "数据要素"]}
 
 wb = load_workbook(XLSX, data_only=False)

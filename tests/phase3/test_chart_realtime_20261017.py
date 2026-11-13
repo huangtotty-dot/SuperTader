@@ -24,6 +24,7 @@ import os
 import sys
 import unittest
 from datetime import datetime
+from unittest import mock
 
 sys.stdout.reconfigure(encoding="utf-8")
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -137,8 +138,13 @@ class TestTencent10minSynthesis(unittest.TestCase):
         """回归：`resample_5min_to_10min` 的输出带 `date` 分组列，原样喂 `_norm_min_bars`
         会变成两个 `time` 列 ⇒ `cannot assemble with duplicate keys`（10min 永远空）。"""
         gui._fetch_min_bars_tencent = lambda code, freq: pd.DataFrame()
-        gui._fetch_min_bars_online = lambda ts_code, freq, days: _frame_5min(_DAY1)
-        df = gui._fetch_min_bars("600000", "10min")
+        # 生产 `_fetch_min_bars_online` 返回已规范化的 Timestamp 帧；且深底座只在图表
+        # 路径真实落盘 —— 单测里深底座混入真实磁盘 Timestamp 会让 string-time 的 mock
+        # 在 `_merge_min_frames` 里 `sort_values("time")` 抛 str/Timestamp 比较错误。
+        gui._fetch_min_bars_online = lambda ts_code, freq, days: gui._norm_min_bars(_frame_5min(_DAY1))
+        with mock.patch.object(gui, "_min_bars_deep_base",
+                               side_effect=lambda code, freq="5min", allow_topup=True: pd.DataFrame()):
+            df = gui._fetch_min_bars("600000", "10min")
         self.assertFalse(df.empty)
         self.assertEqual(len(df), 24)
         self.assertEqual(list(df.columns),
@@ -216,7 +222,11 @@ class TestChartRealtime(unittest.TestCase):
             "600000": {"price": 10.9, "pct": 0.0, "open": 10.9, "high": 10.9,
                        "low": 10.9, "pre_close": 10.9, "vol_hand": 0.0,
                        "ts_date": self.today}}
-        out = self.api._compute_chart_live("600000", "daily")
+        # ⚠️ `_live_bar_series` 现优先吃真实磁盘 payload（≥120 根时跳过 load_daily_display），
+        # 而 600000 的真实 payload 末根就是今天 ⇒ 不 mock 掉它，占位根会「借用」真 payload
+        # 的今天日期，`dates[-1]` 变成今天而不是 _DAY1（测试被真实数据漂移带跑）。
+        with mock.patch.object(cc, "load_payload", return_value=None):
+            out = self.api._compute_chart_live("600000", "daily")
         self.assertTrue(out["available"], out.get("error"))
         self.assertEqual(out["series"]["dates"][-1], _DAY1,
                          "盘前占位根被画进了图（假 O=H=L=C、量=0）")

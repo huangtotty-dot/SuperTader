@@ -29,16 +29,16 @@ class TestShelterPoolBackend(unittest.TestCase):
         self.api = gui.Api()
         self._fp = self.api._SHELTER_FP
         self.api._SHELTER_FP = Path(tempfile.mkdtemp(prefix="shelter_")) / "shelter_pool.json"
-        self._orig = (gui._jiuyan_names, self.api._hunter_build_conformance,
+        self._orig = (gui._concept_names, self.api._hunter_build_conformance,
                       self.api.load_stock_tags_batch, self.api._attach_ma_reclaim)
-        gui._jiuyan_names = lambda: {"600900": "长江电力", "002176": "江特电机"}
+        gui._concept_names = lambda: {"600900": "长江电力", "002176": "江特电机"}
         self.api._hunter_build_conformance = lambda codes, date=None: {}
         self.api.load_stock_tags_batch = lambda codes, offline=False, date=None: {"tags": {}}
         self.api._attach_ma_reclaim = lambda rows, date=None: None
 
     def tearDown(self):
         self.api._SHELTER_FP = self._fp
-        (gui._jiuyan_names, self.api._hunter_build_conformance,
+        (gui._concept_names, self.api._hunter_build_conformance,
          self.api.load_stock_tags_batch, self.api._attach_ma_reclaim) = self._orig
 
     def test_两个池共用同一个行构造(self):
@@ -72,7 +72,7 @@ class TestShelterPoolBackend(unittest.TestCase):
         self.assertEqual(len(self.api.load_shelter_pool()["rows"]), 1)
 
     def test_名称歧义与查无此票(self):
-        gui._jiuyan_names = lambda: {"600001": "张三科技", "600002": "张三控股"}
+        gui._concept_names = lambda: {"600001": "张三科技", "600002": "张三控股"}
         r = self.api.shelter_pool_add("张三")
         self.assertFalse(r["ok"])
         self.assertIn("匹配到多只", r.get("error", ""))

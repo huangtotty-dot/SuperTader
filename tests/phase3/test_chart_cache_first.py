@@ -64,9 +64,20 @@ class TestCacheFirst(unittest.TestCase):
         def _fake_fetch(code):
             calls["fetch"] += 1
             return _daily_df()
+
+        class _TencentDown:
+            """`_fetch_daily_bounded` 现腾讯优先：腾讯不异常就不走 GM 兜底。
+            把它钉成抛异常，回归「miss ⇒ 回退 fetch_daily_kline」这条 GM-first 语义。"""
+            def __init__(self, *a, **k):
+                pass
+
+            def daily(self, code, min_rows=0):
+                raise RuntimeError("tencent down")
+
         with mock.patch.object(cc, "load_payload", return_value=None), \
              mock.patch.object(cc, "load_daily_display", return_value=None), \
              mock.patch("gui._fetch_min_bars", return_value=pd.DataFrame()), \
+             mock.patch("core.market_data.tencent_provider.TencentProvider", _TencentDown), \
              mock.patch("core.position_builder.fetch_daily_kline", _fake_fetch):
             r = self.api.load_stock_chart("600000")
         self.assertTrue(r.get("available"))

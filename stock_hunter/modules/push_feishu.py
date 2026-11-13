@@ -230,7 +230,7 @@ def send_report_summary(config: dict, data: dict, output_path: str, date_str: st
 
     # 2. 构建文字摘要
     lines = []
-    lines.append(f"📊 韭研概念打分报告 | {date_str}")
+    lines.append(f"📊 概念板块打分报告 | {date_str}")
     lines.append(f"打分池: {stats.get('pool_count', 0)} 只 | 行情成功: {stats.get('market_success', 0)} 只 | 失败: {stats.get('market_failed', 0)} 只")
     lines.append(f"板块数: {stats.get('sector_count', 0)} | 得分范围: {stats.get('score_range', 'N/A')} | 平均: {stats.get('score_avg', 0)}")
     heat_top = stats.get('heat_top_sector', '')
@@ -286,7 +286,7 @@ def send_report_summary(config: dict, data: dict, output_path: str, date_str: st
         lines.append("")
 
     lines.append(f"📁 详细报告 Excel 已生成: {output_path}")
-    title = f"【韭研概念打分报告】{date_str}"
+    title = f"【概念板块打分报告】{date_str}"
 
     # 3. 推送文字摘要
     text_result = None
@@ -410,13 +410,13 @@ def send_error_alert(config: dict, error_msg: str, date_str: str) -> dict:
     app_secret = feishu_cfg.get("app_secret", "")
     chat_id = feishu_cfg.get("chat_id", "")
 
-    text = f"⚠️ 【韭研报告告警】{date_str}\n报告生成失败或异常:\n{error_msg}\n请检查脚本日志。"
+    text = f"⚠️ 【概念报告告警】{date_str}\n报告生成失败或异常:\n{error_msg}\n请检查脚本日志。"
 
     # 优先应用API
     if app_id and app_secret and chat_id:
         try:
             client = FeishuAppClient(app_id, app_secret)
-            return client.send_post_message(chat_id, "【韭研报告告警】", [text])
+            return client.send_post_message(chat_id, "【概念报告告警】", [text])
         except Exception:
             pass
 

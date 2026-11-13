@@ -23,9 +23,14 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="需要 nod
 
 
 def _extract():
-    """截出 `_ymdMinusDays` + `buildGapAreas` 两个**真函数**（它们之间到下一个顶层 function）。"""
+    """截出 `_ymdMinusDays` + `buildGapAreas` 两个**真函数**（它们之间到下一个顶层 function）。
+
+    ⚠️ 边界钉在 `buildVolumeProfile`（紧跟 `buildGapAreas` 之后）而不是 `renderStockChart`：
+    `renderStockChart` 之前夹着 `_installChartContextMenu`/`_vpOn` 两个引用 `window`/`localStorage`
+    的 IIFE，node 裸跑会直接 crash。
+    """
     i = _JS.index("function _ymdMinusDays")
-    j = _JS.index("function renderStockChart", i)
+    j = _JS.index("function buildVolumeProfile", i)
     return _JS[i:j]
 
 
@@ -97,5 +102,5 @@ class TestGapWindow:
         assert "String(dates[i]).slice(0, 10) >= cut" in src
 
     def test_call_sites_pass_dates(self):
-        assert "buildGapAreas(period.ohlc, period.dates, 15)" in _JS
+        assert "buildGapAreas(period.ohlc, period.dates, 250)" in _JS
         assert "buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8)" in _JS

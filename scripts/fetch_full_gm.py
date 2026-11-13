@@ -32,7 +32,7 @@ ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
 
 DATA_DIR = Path(r"E:\superTrader\t_io\validation\weak_strong\data")
-WATCHLIST = ROOT / "stock_hunter" / "watchlist_jiuyan.json"
+WATCHLIST = ROOT / "stock_hunter" / "watchlist_concept.json"
 
 
 def universe_codes() -> list[str]:
