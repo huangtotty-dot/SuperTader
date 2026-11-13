@@ -38,7 +38,7 @@ _MAX_APPEND = 60
 
 
 def tdx_market(code: str) -> str:
-    """代码 → 通达信市场段（与 `t_gui._tdx_day_path` 同一套规则）。"""
+    """代码 → 通达信市场段（与 `gui._tdx_day_path` 同一套规则）。"""
     c = str(code)
     if c.startswith(("88", "99", "60", "68", "56", "51", "58")):
         return "sh"

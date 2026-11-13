@@ -24,21 +24,21 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 class TestLinkedStocks(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.mkdtemp()
         self.fp = os.path.join(self.td, "linkage_matrix.npz")
-        self._old_fp = t_gui.Api._LINK_FP
-        t_gui.Api._LINK_FP = __import__('pathlib').Path(self.fp)
-        t_gui.Api._LINK_MEM = {"mtime": None, "data": None}
-        self.api = t_gui.Api()
+        self._old_fp = gui.Api._LINK_FP
+        gui.Api._LINK_FP = __import__('pathlib').Path(self.fp)
+        gui.Api._LINK_MEM = {"mtime": None, "data": None}
+        self.api = gui.Api()
 
     def tearDown(self):
-        t_gui.Api._LINK_FP = self._old_fp
-        t_gui.Api._LINK_MEM = {"mtime": None, "data": None}
+        gui.Api._LINK_FP = self._old_fp
+        gui.Api._LINK_MEM = {"mtime": None, "data": None}
 
     def _build(self, n=80):
         """3 只票：688001 与 688002 同步（相关≈1），688003 反向（相关≈-1）。"""
@@ -72,8 +72,8 @@ class TestLinkedStocks(unittest.TestCase):
     def test_name_resolution(self):
         self._build()
         # 名称走韭研名表：老接口 _jiuyan_names 里有"华工科技"这类，这里用注入的方式验证分支
-        old = t_gui._jiuyan_names
-        t_gui._jiuyan_names = lambda: {"688001": "甲科技", "688002": "乙科技", "688009": "甲科技"}
+        old = gui._jiuyan_names
+        gui._jiuyan_names = lambda: {"688001": "甲科技", "688002": "乙科技", "688009": "甲科技"}
         try:
             d = self.api.load_linked_stocks("乙科技", 60)
             self.assertTrue(d["available"])
@@ -85,15 +85,15 @@ class TestLinkedStocks(unittest.TestCase):
             d3 = self.api.load_linked_stocks("不存在的名字", 60)
             self.assertFalse(d3["available"])
         finally:
-            t_gui._jiuyan_names = old
+            gui._jiuyan_names = old
 
     def test_missing_matrix_is_warming(self):
-        t_gui.Api._LINK_BUILD = {"running": False, "at": 0.0}
+        gui.Api._LINK_BUILD = {"running": False, "at": 0.0}
         d = self.api.load_linked_stocks("688001", 60)
         self.assertFalse(d["available"])
         self.assertTrue(d.get("warming"))
         # 不应抛异常；后台重算被节流置位（这里只看 at 被写过）
-        self.assertGreater(t_gui.Api._LINK_BUILD.get("at") or 0, 0)
+        self.assertGreater(gui.Api._LINK_BUILD.get("at") or 0, 0)
 
 
 if __name__ == "__main__":

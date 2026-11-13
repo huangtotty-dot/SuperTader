@@ -32,8 +32,8 @@ _BOUNCE = _DECLINE + [round(_DECLINE[-1] * 1.001, 4)]  # 最后一周微反弹 �
 
 class TestMacdCriterion(unittest.TestCase):
     def setUp(self):
-        import t_gui
-        self.g = t_gui
+        import gui
+        self.g = gui
 
     def test_一直绿不算(self):
         self.assertFalse(self.g.weekly_macd_turned_red(_DECLINE))
@@ -64,8 +64,8 @@ class TestMacdStateModes(unittest.TestCase):
     原判据只认"本周刚翻红"，而它 8 周前就翻红了 ⇒ 增加**状态口径**。"""
 
     def setUp(self):
-        import t_gui
-        self.g = t_gui
+        import gui
+        self.g = gui
         self.flip_now = _BOUNCE                                   # 最后一根刚翻红
         self.flip_3w = _BOUNCE + [_BOUNCE[-1]] * 3                 # 3 周前翻红、之后一路红柱
         self.always_red = _DECLINE[:40] + [8.0 + 0.6 * i for i in range(1, 12)]  # 早已红、近期无翻转
@@ -116,19 +116,19 @@ class TestMacdStateModes(unittest.TestCase):
 
 class TestScanApi(unittest.TestCase):
     def setUp(self):
-        import t_gui
-        self.tg = t_gui
+        import gui
+        self.tg = gui
         self.td = tempfile.TemporaryDirectory()
-        self._orig_fp = t_gui._FOCUS_FP
-        self._orig_wm = t_gui._WM_STATE_FP
-        t_gui._FOCUS_FP = Path(self.td.name) / "focus_stocks.json"
-        t_gui._WM_STATE_FP = Path(self.td.name) / "weekly_macd_scan.json"
-        t_gui._WM_LAST = {}
-        with t_gui._WM_LOCK:
-            t_gui._WM_SCAN.update({"running": False, "done": 0, "total": 0,
+        self._orig_fp = gui._FOCUS_FP
+        self._orig_wm = gui._WM_STATE_FP
+        gui._FOCUS_FP = Path(self.td.name) / "focus_stocks.json"
+        gui._WM_STATE_FP = Path(self.td.name) / "weekly_macd_scan.json"
+        gui._WM_LAST = {}
+        with gui._WM_LOCK:
+            gui._WM_SCAN.update({"running": False, "done": 0, "total": 0,
                                    "hits": [], "matched": [], "error": "",
                                    "started_at": None, "finished_at": None})
-        self.api = t_gui.Api()
+        self.api = gui.Api()
 
     def tearDown(self):
         self.tg._FOCUS_FP = self._orig_fp
@@ -225,18 +225,18 @@ class TestBeaconWm(unittest.TestCase):
     """2026-10-31 owner：「市场风向也要显示周线 MACD 是否翻红」。"""
 
     def test_按代码取状态且带记忆(self):
-        import t_gui
-        st = t_gui._wm_state_of_code("603028")
+        import gui
+        st = gui._wm_state_of_code("603028")
         self.assertIsInstance(st, dict)
         self.assertTrue(st["red"])
         self.assertFalse(st["flip"])
         self.assertEqual(st["flip_bars_ago"], 8)
-        st2 = t_gui._wm_state_of_code("603028")
+        st2 = gui._wm_state_of_code("603028")
         self.assertEqual(st, st2)
-        self.assertIsNone(t_gui._wm_state_of_code("999999"))
+        self.assertIsNone(gui._wm_state_of_code("999999"))
 
     def test_enrich里带wm(self):
-        src = (Path(_ROOT) / "t_gui.py").read_text(encoding="utf-8")
+        src = (Path(_ROOT) / "gui.py").read_text(encoding="utf-8")
         i = src.index("def _beacon_enrich(")
         seg = src[i:i + 2500]
         self.assertIn('"wm": _wm_state_of_code(c)', seg)

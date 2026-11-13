@@ -13,7 +13,7 @@ from datetime import datetime
 
 sys.path.insert(0, BASE)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 TODAY = datetime.now().strftime("%Y-%m-%d")
 
@@ -26,10 +26,10 @@ print(f"{'端点':<26}{'耗时ms':>9}{'线程增量':>9}  新线程名")
 print("-" * 90)
 for nm in NAMES:
     # 每次都用全新 Api（清掉实例级缓存），保留类级缓存以模拟真实冷启动第二波
-    api = t_gui.Api()
+    api = gui.Api()
     for a in ("_indices_cache", "_turnover_cache", "_turnover_hist_cache"):
-        if hasattr(t_gui.Api, a):
-            getattr(t_gui.Api, a).clear()
+        if hasattr(gui.Api, a):
+            getattr(gui.Api, a).clear()
     before = {t.ident for t in threading.enumerate()}
     fn = getattr(api, nm, None)
     if fn is None:

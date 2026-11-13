@@ -2,7 +2,7 @@
 """给「数据要素」各二级概念写一句解释（owner 2026-10-24：猎手分组头红框处要显示板块解释）。
 
 沿用 2026-10-19 医药板块的机制：解释写在 watchlist 的 `jiuyan_concept_desc`（{概念: 解释}），
-t_gui `_jiuyan_all_concept_descs()` 合并成全表字典 → 前端 `gkDesc()` 直接渲染在分组头右侧
+gui `_jiuyan_all_concept_descs()` 合并成全表字典 → 前端 `gkDesc()` 直接渲染在分组头右侧
 （过长省略、悬停看全文）。**只增不覆盖**：已有该概念的注释一律保留。
 
 用法：``python stock_hunter/annotate_dataelement_20261024.py [--apply]``（默认 dry-run）

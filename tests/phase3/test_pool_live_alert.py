@@ -23,6 +23,9 @@ from core import hunter_ma5_alert as H   # noqa: E402
 from core import ma5_pullback as P       # noqa: E402
 
 _MAIN = (_ROOT / "main.py").read_text(encoding="utf-8")
+# 2026-11-13：猎手/异常监控池 watcher + 轮询已抽到 core/hunter_watch.py，
+# `_start_hunter_ma5_watch` 的定义断言改读它。
+_HW = (_ROOT / "core" / "hunter_watch.py").read_text(encoding="utf-8")
 
 
 @pytest.fixture()
@@ -75,8 +78,8 @@ class TestCardWording:
 
 class TestWiring:
     def test_main_starts_pool_universe(self):
-        i = _MAIN.index("def _start_hunter_ma5_watch")
-        seg = _MAIN[i:i + 2000]
+        i = _HW.index("def _start_hunter_ma5_watch")
+        seg = _HW[i:i + 2000]
         assert '"universe": "pool"' in seg, "watcher 必须显式用异常监控池名单"
 
     def test_pullback_uses_pool_source(self):

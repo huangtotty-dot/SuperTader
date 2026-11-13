@@ -70,7 +70,7 @@ V2 纯两点后 strength 恒≥10（score=100/阈值36），三档失效 → W33
 |------|------|------|
 | `sizing_advice_{date}.jsonl` | `t_io/traces/` | 每次 sizing 调用逐笔落盘（买卖双侧） |
 | `forward_tracker.py` | `t_io/validation/daily_review/` | 前瞻收益回填（加仓/建仓两张表，幂等） |
-| `confirm_position` API | `t_gui.py` + web | 人工确认建仓 → 回写 signal_history |
+| `confirm_position` API | `gui.py` + web | 人工确认建仓 → 回写 signal_history |
 | `daily_review.py` | `t_io/validation/daily_review/` | 日复盘自动产出（加仓观察/建仓扫描/阶段看板/sizing汇总/持仓准确性 K2K3） |
 
 Review 体系（V2.1）：`doc/每日复盘/每日Review.md`（加仓+建仓双主轴）、`doc/每周复盘/每周Review.md`（唯一允许改参/上线的时点）、`doc/每周复盘/W33_*.md`（专项方案）。
@@ -80,7 +80,7 @@ Review 体系（V2.1）：`doc/每日复盘/每日Review.md`（加仓+建仓双�
 ```bash
 cd E:\06_T
 python main.py                          # 实盘盯盘（自动拉起桌面 GUI 看板；--no-gui 禁用）
-python t_gui.py                         # 仅打开盘后复盘决策看板（不盯盘）
+python gui.py                         # 仅打开盘后复盘决策看板（不盯盘）
 python replay_day.py                    # 单日回放
 python position_builder.py --no-feishu  # 建仓扫描（单股 --code）
 python harness_backtest.py --codes 000988 --start 2026-07-24 --end 2026-07-24  # 回测
@@ -89,7 +89,7 @@ python t_io/validation/daily_review/forward_tracker.py --date 2026-08-13        
 python t_io/validation/w33_offline_rescan.py                                    # 双通道离线闸门
 ```
 
-> **GUI 看板**：`main.py` 默认以子进程启动 `t_gui.py`（pywebview 桌面壳，只读盘上 JSON/JSONL 数据，失败不影响盯盘）。建仓区块含「✓确认建仓」按钮（回写 signal_history）。
+> **GUI 看板**：`main.py` 默认以子进程启动 `gui.py`（pywebview 桌面壳，只读盘上 JSON/JSONL 数据，失败不影响盯盘）。建仓区块含「✓确认建仓」按钮（回写 signal_history）。
 
 ## 七、数据目录 t_io/
 

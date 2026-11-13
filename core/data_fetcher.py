@@ -649,7 +649,7 @@ def load_watchlist() -> Dict[str, dict]:
 
 def load_holdings() -> Dict[str, dict]:
     global STRATEGY_MEMORY
-    from src.holdings_repo import load_held_manual, MANUAL_FILE as _HR_FILE
+    from core.holdings_repo import load_held_manual, MANUAL_FILE as _HR_FILE
     # 友好报错：用户手改 holdings_manual.json 常见漏逗号；容错静默，这里先显式校验一次
     if os.path.exists(_HR_FILE):
         try:

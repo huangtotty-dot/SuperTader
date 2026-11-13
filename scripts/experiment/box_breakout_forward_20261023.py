@@ -3,7 +3,7 @@
 
 ## 要回答的三件事
 
-1. **现在的信号到底有没有正向超额**？（口径原样复刻 `t_gui.Api._breakout_probe_one`：
+1. **现在的信号到底有没有正向超额**？（口径原样复刻 `gui.Api._breakout_probe_one`：
    `昨收 ≤ 箱体上沿 < 今收` 且幅度 ∈ [0.3%, 8%]，上沿取 as-of 上一交易日的 rel==0 箱体）
 2. 如果没有/很弱，**错在哪**：幅度带？量能？箱体宽度/时长？当日形态（上影线）？
 3. 哪个子集（如果有）**显著更强**，可以拿来做过滤。
@@ -49,8 +49,8 @@ def _load(code):
 def _scan_one(code, lookback: int = 260):
     """单只：逐日复刻突破判定 + 记录特征与前向收益。返回样本列表（dict）。"""
     import pandas as pd
-    import t_gui
-    api = t_gui.Api()
+    import gui
+    api = gui.Api()
     rows = _load(code)
     if not rows:
         return []

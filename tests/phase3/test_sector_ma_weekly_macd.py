@@ -20,7 +20,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-PY = (Path(_ROOT) / "t_gui.py").read_text(encoding="utf-8")
+PY = (Path(_ROOT) / "gui.py").read_text(encoding="utf-8")
 JS = (Path(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
 HTML = (Path(_ROOT) / "web" / "index.html").read_text(encoding="utf-8")
 
@@ -33,8 +33,8 @@ def _series(code):
 
 class TestFlags(unittest.TestCase):
     def setUp(self):
-        import t_gui
-        self.g = t_gui
+        import gui
+        self.g = gui
 
     def test_最后一天与状态同口径(self):
         for code, want in (("603028", True), ("600362", False)):

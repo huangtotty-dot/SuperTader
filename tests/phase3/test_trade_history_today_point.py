@@ -4,7 +4,7 @@
 背景：`core.trade_history` 的 `cum`/`cum_all` 是**按成交日**逐日累计的 ⇒ 最后一点 =
 最后一个**成交日**。今天没成交时，那张「含浮动」的曲线就停在昨天，可浮动明明每天都变。
 
-`t_gui.Api._ledger_append_today` 在**收盘后**、且台账里还没有今天的成交时，补一个点：
+`gui.Api._ledger_append_today` 在**收盘后**、且台账里还没有今天的成交时，补一个点：
 已实现/累计买入不变，`cum_total = 已实现 + 浮动`（浮动取台账里的 `unrealized`）。
 盘中不补（台账里的 `last_price` 不是今天的收盘价）。
 
@@ -20,9 +20,9 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
-APPEND = t_gui.Api._ledger_append_today
+APPEND = gui.Api._ledger_append_today
 
 
 def _ledger():

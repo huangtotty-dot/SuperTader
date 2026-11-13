@@ -23,7 +23,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 class _Win:
@@ -44,38 +44,38 @@ class _Win:
 
 class TestGuardedEval(unittest.TestCase):
     def setUp(self):
-        t_gui._EVAL_GUARD.update({"busy": False, "fail": 0})
+        gui._EVAL_GUARD.update({"busy": False, "fail": 0})
 
     def tearDown(self):
-        t_gui._EVAL_GUARD.update({"busy": False, "fail": 0})
+        gui._EVAL_GUARD.update({"busy": False, "fail": 0})
 
     def test_ok(self):
         w = _Win()
-        self.assertTrue(t_gui._eval_js_guarded(w, "1+1", "t", timeout=1.0))
+        self.assertTrue(gui._eval_js_guarded(w, "1+1", "t", timeout=1.0))
         self.assertEqual(w.calls, 1)
 
     def test_exception_is_false(self):
-        self.assertFalse(t_gui._eval_js_guarded(_Win(boom=True), "x", "t", timeout=1.0))
+        self.assertFalse(gui._eval_js_guarded(_Win(boom=True), "x", "t", timeout=1.0))
 
     def test_hang_returns_within_timeout(self):
         w = _Win(hang=True)
         t0 = time.time()
-        self.assertFalse(t_gui._eval_js_guarded(w, "x", "t", timeout=0.5))
+        self.assertFalse(gui._eval_js_guarded(w, "x", "t", timeout=0.5))
         dt = time.time() - t0
         self.assertLess(dt, 2.0)                 # 关键：不能被渲染进程拖死
-        self.assertEqual(t_gui._EVAL_GUARD["fail"], 1)
+        self.assertEqual(gui._EVAL_GUARD["fail"], 1)
         w._release.set()                          # 放掉模拟线程
 
     def test_give_up_after_five(self):
-        t_gui._EVAL_GUARD["fail"] = 5
+        gui._EVAL_GUARD["fail"] = 5
         w = _Win()
-        self.assertFalse(t_gui._eval_js_guarded(w, "x", "t", timeout=0.2))
+        self.assertFalse(gui._eval_js_guarded(w, "x", "t", timeout=0.2))
         self.assertEqual(w.calls, 0)             # 不再发起
 
     def test_busy_skip(self):
-        t_gui._EVAL_GUARD["busy"] = True
+        gui._EVAL_GUARD["busy"] = True
         w = _Win()
-        self.assertFalse(t_gui._eval_js_guarded(w, "x", "t", timeout=0.2))
+        self.assertFalse(gui._eval_js_guarded(w, "x", "t", timeout=0.2))
         self.assertEqual(w.calls, 0)
 
 

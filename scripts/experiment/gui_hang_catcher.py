@@ -2,7 +2,7 @@
 """GUI **进程外**卡死捕获器（2026-10-30）。
 
 ## 为什么需要它（不是重复造轮子）
-进程内的卡死看门狗（`t_gui._start_gui_freeze_watchdog`）与线程采样（`core.thread_watch`）
+进程内的卡死看门狗（`gui._stargui_freeze_watchdog`）与线程采样（`core.thread_watch`）
 都活在 GUI 进程里。2026-10-30 15:47 的这次卡死，**GUI 的 34 个线程全部阻塞、CPU 增量 0.0s**，
 连看门狗线程都没再写过一行 ⇒ 进程内工具整体失效，事后只剩"它卡了"，没有栈。
 
@@ -41,7 +41,7 @@ def _pyspy():
 
 
 def find_gui() -> list[int]:
-    """找出所有跑 t_gui.py 的 pid（可能有多个：单实例守卫会等待）。"""
+    """找出所有跑 gui.py 的 pid（可能有多个：单实例守卫会等待）。"""
     try:
         import psutil
     except ImportError:
@@ -50,7 +50,7 @@ def find_gui() -> list[int]:
     for p in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             cmd = " ".join(p.info.get("cmdline") or [])
-            if "t_gui.py" in cmd and "python" in (p.info.get("name") or "").lower():
+            if "gui.py" in cmd and "python" in (p.info.get("name") or "").lower():
                 out.append(p.info["pid"])
         except Exception:
             continue

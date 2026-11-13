@@ -35,7 +35,7 @@ if _ROOT not in sys.path:
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 def _zigzag(pivots, spread=0.005):
@@ -59,7 +59,7 @@ def _zigzag(pivots, spread=0.005):
 class TestFibonacci(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.api = t_gui.Api()
+        cls.api = gui.Api()
 
     def _fib(self, df, period="daily"):
         return self.api._calc_fibonacci(df, period)
@@ -88,12 +88,12 @@ class TestFibonacci(unittest.TestCase):
         L, H = r["swing"]["low"]["price"], r["swing"]["high"]["price"]
         by_ratio = {lv["ratio"]: lv for lv in r["levels"]}
         # 回撤位夹在摆动区间内
-        for rt in t_gui._FIB_RETRACE:
+        for rt in gui._FIB_RETRACE:
             self.assertAlmostEqual(by_ratio[rt]["price"], round(H - (H - L) * rt, 3), places=3)
             self.assertLessEqual(by_ratio[rt]["price"], H + 1e-6)
             self.assertGreaterEqual(by_ratio[rt]["price"], L - 1e-6)
         # 扩展位在摆动区间上方
-        for ex in t_gui._FIB_EXTENSION:
+        for ex in gui._FIB_EXTENSION:
             self.assertAlmostEqual(by_ratio[ex]["price"], round(L + (H - L) * ex, 3), places=3)
             self.assertGreater(by_ratio[ex]["price"], H)
         # 黄金位唯一且为 0.618
@@ -121,9 +121,9 @@ class TestFibonacci(unittest.TestCase):
 
         L, H = r["swing"]["low"]["price"], r["swing"]["high"]["price"]
         by_ratio = {lv["ratio"]: lv for lv in r["levels"]}
-        for rt in t_gui._FIB_RETRACE:
+        for rt in gui._FIB_RETRACE:
             self.assertAlmostEqual(by_ratio[rt]["price"], round(L + (H - L) * rt, 3), places=3)
-        for ex in t_gui._FIB_EXTENSION:
+        for ex in gui._FIB_EXTENSION:
             self.assertAlmostEqual(by_ratio[ex]["price"], round(H - (H - L) * ex, 3), places=3)
             self.assertLess(by_ratio[ex]["price"], L)
 
@@ -138,7 +138,7 @@ class TestFibonacci(unittest.TestCase):
         # H=30, L=2 ⇒ rng=28；1.272→-5.6、1.618→-15.3 均被丢弃
         kinds = [lv["kind"] for lv in r["levels"]]
         self.assertNotIn("extension", kinds)
-        self.assertEqual(len(r["levels"]), len(t_gui._FIB_RETRACE))
+        self.assertEqual(len(r["levels"]), len(gui._FIB_RETRACE))
 
     def test_fallback_when_no_pivot_at_all(self):
         """单边行情（无任何分形摆动点）⇒ 降级为回看区间高低点，仍可用。"""
@@ -159,14 +159,14 @@ class TestFibonacci(unittest.TestCase):
 
         self.assertTrue(r["available"])
         self.assertTrue(r["fallback"])
-        self.assertLess(r["swing"]["amplitude_pct"], t_gui._FIB_MIN_AMP["daily"])
+        self.assertLess(r["swing"]["amplitude_pct"], gui._FIB_MIN_AMP["daily"])
 
     def test_index_offset_under_lookback(self):
         """总长 > lookback 时，锚点索引必须相对**全量**序列（偏移修正回归点）。"""
         # 前 230 根缓慢上行（段内单调、无分形极值）→ 把大摆动推到尾部，
         # 确保 tail(250) 会裁掉开头，从而 off > 0
         df, _ = _zigzag([(20, 0), (22, 230), (12, 30), (30, 40), (26, 20)])
-        self.assertGreater(len(df), t_gui._FIB_LOOKBACK["daily"])
+        self.assertGreater(len(df), gui._FIB_LOOKBACK["daily"])
         r = self._fib(df)
 
         self.assertTrue(r["available"])
@@ -176,7 +176,7 @@ class TestFibonacci(unittest.TestCase):
         self.assertAlmostEqual(r["swing"]["low"]["price"], round(12 * 0.995, 3), places=3)
         self.assertAlmostEqual(r["swing"]["high"]["price"], round(30 * 1.005, 3), places=3)
         # 索引相对全量序列：必须 > lookback 裁掉的偏移量
-        self.assertGreater(r["swing"]["low"]["index"], len(df) - t_gui._FIB_LOOKBACK["daily"])
+        self.assertGreater(r["swing"]["low"]["index"], len(df) - gui._FIB_LOOKBACK["daily"])
         self._assert_dates_match_indices(df, r)
 
     def test_insufficient_sample(self):

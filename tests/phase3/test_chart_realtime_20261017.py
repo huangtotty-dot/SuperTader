@@ -32,7 +32,7 @@ if _ROOT not in sys.path:
 
 import pandas as pd  # noqa: E402
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 import core.market_data.tencent_provider as TP  # noqa: E402
 from core import chart_cache as cc  # noqa: E402
 
@@ -111,22 +111,22 @@ class TestTencentSymbolPrefix(unittest.TestCase):
 
 class TestTencent10minSynthesis(unittest.TestCase):
     def setUp(self):
-        t_gui._MIN_BARS_CACHE.clear()
+        gui._MIN_BARS_CACHE.clear()
         self._orig_mk = TP.minute_kline
-        self._orig_tx = t_gui._fetch_min_bars_tencent
-        self._orig_online = t_gui._fetch_min_bars_online
+        self._orig_tx = gui._fetch_min_bars_tencent
+        self._orig_online = gui._fetch_min_bars_online
 
     def tearDown(self):
         TP.minute_kline = self._orig_mk
-        t_gui._fetch_min_bars_tencent = self._orig_tx
-        t_gui._fetch_min_bars_online = self._orig_online
-        t_gui._MIN_BARS_CACHE.clear()
+        gui._fetch_min_bars_tencent = self._orig_tx
+        gui._fetch_min_bars_online = self._orig_online
+        gui._MIN_BARS_CACHE.clear()
 
     def test_10min_from_m5_has_24_bars_per_day_and_no_dup_columns(self):
         frames = [_frame_5min(d) for d in (_DAY1, _DAY2)]
         TP.minute_kline = lambda code, freq="m5", count=640: pd.concat(
             frames, ignore_index=True)
-        df = t_gui._fetch_min_bars_tencent("600000", "10min")
+        df = gui._fetch_min_bars_tencent("600000", "10min")
         self.assertFalse(df.empty, "10min 合成结果为空（date/time 重名列又回来了？）")
         self.assertEqual(list(df.columns),
                          ["time", "open", "high", "low", "close", "volume"])
@@ -136,9 +136,9 @@ class TestTencent10minSynthesis(unittest.TestCase):
     def test_tushare_fallback_path_also_survives(self):
         """回归：`resample_5min_to_10min` 的输出带 `date` 分组列，原样喂 `_norm_min_bars`
         会变成两个 `time` 列 ⇒ `cannot assemble with duplicate keys`（10min 永远空）。"""
-        t_gui._fetch_min_bars_tencent = lambda code, freq: pd.DataFrame()
-        t_gui._fetch_min_bars_online = lambda ts_code, freq, days: _frame_5min(_DAY1)
-        df = t_gui._fetch_min_bars("600000", "10min")
+        gui._fetch_min_bars_tencent = lambda code, freq: pd.DataFrame()
+        gui._fetch_min_bars_online = lambda ts_code, freq, days: _frame_5min(_DAY1)
+        df = gui._fetch_min_bars("600000", "10min")
         self.assertFalse(df.empty)
         self.assertEqual(len(df), 24)
         self.assertEqual(list(df.columns),
@@ -156,24 +156,24 @@ def _history_df(days=60, end=_DAY1):
 
 class TestChartRealtime(unittest.TestCase):
     def setUp(self):
-        t_gui._CHART_LIVE_CACHE.clear()
-        t_gui._CHART_LIVE_STATE.clear()
-        self._orig_session = t_gui._in_trading_session
+        gui._CHART_LIVE_CACHE.clear()
+        gui._CHART_LIVE_STATE.clear()
+        self._orig_session = gui._in_trading_session
         self._orig_daily_display = cc.load_daily_display
         self._orig_raw_daily = TP.daily_kline_raw
         self._orig_snap = TP.TencentProvider.snapshot_auction
-        t_gui._in_trading_session = lambda now=None: True
+        gui._in_trading_session = lambda now=None: True
         self.today = datetime.now().strftime("%Y-%m-%d")
-        self.api = t_gui.Api()
+        self.api = gui.Api()
 
     def tearDown(self):
-        t_gui._in_trading_session = self._orig_session
+        gui._in_trading_session = self._orig_session
         cc.load_daily_display = self._orig_daily_display
         TP.daily_kline_raw = self._orig_raw_daily
         TP.TencentProvider.snapshot_auction = self._orig_snap
-        t_gui._CHART_LIVE_CACHE.clear()
-        t_gui._CHART_LIVE_STATE.clear()
-        t_gui._CHART_LIVE_TTL = 2.0
+        gui._CHART_LIVE_CACHE.clear()
+        gui._CHART_LIVE_STATE.clear()
+        gui._CHART_LIVE_TTL = 2.0
 
     def _fake_quote(self):
         TP.TencentProvider.snapshot_auction = lambda self_, codes: {
@@ -226,8 +226,8 @@ class TestChartRealtime(unittest.TestCase):
             rows = _frame_5min(_DAY2)
             rows["time"] = pd.to_datetime(rows["time"])
             return rows
-        orig = t_gui._fetch_min_bars_tencent
-        t_gui._fetch_min_bars_tencent = _fake_tx
+        orig = gui._fetch_min_bars_tencent
+        gui._fetch_min_bars_tencent = _fake_tx
         try:
             self._fake_quote()
             out = self.api._compute_chart_live("600000", "min30")
@@ -235,7 +235,7 @@ class TestChartRealtime(unittest.TestCase):
             self.assertEqual(len(out["series"]["dates"]), 48)
             self.assertEqual(out["series"]["dates"][-1], f"{_DAY2} 15:00")
         finally:
-            t_gui._fetch_min_bars_tencent = orig
+            gui._fetch_min_bars_tencent = orig
 
     # ---- SWR 契约（2026-10-18 GUI 卡死专项）----
 
@@ -252,7 +252,7 @@ class TestChartRealtime(unittest.TestCase):
         self.assertLess(dt, 250, f"首次调用耗时 {dt:.0f}ms —— SWR 失效，js_api 又被同步取数占住")
         # 等后台 worker 落缓存
         for _ in range(100):
-            if t_gui._CHART_LIVE_CACHE.get(("600000", "daily")):
+            if gui._CHART_LIVE_CACHE.get(("600000", "daily")):
                 break
             _t.sleep(0.02)
         second = self.api.load_chart_realtime("600000", "daily")
@@ -271,7 +271,7 @@ class TestChartRealtime(unittest.TestCase):
         import time as _t
         self.api.load_chart_realtime("600000", "daily")
         for _ in range(100):
-            if t_gui._CHART_LIVE_CACHE.get(("600000", "daily")):
+            if gui._CHART_LIVE_CACHE.get(("600000", "daily")):
                 break
             _t.sleep(0.02)
         # 缓存新鲜 ⇒ 直接回，不再打网络
@@ -283,51 +283,51 @@ class TestMinuteSourceOrderAndTushareGuard(unittest.TestCase):
     """2026-10-18 GUI 卡死专项：分钟取数必须**腾讯优先**，tushare 只作兜底且带熔断/硬超时。"""
 
     def setUp(self):
-        t_gui._MIN_BARS_CACHE.clear()
-        t_gui._TUSHARE_MIN_STATE["until"] = 0.0
-        self._o_session = t_gui._in_trading_session
-        self._o_tx = t_gui._fetch_min_bars_tencent
-        self._o_online = t_gui._fetch_min_bars_online
-        self._o_bounded = t_gui._run_bounded
+        gui._MIN_BARS_CACHE.clear()
+        gui._TUSHARE_MIN_STATE["until"] = 0.0
+        self._o_session = gui._in_trading_session
+        self._o_tx = gui._fetch_min_bars_tencent
+        self._o_online = gui._fetch_min_bars_online
+        self._o_bounded = gui._run_bounded
 
     def tearDown(self):
-        t_gui._in_trading_session = self._o_session
-        t_gui._fetch_min_bars_tencent = self._o_tx
-        t_gui._fetch_min_bars_online = self._o_online
-        t_gui._run_bounded = self._o_bounded
-        t_gui._MIN_BARS_CACHE.clear()
-        t_gui._TUSHARE_MIN_STATE["until"] = 0.0
+        gui._in_trading_session = self._o_session
+        gui._fetch_min_bars_tencent = self._o_tx
+        gui._fetch_min_bars_online = self._o_online
+        gui._run_bounded = self._o_bounded
+        gui._MIN_BARS_CACHE.clear()
+        gui._TUSHARE_MIN_STATE["until"] = 0.0
 
     def test_tencent_is_first_even_off_session(self):
-        t_gui._in_trading_session = lambda now=None: False
-        t_gui._fetch_min_bars_tencent = lambda code, freq: _frame_5min(_DAY1)
+        gui._in_trading_session = lambda now=None: False
+        gui._fetch_min_bars_tencent = lambda code, freq: _frame_5min(_DAY1)
 
         def _boom(*a, **k):
             raise AssertionError("盘后也不该先打 tushare（卡死栈里 3 个 worker 就挂在这）")
-        t_gui._fetch_min_bars_online = _boom
-        df = t_gui._fetch_min_bars("600000", "30min")
+        gui._fetch_min_bars_online = _boom
+        df = gui._fetch_min_bars("600000", "30min")
         self.assertFalse(df.empty)
 
     def test_tushare_timeout_starts_cooldown_and_returns_fast(self):
-        t_gui._run_bounded = lambda fn, timeout: (False, None, None)   # 模拟 DNS 卡死超时
+        gui._run_bounded = lambda fn, timeout: (False, None, None)   # 模拟 DNS 卡死超时
         import time as _t
         t0 = _t.perf_counter()
-        df = t_gui._fetch_min_bars_online("000001.SZ", "30min", 70)
+        df = gui._fetch_min_bars_online("000001.SZ", "30min", 70)
         dt = _t.perf_counter() - t0
         self.assertTrue(df.empty)
         self.assertLess(dt, 0.5, "超时后必须立刻返回，不能同步等网络")
-        self.assertGreater(t_gui._TUSHARE_MIN_STATE["until"], _t.time(), "必须进入冷却")
+        self.assertGreater(gui._TUSHARE_MIN_STATE["until"], _t.time(), "必须进入冷却")
 
     def test_cooldown_skips_network_entirely(self):
         import time as _t
-        t_gui._TUSHARE_MIN_STATE["until"] = _t.time() + 300
+        gui._TUSHARE_MIN_STATE["until"] = _t.time() + 300
         called = {"n": 0}
 
         def _should_not_run(fn, timeout):
             called["n"] += 1
             return True, None, None
-        t_gui._run_bounded = _should_not_run
-        df = t_gui._fetch_min_bars_online("000001.SZ", "30min", 70)
+        gui._run_bounded = _should_not_run
+        df = gui._fetch_min_bars_online("000001.SZ", "30min", 70)
         self.assertTrue(df.empty)
         self.assertEqual(called["n"], 0, "冷却期内不许再发起调用")
 
@@ -336,10 +336,10 @@ class TestInstrumentSearch(unittest.TestCase):
     """手动盘「K线速查」：名称/代码 → 可画 K 线的标的（2026-10-18）。全离线。"""
 
     def setUp(self):
-        t_gui._SEARCH_CACHE.clear()
-        t_gui._INSTRUMENT_NAMES["ts"] = 0.0
-        t_gui._INSTRUMENT_NAMES["map"] = {}
-        self.api = t_gui.Api()
+        gui._SEARCH_CACHE.clear()
+        gui._INSTRUMENT_NAMES["ts"] = 0.0
+        gui._INSTRUMENT_NAMES["map"] = {}
+        self.api = gui.Api()
         self._orig_search = TP.search_instruments
         self._orig_names_fn = self.api._instrument_names
         self.api._instrument_names = lambda: {"600362": "江西铜业", "600519": "贵州茅台"}
@@ -347,9 +347,9 @@ class TestInstrumentSearch(unittest.TestCase):
     def tearDown(self):
         TP.search_instruments = self._orig_search
         self.api._instrument_names = self._orig_names_fn
-        t_gui._SEARCH_CACHE.clear()
-        t_gui._INSTRUMENT_NAMES["ts"] = 0.0
-        t_gui._INSTRUMENT_NAMES["map"] = {}
+        gui._SEARCH_CACHE.clear()
+        gui._INSTRUMENT_NAMES["ts"] = 0.0
+        gui._INSTRUMENT_NAMES["map"] = {}
 
     def test_local_exact_name_hits_without_network(self):
         calls = {"n": 0}

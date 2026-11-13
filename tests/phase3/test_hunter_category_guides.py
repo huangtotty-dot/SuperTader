@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PY_SOURCE = (ROOT / "t_gui.py").read_text(encoding="utf-8")
+PY_SOURCE = (ROOT / "gui.py").read_text(encoding="utf-8")
 JS_SOURCE = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 
@@ -40,7 +40,7 @@ class TestCategoryGuidePayload(unittest.TestCase):
         self.assertEqual(security_guide["title"], "什么是网络安全？")
         self.assertEqual(len(security_guide["sections"]), 4)
 
-    def test_guide_covers_definition_services_boundaries_and_relevance(self):
+    def tesguide_covers_definition_services_boundaries_and_relevance(self):
         text = json.dumps(self.guides["云计算"], ensure_ascii=False)
         required = (
             "远端数据中心", "按需使用", "按用量或订阅付费", "不自己买发电机，而是接电厂的电",
@@ -86,7 +86,7 @@ class TestCategoryGuidePayload(unittest.TestCase):
 
 
 class TestCategoryGuideFrontend(unittest.TestCase):
-    def test_guide_is_before_legend_and_stock_table(self):
+    def tesguide_is_before_legend_and_stock_table(self):
         start = JS_SOURCE.index("function renderHunter(h)")
         segment = JS_SOURCE[start:JS_SOURCE.index("\nfunction ", start + 10)]
         guide = segment.index("hunterCategoryGuideHtml((h.category_guides || {})[category])")

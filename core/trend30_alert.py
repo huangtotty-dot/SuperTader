@@ -58,7 +58,7 @@ def _codes() -> list:
             out.append(b)
 
     try:
-        from src.holdings_repo import load_held_manual
+        from core.holdings_repo import load_held_manual
         for c in load_held_manual():
             _add(c)
     except Exception:
@@ -77,7 +77,7 @@ def _codes() -> list:
 def _names() -> dict:
     names = {}
     try:
-        from src.holdings_repo import load_union
+        from core.holdings_repo import load_union
         for c, h in load_union().items():
             names[str(c)] = (h or {}).get("name") or str(c)
     except Exception:

@@ -19,7 +19,7 @@ from core.market_data.http_pool import pooled_get
 from core.rules import MAIN_BOARD_LIMIT_PCT, limit_pct
 
 
-# 2026-08-15: 拉取进度上报（供 t_gui 选股猎手前端轮询显示进度条）
+# 2026-08-15: 拉取进度上报（供 gui 选股猎手前端轮询显示进度条）
 MARKET_PROGRESS = {"running": False, "phase": "", "done": 0, "total": 0, "msg": ""}
 
 

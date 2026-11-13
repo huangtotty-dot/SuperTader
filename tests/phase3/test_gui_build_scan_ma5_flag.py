@@ -7,7 +7,7 @@
   · **行底色**仍是 5 日线口径。
 本测试只做源码契约，不启动 GUI。
 
-运行：python -m unittest tests.phase3.test_gui_build_scan_ma5_flag -v
+运行：python -m unittest tests.phase3.tesgui_build_scan_ma5_flag -v
 """
 import sys
 import unittest

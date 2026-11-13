@@ -17,24 +17,28 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 _ROOT = Path(__file__).resolve().parents[2]
 _MAIN_SRC = (_ROOT / "main.py").read_text(encoding="utf-8")
+# 2026-11-13：scan_once 抽到 core/scan.py（#3 参数注入），EOD 钩子接线断言改读它。
+_SCAN_SRC = (_ROOT / "core" / "scan.py").read_text(encoding="utf-8")
+# 2026-11-13：EOD 任务簇已抽到 core/eod_tasks.py，定义级断言改读它；main.py 只留 scan_once 的接线。
+_EOD_SRC = (_ROOT / "core" / "eod_tasks.py").read_text(encoding="utf-8")
 _GM_SRC = (_ROOT / "execution" / "auto" / "gm_main.py").read_text(encoding="utf-8")
 
 
 class TestSentimentEodSchedule(unittest.TestCase):
     def test_eod_hook_defined_and_wired(self):
-        self.assertIn("def _maybe_run_sentiment_eod(now: datetime)", _MAIN_SRC)
-        self.assertIn("_maybe_run_sentiment_eod(now)", _MAIN_SRC,
-                      "scan_once 必须调用 EOD 钩子")
-        self.assertIn("dtime(15, 30)", _MAIN_SRC, "收盘后 15:30 才允许跑")
-        self.assertIn("_regime_state_last_date() >= today", _MAIN_SRC,
+        self.assertIn("def _maybe_run_sentiment_eod(now: datetime)", _EOD_SRC)
+        self.assertIn("_maybe_run_sentiment_eod(now)", _SCAN_SRC,
+                      "scan_once（已抽 core/scan.py）必须调用 EOD 钩子")
+        self.assertIn("dtime(15, 30)", _EOD_SRC, "收盘后 15:30 才允许跑")
+        self.assertIn("_regime_state_last_date() >= today", _EOD_SRC,
                       "已落库必须短路，避免重复子进程")
 
     def test_subprocess_sets_pythonpath(self):
         """按绝对路径启动脚本时 sys.path[0]=execution/，不设 PYTHONPATH 则 `import core` 必失败
         （10-12~10-16 的 sentiment_backfill 日志实证）。"""
-        self.assertIn('_env["PYTHONPATH"]', _MAIN_SRC)
-        self.assertIn("env=_env", _MAIN_SRC)
-        self.assertIn('_launch_sentiment_subprocess(today, "eod", "sentiment_eod")', _MAIN_SRC)
+        self.assertIn('_env["PYTHONPATH"]', _EOD_SRC)
+        self.assertIn("env=_env", _EOD_SRC)
+        self.assertIn('_launch_sentiment_subprocess(today, "eod", "sentiment_eod")', _EOD_SRC)
 
     def test_gm_main_never_passes_invalid_mode(self):
         """index_regime 只接受 eod/morning/tail；旧的 `"live"` 会 ValueError 且被外层吞掉。"""

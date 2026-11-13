@@ -153,27 +153,27 @@ class TestUp30Backend(unittest.TestCase):
         })
 
     def test_口径与手算一致(self):
-        import t_gui
+        import gui
         # 30 个收益里 18 个上涨 ⇒ 60.0%
         closes = [10.0]
         for i in range(30):
             closes.append(closes[-1] * (1.01 if i % 5 < 3 else 0.99))
-        r = t_gui.Api()._stock_tags_from_df(self._df(closes), "000001", t30=False)
+        r = gui.Api()._stock_tags_from_df(self._df(closes), "000001", t30=False)
         manual = sum(1 for i in range(1, 31) if closes[i] > closes[i - 1]) / 30 * 100
         self.assertAlmostEqual(r["up30"], round(manual, 1), places=1)
 
     def test_不足31根给None(self):
-        import t_gui
-        r = t_gui.Api()._stock_tags_from_df(self._df([10.0] * 30), "000001", t30=False)
+        import gui
+        r = gui.Api()._stock_tags_from_df(self._df([10.0] * 30), "000001", t30=False)
         self.assertIsNone(r.get("up30"), "只有 30 根算不出 30 个收益，不能编")
 
     def test_前一窗口是同口径整体前移5根(self):
         """升降比较必须有基准：`up30_prev` = 窗口整体前移 5 根的同一口径。"""
-        import t_gui
+        import gui
         closes = [10.0]
         for i in range(45):
             closes.append(closes[-1] * (1.01 if (i // 7) % 2 == 0 else 0.99))
-        r = t_gui.Api()._stock_tags_from_df(self._df(closes), "000001", t30=False)
+        r = gui.Api()._stock_tags_from_df(self._df(closes), "000001", t30=False)
         n = len(closes)
         manual = sum(1 for j in range(n - 36, n - 5) if closes[j + 1] > closes[j]) / 30 * 100
         self.assertAlmostEqual(r["up30_prev"], round(manual, 1), places=1)
@@ -181,13 +181,13 @@ class TestUp30Backend(unittest.TestCase):
                                   msg="构造的两段方向应不同，否则测不到箭头")
 
     def test_不足36根时prev给None(self):
-        import t_gui
-        r = t_gui.Api()._stock_tags_from_df(self._df([10.0 + i * 0.01 for i in range(35)]),
+        import gui
+        r = gui.Api()._stock_tags_from_df(self._df([10.0 + i * 0.01 for i in range(35)]),
                                             "000001", t30=False)
         self.assertIsNone(r.get("up30_prev"), "35 根挪不出 5 天前的 30 日窗口，不能猜方向")
 
     def test_后端三条下发路径都带up30(self):
-        src = (Path(_ROOT) / "t_gui.py").read_text(encoding="utf-8")
+        src = (Path(_ROOT) / "gui.py").read_text(encoding="utf-8")
         self.assertIn('"up30": _tagres.get("up30")', src, "持仓体检")
         self.assertIn('"up30": (_tags_map.get(c) or {}).get("up30")', src, "异常监控池/避风港湾")
         self.assertEqual(src.count('r["up30"] = info.get("up30")'), 2, "建仓表两条路径")

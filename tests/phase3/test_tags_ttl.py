@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 
 _JS = (Path(__file__).resolve().parents[2] / "web" / "app.js").read_text(encoding="utf-8")
 
@@ -29,8 +29,8 @@ class _DT:
 
 class TestTagsTTL:
     def _ttl_at(self, monkeypatch, fake):
-        monkeypatch.setattr(t_gui, "datetime", _DT(fake))
-        return t_gui._tags_ttl_now()
+        monkeypatch.setattr(gui, "datetime", _DT(fake))
+        return gui._tags_ttl_now()
 
     def test_intraday_is_short(self, monkeypatch):
         # 2026-10-30：120s → **300s**。实测盘中每 30 分钟边界都会起 6~9 个池线程、
@@ -50,14 +50,14 @@ class TestTagsTTL:
 
     def test_both_ttl_sites_use_it(self):
         import inspect
-        src = inspect.getsource(t_gui.Api.load_stock_tags_batch)
+        src = inspect.getsource(gui.Api.load_stock_tags_batch)
         assert "_tags_ttl_now()" in src, "批量缓存 TTL 必须走动态值"
-        src2 = inspect.getsource(t_gui.Api._stock_tags_one)
+        src2 = inspect.getsource(gui.Api._stock_tags_one)
         assert "_tags_ttl_now()" in src2, "单只缓存 TTL 也要走动态值"
 
     def test_worker_pool_is_capped(self):
         import inspect
-        src = inspect.getsource(t_gui.Api.load_stock_tags_batch)
+        src = inspect.getsource(gui.Api.load_stock_tags_batch)
         assert "max_workers=3" in src, "标签批算是纯 GIL 活，别开大池和 UI 抢"
 
     def test_chart_call_timeout_is_relaxed(self):

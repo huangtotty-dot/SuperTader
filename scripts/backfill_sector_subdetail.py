@@ -29,7 +29,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE))
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 10
 SUMMARY = BASE / "stock_hunter" / "history" / "daily_summary.json"
@@ -50,7 +50,7 @@ def main() -> int:
     shutil.copy2(SUMMARY, bak)
     print(f"备份 {bak.name}；回填 {len(dates)} 天：{dates[0]} ~ {dates[-1]}")
 
-    api = t_gui.Api()
+    api = gui.Api()
     details: dict[str, dict] = {}
     for d in dates:
         t = time.time()

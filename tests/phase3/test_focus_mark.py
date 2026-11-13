@@ -23,7 +23,7 @@ if _ROOT not in sys.path:
 
 JS = (Path(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
 CSS = (Path(_ROOT) / "web" / "style.css").read_text(encoding="utf-8")
-PY = (Path(_ROOT) / "t_gui.py").read_text(encoding="utf-8")
+PY = (Path(_ROOT) / "gui.py").read_text(encoding="utf-8")
 
 
 class TestFrontend(unittest.TestCase):
@@ -49,12 +49,12 @@ class TestFrontend(unittest.TestCase):
 
 class TestBackend(unittest.TestCase):
     def setUp(self):
-        import t_gui
-        self.tg = t_gui
+        import gui
+        self.tg = gui
         self.td = tempfile.TemporaryDirectory()
-        self._orig = t_gui._FOCUS_FP
-        t_gui._FOCUS_FP = Path(self.td.name) / "focus_stocks.json"
-        self.api = t_gui.Api()
+        self._orig = gui._FOCUS_FP
+        gui._FOCUS_FP = Path(self.td.name) / "focus_stocks.json"
+        self.api = gui.Api()
 
     def tearDown(self):
         self.tg._FOCUS_FP = self._orig

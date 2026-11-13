@@ -17,7 +17,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
@@ -40,14 +40,14 @@ def _write_trace(dirpath: Path, date: str, recs):
 @pytest.fixture()
 def env(tmp_path, monkeypatch):
     """把 TRACES / STATE_DIR 指到临时目录，避免依赖真实日期。"""
-    monkeypatch.setattr(t_gui, "TRACES", tmp_path)
-    monkeypatch.setattr(t_gui, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(gui, "TRACES", tmp_path)
+    monkeypatch.setattr(gui, "STATE_DIR", tmp_path)
     (tmp_path / "watchlist_buy.json").write_text(json.dumps(
         {"stocks": {"600000": {"name": "浦发银行", "pool": "manual",
                                "status": "monitoring"}}}), encoding="utf-8")
-    t_gui._PREV_SCORE_CACHE.clear()
+    gui._PREV_SCORE_CACHE.clear()
     yield tmp_path
-    t_gui._PREV_SCORE_CACHE.clear()
+    gui._PREV_SCORE_CACHE.clear()
 
 
 class TestPrevDayScoreMap:
@@ -57,23 +57,23 @@ class TestPrevDayScoreMap:
             _rec("600000", 50, "2026-10-20 14:30:00"),   # 更晚 ⇒ 以它为准
             _rec("600001", 10, "2026-10-20 10:00:00"),
         ])
-        m = t_gui.Api()._prev_day_score_map("2026-10-21")
+        m = gui.Api()._prev_day_score_map("2026-10-21")
         assert m == {"600000": 50, "600001": 10}
 
     def test_skips_weekend_gap(self, env):
         """周一（10-19）要比**上一个有 trace 的日子**（10-17 周五），不是"日期减一"。"""
         _write_trace(env, "2026-10-17", [_rec("600000", 70, "2026-10-17 15:00:00")])
         _write_trace(env, "2026-10-19", [_rec("600000", 20, "2026-10-19 15:00:00")])
-        m = t_gui.Api()._prev_day_score_map("2026-10-20")
+        m = gui.Api()._prev_day_score_map("2026-10-20")
         assert m == {"600000": 20}
 
     def test_no_earlier_trace_is_empty(self, env):
         _write_trace(env, "2026-10-21", [_rec("600000", 40, "2026-10-21 10:00:00")])
-        assert t_gui.Api()._prev_day_score_map("2026-10-21") == {}
+        assert gui.Api()._prev_day_score_map("2026-10-21") == {}
 
     def test_cached_by_mtime(self, env, monkeypatch):
         fp = _write_trace(env, "2026-10-20", [_rec("600000", 50, "2026-10-20 15:00:00")])
-        api = t_gui.Api()
+        api = gui.Api()
         assert api._prev_day_score_map("2026-10-21") == {"600000": 50}
         # 把文件内容换掉但 mtime 不变 ⇒ 应命中缓存（refresh_pb 每 10s 调一次，不能重解析）
         import os
@@ -88,14 +88,14 @@ class TestRowCarriesScorePrev:
     def test_rows_have_score_prev(self, env):
         _write_trace(env, "2026-10-20", [_rec("600000", 50, "2026-10-20 15:00:00")])
         _write_trace(env, "2026-10-21", [_rec("600000", 40, "2026-10-21 10:00:00")])
-        rows = t_gui.Api()._agg_position_builder("2026-10-21").get("rows") or []
+        rows = gui.Api()._agg_position_builder("2026-10-21").get("rows") or []
         row = next(r for r in rows if r["code"] == "600000")
         assert row["composite_score"] == 40
         assert row["score_prev"] == 50
 
     def test_unscanned_yesterday_is_none(self, env):
         _write_trace(env, "2026-10-21", [_rec("600000", 40, "2026-10-21 10:00:00")])
-        rows = t_gui.Api()._agg_position_builder("2026-10-21").get("rows") or []
+        rows = gui.Api()._agg_position_builder("2026-10-21").get("rows") or []
         row = next(r for r in rows if r["code"] == "600000")
         assert row["score_prev"] is None, "昨天没扫过 ⇒ None，前端不能画成持平"
 

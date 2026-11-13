@@ -84,8 +84,8 @@ class TestDailyBreakoutRule(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import t_gui
-        cls.api = t_gui.Api()
+        import gui
+        cls.api = gui.Api()
         cls.df = _band_frame()
         cls.box_top = cls.api._box_top_for(cls.df.iloc[:-1])
 
@@ -169,8 +169,8 @@ class TestPoolAndBatching(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import t_gui
-        with open(t_gui.__file__, encoding="utf-8") as fh:
+        import gui
+        with open(gui.__file__, encoding="utf-8") as fh:
             cls.src = fh.read()
 
     @staticmethod
@@ -207,9 +207,9 @@ class TestPoolAndBatching(unittest.TestCase):
         批次大小 × 每只根数 必须留在该上限内。
         """
         from core.market_data.facade import MarketDataFacade
-        import t_gui
+        import gui
         batch = MarketDataFacade._BATCH_MAX
-        bars = t_gui.Api._BK_SCAN_BARS
+        bars = gui.Api._BK_SCAN_BARS
         self.assertGreater(batch, 0)
         self.assertLessEqual(batch * bars, 200_000,
                              f"{batch}×{bars}={batch * bars} 行，顶到 GM 上限会被 1029 拒绝")
@@ -291,8 +291,8 @@ class TestGmGivesUpAfterFirstEmptyBatch(unittest.TestCase):
         _orig = _fd.get_provider
         _fd.get_provider = lambda: _Fake()
         try:
-            import t_gui
-            api = t_gui.Api()
+            import gui
+            api = gui.Api()
             api._GM_BATCH_RETRY_WAIT = 0
             api._bk_cache_covers = lambda codes, target, sample=80: 0.0   # 逼它先走 GM
             api._bk_cache_last = lambda code, target=None: None
@@ -323,8 +323,8 @@ class TestScanFetchFailure(unittest.TestCase):
             def daily_many(self, codes, days=0):
                 return {}
         self._patch_provider(_Fake())
-        import t_gui
-        api = t_gui.Api(); api._GM_BATCH_RETRY_WAIT = 0
+        import gui
+        api = gui.Api(); api._GM_BATCH_RETRY_WAIT = 0
         # 三处都要堵：覆盖率闸、末根日期、缓存取帧 —— 否则本地缓存会"顶上"，
         # 用例就不是在测"整池无数据"了（2026-10-29 修：本地缓存已覆盖该日）。
         api._bk_cache_covers = lambda codes, target, sample=80: 0.0
@@ -347,9 +347,9 @@ class TestScanFetchFailure(unittest.TestCase):
             def daily_many(self, codes, days=0):
                 return {c: df.copy() for c in codes}
         self._patch_provider(_Fake())
-        import t_gui
+        import gui
         st = {}
-        _api = t_gui.Api()
+        _api = gui.Api()
         _api._bk_cache_covers = lambda codes, target, sample=80: 0.0  # 同上：必须真的走 GM
         _api._scan_breakout(["600000"], st, "2026-10-09")
         self.assertEqual(st.get("stale"), 1, "有历史无当日 bar 应计 stale")
@@ -365,9 +365,9 @@ class TestScanFetchFailure(unittest.TestCase):
             def daily_many(self, codes, days=0):
                 return {"600000": df.copy()}   # 北交所 430047 缺
         self._patch_provider(_Fake())
-        import t_gui
+        import gui
         st = {}
-        t_gui.Api()._scan_breakout(["600000", "430047"], st, "2026-10-09")
+        gui.Api()._scan_breakout(["600000", "430047"], st, "2026-10-09")
         self.assertEqual(st.get("bj_no_data"), 1)
         self.assertEqual(st.get("rest_no_data"), 0)
         self.assertFalse(st.get("fetch_failed"),

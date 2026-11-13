@@ -21,7 +21,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 JS = (Path(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
 HTML = (Path(_ROOT) / "web" / "index.html").read_text(encoding="utf-8")
-PY = (Path(_ROOT) / "t_gui.py").read_text(encoding="utf-8")
+PY = (Path(_ROOT) / "gui.py").read_text(encoding="utf-8")
 
 
 class TestSidebar(unittest.TestCase):

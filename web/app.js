@@ -208,7 +208,7 @@ let _lastReportAt = 0;      // 上报节流（见 apiCall 末尾注释）
 
 async function apiCall(name, ...args) {
   if (!window.pywebview || !window.pywebview.api) {
-    throw new Error("未运行在 pywebview 环境（请用 python t_gui.py 启动）");
+    throw new Error("未运行在 pywebview 环境（请用 python gui.py 启动）");
   }
   // pywebview 的 `window.pywebview.api` 先建成**空对象**（api.js），稍后由 finish.js 挂上方法。
   // 若调用落在该窗口内 ⇒ 报 "window.pywebview.api[name] is not a function"（桥接就绪竞态）。
@@ -742,7 +742,7 @@ function _refreshQuotesAndSidebar(pre) {
 
 
 /* ================= 🧭 市场风向标（人气板块 × 龙头/中军） ================= */
-// ⚠️ **描述性看盘，无前瞻信息量** —— 依据见后端 `t_gui.load_market_beacon` 的 docstring：
+// ⚠️ **描述性看盘，无前瞻信息量** —— 依据见后端 `gui.load_market_beacon` 的 docstring：
 //    实测「龙头/中军」对后续收益**无区分度**（977 池 × 2009 日、行业口径、同板块同日配对、
 //    按日聚类 t、分半窗符号翻转；涨幅头名 vs 杂毛 H=5 仅 −0.021pp t=−0.40，成交额头名反而
 //    −0.302pp t=−5.7）。本面板只回答「今天钱在哪个板块、谁在场」，**不是买卖依据**。
@@ -1745,8 +1745,8 @@ async function drawTurnoverHist() {
     //    `bse_missing`，图上必须**看得出来**（图例下方那条提示），不许静默。
     d = await apiCall("load_turnover_history", 250);
   } catch (e) {
-    // 最常见：后端进程还是旧代码（没有 load_turnover_history 这个接口）⇒ 必须重启 t_gui.py
-    _turnoverFail(`接口调用失败（${e && e.message ? e.message : e}）· 若刚改过 t_gui.py 请重启它`);
+    // 最常见：后端进程还是旧代码（没有 load_turnover_history 这个接口）⇒ 必须重启 gui.py
+    _turnoverFail(`接口调用失败（${e && e.message ? e.message : e}）· 若刚改过 gui.py 请重启它`);
     return;
   }
   if (document.getElementById("turnoverHistChart") !== box) return;   // 期间又被重建（下一次会画）
@@ -4351,10 +4351,10 @@ const UP30_TH = `<th class="num" title="最近 30 个交易日里**收盘上涨*
 /* 时机条件列（2026-10-16 owner：「选股猎手的时机条件列与建仓信号扫描的该列保持一致」）。
    **建仓信号扫描 / 选股猎手 共用本渲染**（同 `structCellHtml`/`dayStageCellHtml`/`pctHtml` 的做法），
    别再各写一份 —— 此前猎手侧**硬编码只列 3 个条件键**，与真源脱钩，代价是：
-     · 10-15 给真源 `t_gui.COND_LABELS` 加了 `t_ma20`/`t_ma5` 两条**硬约束**（正是"解释 NO-GO
+     · 10-15 给真源 `gui.COND_LABELS` 加了 `t_ma20`/`t_ma5` 两条**硬约束**（正是"解释 NO-GO
        为什么 NO-GO"的两条），猎手侧漏改 ⇒ **同一只票在猎手表里 4 个圆点、在建仓表里 7 个**；
      · tooltip 也不同源（猎手拿 `build_reason` 当 title，与建仓表的逐条「通过/未过」不是一回事）。
-   `labels` 一律传**后端下发的 `cond_labels`**（`t_gui.COND_LABELS` 单一真源），前端不再维护副本。
+   `labels` 一律传**后端下发的 `cond_labels`**（`gui.COND_LABELS` 单一真源），前端不再维护副本。
    `isNoData` ⇒ 整格 `—`：**数据不足 ≠ 全部未通过**（画成 6 个空心圆是在编造结论）。 */
 function condCellHtml(conds, labels, isNoData, vetoList) {
   const _c = conds || {};
@@ -4811,7 +4811,7 @@ async function abnormalAddLimitup() {
 
 /* ================= ⚓ 避风港湾（2026-10-29 owner：「新增一个避风港湾的板块，样式和建仓信号扫描一样」）
    与「异常监控池」**同一套行构造**（后端 `_pool_rows`）与同一套单元格渲染，
-   区别只有：成员存在另一个 store（`t_gui.shelter_pool_*`）、没有「涨停原因」列（那是涨停复盘专用的）。
+   区别只有：成员存在另一个 store（`gui.shelter_pool_*`）、没有「涨停原因」列（那是涨停复盘专用的）。
    刷新节奏与异常监控池一致：行情 15s / 整行 60s（有 pending 的「均线突破」时 15s）。 */
 let _shelterRows = [], _shelterLoadedAt = 0, _shelterInflight = false;
 let _shelterPending = 0;   // 与异常池同款：后端分批算，没算完就 15s 短轮询
@@ -5703,7 +5703,7 @@ function initBuyConfirmEvents() {
 
 /* ---- 每日选股记录（2026-10-17）：盘前候选 → 10:00 三关漏斗 → 选中 + 逐只原因 ----
    owner：要能回答「每天早上候选了多少、最后选了哪些、原因是什么」，且能选日期回看。
-   数据源见 t_gui.Api.load_osc_day：优先 decision_{date}.json（新落盘），
+   数据源见 gui.Api.load_osc_day：优先 decision_{date}.json（新落盘），
    否则从 backtrace/fills/策略日志读时还原（缺的字段如实显示「未记录」，绝不显示成 0）。 */
 let _oscDayCache = {};        // date -> payload（同一天不重复取）
 let _oscDayCur = null;        // 当前渲染的 payload（筛选时复用，不重新请求）
@@ -5979,22 +5979,22 @@ const MA365_COLOR = "#22d3ee";
    ⚠️ 单图和九宫格共用这一个值，改窗口在两处同时生效。 */
 const VOL_MA_BASE = 60;
 
-/* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
+/* 默认可见根数。取值贴着后端黄金分割回看期（gui._FIB_LOOKBACK）——daily 120 与回看期
    相等，锚点必然落在默认视窗内；weekly/monthly 因 bar 更少而略小，万一锚点更早由下面的
    放宽分支兜底。核心目的：后端 800 根日线全画出来蜡烛只有 ~3px，形态根本看不清。 */
 // 2026-10-20 owner：日线默认 **近 6 个月**（120 根）。
 //   · 曾经是"全部"（约 800 根）—— 那是为了回「日线只能显示一部分」做的过度修正，
 //     800 根蜡烛只有 ~3px、形态根本看不清，owner 现在改口要 6 个月；
-//   · 120 同时等于后端黄金分割的回看期（`t_gui._FIB_LOOKBACK["daily"]=120`），
+//   · 120 同时等于后端黄金分割的回看期（`gui._FIB_LOOKBACK["daily"]=120`），
 //     锚点必然落在默认视窗内，不会出现"标了锚点却看不见"；
 //   · 想更长/更短仍可点「近3月 / 近1年 / 全部」。
-// K 线弹窗的分钟档（2026-10-20 加 5 分）——**与后端 t_gui._MIN_PERIODS 同一份清单**，
+// K 线弹窗的分钟档（2026-10-20 加 5 分）——**与后端 gui._MIN_PERIODS 同一份清单**，
 // 加档位时两边都要动；漏改的症状是"某个 Tab 永远空白"。
 const MIN_PERIODS = ["min5", "min10", "min30", "min60"];
 const DEFAULT_BARS = { daily: 120, weekly: 104, monthly: 60,
                        min5: 160, min10: 160, min30: 160, min60: 160 };
 // 快捷区间：按周期给不同标签；bars=null 表示全部。每个周期的默认项都在表内（高亮用）。
-// 分钟档后端保留根数（2026-10-30 起 5/10 分加深，见 t_gui.MIN_BARS_CHART）：
+// 分钟档后端保留根数（2026-10-30 起 5/10 分加深，见 gui.MIN_BARS_CHART）：
 //   5分 3200 根 ≈ 近3月（48 根/日）；10分 1600 根 ≈ 近3月（24 根/日）；
 //   30分 320 根 ≈ 8根/日×40日；60分 320 根 ≈ 4根/日×80日。
 const RANGE_PRESETS = {
@@ -7838,12 +7838,12 @@ function openPaBoxDialog(boxId) {
           ? await apiCall("update_price_box", stockChartCode, target.id, up, dn, _paCurrentPrice())
           : await apiCall("save_price_box", stockChartCode, up, dn, null, null, _paCurrentPrice());
         if (!r || !r.ok) {
-          _paToast("保存失败：" + ((r && r.error) || "后端没返回 ok") + "（改框需重启过 t_gui.py）", "err");
+          _paToast("保存失败：" + ((r && r.error) || "后端没返回 ok") + "（改框需重启过 gui.py）", "err");
           return;
         }
       } catch (e) {
         _paToast("保存失败：" + (e && e.message ? e.message : e)
-          + "（若提示后端方法不可用 ⇒ 需要重启 t_gui.py）", "err");
+          + "（若提示后端方法不可用 ⇒ 需要重启 gui.py）", "err");
         return;
       }
       close();
@@ -8075,7 +8075,7 @@ async function _paFinalize(p0, p1) {
                        d0, d1, _paCurrentPrice());
   } catch (e) {
     _paToast("保存画框失败：" + (e && e.message ? e.message : e)
-      + "（若提示后端方法不可用 ⇒ 需要重启 t_gui.py）", "err");
+      + "（若提示后端方法不可用 ⇒ 需要重启 gui.py）", "err");
     return;
   }
   if (!r2 || !r2.ok) {
@@ -9629,7 +9629,7 @@ function trendBadge(t) {
   if (t === "down") return `<span class="badge t-short" title="30分钟趋势 BEAR">下行↘</span>`;
   return `<span class="badge chop" title="30分钟趋势 RANGE">震荡→</span>`;
 }
-// 技术标签徽章（desc 悬停解释文案，与 t_gui._stock_tags_one 标签一一对应）
+// 技术标签徽章（desc 悬停解释文案，与 gui._stock_tags_one 标签一一对应）
 const TAG_DESC = {
   "上行": "30分钟线趋势=BULL（ADX(14)>22 且上行、EMA20>EMA60 且价在 EMA20 上、Supertrend 未破）：趋势偏多，回踩低吸",
   "下行": "30分钟线趋势=BEAR（ADX(14)>22 且上行、EMA20<EMA60 且价在 EMA20 下、Supertrend 走空）：趋势偏空，反弹减仓、不抄底",
@@ -9758,7 +9758,7 @@ async function loadSectorTags(category) {
   // 2026-10-11 提速（owner：展开后列更新很慢）：
   // ① 只取**当前页**（≤50）而不是整个板块（可达 200）；
   // ② 逐 code 增量取，已缓存的跳过（翻页回来不再重复拉）；
-  // ③ 后端走 offline（本地日线缓存，零网络）——见 t_gui._stock_tags_one。
+  // ③ 后端走 offline（本地日线缓存，零网络）——见 gui._stock_tags_one。
   const want = _renderedCodesFor(category);
   if (!want.length) return {};
   const have = hunterTagsCache[category] || {};
@@ -10856,7 +10856,7 @@ function renderHunter(h) {
 
   const sumRows = h.summary_rows || [];
     const ss = h.sector_stocks || {};
-    // 时机条件列的标签真源（后端 `t_gui.COND_LABELS` 经 payload 下发）——猎手侧**不再自己列条件键**，
+    // 时机条件列的标签真源（后端 `gui.COND_LABELS` 经 payload 下发）——猎手侧**不再自己列条件键**，
     // 见 `condCellHtml` 注释（硬编码 3 键曾被 10-15 的真源扩到 6 条时漏改）。
     const condLabels = h.cond_labels || {};
     // 存储板块成分股供展开标注/翻页
@@ -11322,7 +11322,7 @@ function renderHunter(h) {
 }
 
 /* ---- 持仓日线体检 ---- */
-// 持仓体检加载器：后端只用已预热的图表缓存算（见 t_gui.load_ob_analysis），未就绪的持仓
+// 持仓体检加载器：后端只用已预热的图表缓存算（见 gui.load_ob_analysis），未就绪的持仓
 // 会返回 pending>0 ⇒ 稍后自动重拉补全，避免冷启动时把主线程同步冻住 14s。
 let _obRetryTimer = null;
 async function loadOBAnalysis() {
@@ -12516,7 +12516,7 @@ async function init() {
     }
   }
   if ((!dates || !dates.length) && _bootErr) {
-    statusEl("无法连接后端：" + _bootErr.message + "（请确保用 python t_gui.py 启动）", "err");
+    statusEl("无法连接后端：" + _bootErr.message + "（请确保用 python gui.py 启动）", "err");
     return;
   }
   if (!dates || !dates.length) {
@@ -12661,7 +12661,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const timeout = setTimeout(() => {
     if (!booted) {
       clearInterval(t);
-      statusEl("⚠️ 后端连接失败（可能 t_gui.py 未启动或已崩溃，请检查进程）", "err");
+      statusEl("⚠️ 后端连接失败（可能 gui.py 未启动或已崩溃，请检查进程）", "err");
     }
   }, 8000);
   setTimeout(() => {

@@ -270,7 +270,7 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
 
 
 def _detect_boxes_simple(df: pd.DataFrame, n_keep: int = 3) -> list:
-    """简化滑窗箱体检测（与 t_gui._detect_boxes 同思路）：近150日滑窗30天，
+    """简化滑窗箱体检测（与 gui._detect_boxes 同思路）：近150日滑窗30天，
     分位数(88/12)边界 + 触及验证 + 重叠合并。返回 [{low, high, rel}]。"""
     import numpy as np
     if df.empty or len(df) < 30:

@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 
 
 def _df(last_date, close):
@@ -27,7 +27,7 @@ def _df(last_date, close):
 
 @pytest.fixture
 def api(monkeypatch):
-    a = t_gui.Api()
+    a = gui.Api()
     monkeypatch.setattr(a, "_daily_patch_memo", {}, raising=False)
     return a
 
@@ -88,7 +88,7 @@ class TestPatchDailyToday:
         """周末没有盘中价：直接返回，不打网络。"""
         called = {"n": 0}
         api._today_forming_bar = lambda code, allow_network=True: called.__setitem__("n", called["n"] + 1)
-        monkeypatch.setattr(t_gui, "datetime", _FakeSat)
+        monkeypatch.setattr(gui, "datetime", _FakeSat)
         out = api._patch_daily_today(_df(_today(), 61.08), "688003")
         assert called["n"] == 0
         assert float(out.iloc[-1]["close"]) == pytest.approx(61.08)

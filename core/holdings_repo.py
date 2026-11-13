@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""src/holdings_repo.py — 持仓真源网关（2026-10-04 手动/自动双文件拆分）
+"""core/holdings_repo.py — 持仓真源网关（2026-10-04 手动/自动双文件拆分）
 
 背景：原单一 `t_io/state/holdings.json`（手动+自动混存，`pool` 标记归属）按 owner 决策
 拆成两份独立真源：

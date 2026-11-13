@@ -92,13 +92,16 @@ class TestVwapUnits(unittest.TestCase):
 
 
 class TestMainUsesTencentNotAkshare(unittest.TestCase):
-    """钉住换源本身 —— 退回 akshare 就会把主循环重新拖回 15 分钟。"""
+    """钉住换源本身 —— 退回 akshare 就会把主循环重新拖回 15 分钟。
 
-    _SRC = (_ROOT / "main.py").read_text(encoding="utf-8")
+    2026-11-13：`_refresh_spot_vwap_cache` 已抽到 `core/spot_vwap.py`，本组改读该模块源码。
+    """
+
+    _SRC = (_ROOT / "core" / "spot_vwap.py").read_text(encoding="utf-8")
 
     def _fn_src(self, code_only: bool = False):
         a = self._SRC.index("def _refresh_spot_vwap_cache")
-        b = self._SRC.index("\n_IR_GATE_ADVICE_CN", a)
+        b = len(self._SRC)   # 抽到 core/spot_vwap.py 后该函数是文件末尾
         src = self._SRC[a:b]
         if code_only:
             # ⚠️ 必须剥掉 docstring 与 `#` 注释再判 —— 判据看**代码**，不看说明文字。

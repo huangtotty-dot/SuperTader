@@ -6,7 +6,7 @@
      每周期的事件 [{index,type,price,consec,dif,bars_ago}]；短序列(<40)不产键。
   B. 前端契约：app.js 画 divByIndex 散点、index.html 有「背离」开关。
 
-⚠️ 与 test_scan_stage_timing 同款：**不 import t_gui**（GUI 主程序），按标记切出函数源码 exec。
+⚠️ 与 test_scan_stage_timing 同款：**不 import gui**（GUI 主程序），按标记切出函数源码 exec。
 运行：python -m unittest tests.phase3.test_chart_divergence_annotation -v
 """
 import sys
@@ -21,7 +21,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-_SRC = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+_SRC = (_ROOT / "gui.py").read_text(encoding="utf-8")
 
 
 def _load_attach():
@@ -31,7 +31,7 @@ def _load_attach():
     import re
     m = re.search(r"^_DIV_SCHEMA\s*=\s*(\d+)", _SRC, re.M)
     ns = {"_DIV_SCHEMA": int(m.group(1)) if m else 2}
-    exec(compile(_SRC[a:b], "t_gui.py:_attach_divergence", "exec"), ns)
+    exec(compile(_SRC[a:b], "gui.py:_attach_divergence", "exec"), ns)
     return ns["_attach_divergence"]
 
 

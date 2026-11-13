@@ -98,7 +98,7 @@ class TestObShortSeriesVisible(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.src = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        cls.src = (_ROOT / "gui.py").read_text(encoding="utf-8")
 
     def test_short_series_appends_row_with_reason(self):
         i = self.src.index("if n < 30:")
@@ -119,7 +119,7 @@ class TestPayloadShorterThanCacheRebuilds(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.src = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        cls.src = (_ROOT / "gui.py").read_text(encoding="utf-8")
 
     def test_payload_length_guard_present(self):
         i = self.src.index("def _serve_payload_cache")

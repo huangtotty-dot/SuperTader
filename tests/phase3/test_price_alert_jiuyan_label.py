@@ -4,10 +4,10 @@
 owner 截图：「飞书推送的这个信息要注明来自韭研概念的哪个板块」。
 
 守三条：
-  ① `core.jiuyan_tags` 的主板块必须与 `t_gui._jiuyan_board()` **逐码一致** ——
-     它是同一口径的**第三份实现**（t_gui 不能 import 策略包、main.py 不能 import t_gui），
+  ① `core.jiuyan_tags` 的主板块必须与 `gui._jiuyan_board()` **逐码一致** ——
+     它是同一口径的**第三份实现**（gui 不能 import 策略包、main.py 不能 import gui），
      副本可以存在，但必须有机械闸（同 `test_market_beacon.TestBoardMapSingleSource`）；
-  ② 概念合并口径与 `t_gui._jiuyan_concepts` 一致（编号字段优先、`|` 拆分、去重保序）；
+  ② 概念合并口径与 `gui._jiuyan_concepts` 一致（编号字段优先、`|` 拆分、去重保序）；
   ③ `main._push_price_alert` 真的把标签拼进飞书文案（读不到也照发，只少这一截）。
 
 运行：python -m unittest tests.phase3.test_price_alert_jiuyan_label -v
@@ -23,17 +23,18 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import t_gui                                              # noqa: E402
+import gui                                              # noqa: E402
 from core import jiuyan_tags as jt                       # noqa: E402
 
-PY_MAIN = (_ROOT / "main.py").read_text(encoding="utf-8")
+# 2026-11-13：突破预警 watcher 已抽到 core/price_alert_watch.py，标签拼接断言改读它。
+PY_PAW = (_ROOT / "core" / "price_alert_watch.py").read_text(encoding="utf-8")
 
 
 class TestBoardSingleSource(unittest.TestCase):
-    """第三份实现必须与 t_gui 的主板块逐码一致（漂移即红）。"""
+    """第三份实现必须与 gui 的主板块逐码一致（漂移即红）。"""
 
     def test_逐码一致(self):
-        ref = t_gui._jiuyan_board()
+        ref = gui._jiuyan_board()
         mine = jt._build()
         self.assertGreater(len(ref), 1000, "韭研表没读到 —— 测试数据缺失")
         self.assertEqual(set(ref), set(mine), "代码集合不一致")
@@ -71,7 +72,7 @@ class TestConceptMerge(unittest.TestCase):
         self.assertEqual(jt.board_of("600000"), "医药", "MERGES：创新药 → 医药")
 
     def test_概念去重保序且编号优先(self):
-        # 有编号字段就不再读旧 `jiuyan_concept`（与 t_gui._jiuyan_concepts 同口径）
+        # 有编号字段就不再读旧 `jiuyan_concept`（与 gui._jiuyan_concepts 同口径）
         self.assertEqual(jt.concepts_of("603179"), ["结构件"])
         self.assertEqual(jt.concepts_of("000538"), ["种植", "民族药"])
         self.assertEqual(jt.concepts_of("600000"), ["临床CRO"], "没有编号字段才回退旧字段")
@@ -86,16 +87,16 @@ class TestConceptMerge(unittest.TestCase):
 
 class TestPushIncludesLabel(unittest.TestCase):
     def test_推飞书文案带板块标签(self):
-        i = PY_MAIN.index("def _push_price_alert")
-        seg = PY_MAIN[i:PY_MAIN.index("\n\n\n", i)]
+        i = PY_PAW.index("def _push_price_alert")
+        seg = PY_PAW[i:]   # 本模块里 _push_price_alert 是最后一个函数
         self.assertIn("from core.jiuyan_tags import label_of", seg)
         self.assertIn("🏷", seg)
         self.assertIn("_lab['board']", seg)
 
     def test_标签失败不影响推送(self):
         """读不到 watchlist ⇒ 只少标签，消息照发（label_of 内部 fail-open）。"""
-        i = PY_MAIN.index("def _push_price_alert")
-        seg = PY_MAIN[i:PY_MAIN.index("\n\n\n", i)]
+        i = PY_PAW.index("def _push_price_alert")
+        seg = PY_PAW[i:]   # 本模块里 _push_price_alert 是最后一个函数
         self.assertIn("if _lab.get(\"board\")", seg)
 
 

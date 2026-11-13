@@ -27,10 +27,10 @@ if _ROOT not in sys.path:
 
 import pandas as pd  # noqa: E402
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 import time as _time  # noqa: E402
 
-CALC = t_gui.Api._turnover_from_minutes
+CALC = gui.Api._turnover_from_minutes
 
 # 一天 4 根（简化）：每根 100 亿
 _BARS = [("10:00", 100e8), ("11:30", 100e8), ("14:00", 100e8), ("15:00", 100e8)]
@@ -133,7 +133,7 @@ class TestDeltaAndProjection(unittest.TestCase):
 
     def test_无同日历史时不给数(self):
         """昨日数据从 14:00 才开始 ⇒ 10:35 拿不到"同一时刻"占比 ⇒ 给 None（不线性硬猜）。"""
-        r = t_gui.Api._project_full_day(
+        r = gui.Api._project_full_day(
             {"sh000001": _leg("2026-09-29", bars=[("14:00", 100e8), ("15:00", 100e8)])},
             ["2026-09-29"], "10:35", 200e8)
         self.assertIsNone(r["projected"])
@@ -214,7 +214,7 @@ class TestPrevTradingDaySameHm(unittest.TestCase):
     def test_降级路径也带同期字段(self):
         """日线兜底只在 ≥15:00 走，此刻同期==全日 ⇒ 也要给浮窗同一套字段。"""
         import inspect
-        src = inspect.getsource(t_gui.Api._turnover_daily_fallback)
+        src = inspect.getsource(gui.Api._turnover_daily_fallback)
         for k in ('"amount_prev_same_hm"', '"prev_trading_day"', '"hm"'):
             self.assertIn(k, src, f"兜底载荷缺 {k} ⇒ 浮窗在降级时又回到'全日配实时'")
 
@@ -339,7 +339,7 @@ class TestLegConsistency(unittest.TestCase):
             恒定低 ~120 亿（2026-09-30 实测：沪深 14380 vs 同花顺 14500）。
         """
         import inspect
-        src = inspect.getsource(t_gui.Api._market_turnover)
+        src = inspect.getsource(gui.Api._market_turnover)
         self.assertIn('"sh000001"', src)
         self.assertIn('"sz399106"', src, "深市腿必须是深证综指 sz399106")
         self.assertNotIn('"sz399001"', src, "深证成指的分钟口径只有成分股，会少算一半")
@@ -349,7 +349,7 @@ class TestLegConsistency(unittest.TestCase):
     def test_北交所不可得时如实标记(self):
         """降级为沪深口径必须显式标记，否则用户会以为数值正常（正是本次对不上的原因）。"""
         import inspect
-        src = inspect.getsource(t_gui.Api._market_turnover)
+        src = inspect.getsource(gui.Api._market_turnover)
         self.assertIn("bse_included", src)
         self.assertIn("degraded", src)
 
@@ -360,7 +360,7 @@ class TestTurnoverHistory(unittest.TestCase):
     @staticmethod
     def asm(*a):
         # 不要把函数直接赋成类属性（会变成绑定方法、多一个 self）——用包装函数转调
-        return t_gui.Api._assemble_turnover_history(*a)
+        return gui.Api._assemble_turnover_history(*a)
 
     @staticmethod
     def _hs(n=80, base=15000e8, start=1):
@@ -511,50 +511,50 @@ class TestTurnoverHistoryCacheKey(unittest.TestCase):
     """
 
     def setUp(self):
-        self._cache = t_gui.Api._turnover_hist_cache
-        self._snap = t_gui._snapshot_read
-        self._fn = t_gui.Api._turnover_history_cached
+        self._cache = gui.Api._turnover_hist_cache
+        self._snap = gui._snapshot_read
+        self._fn = gui.Api._turnover_history_cached
         self.calls = []
-        t_gui.Api._turnover_hist_cache = {}
+        gui.Api._turnover_hist_cache = {}
 
         def _stub(days=None):
-            d = int(t_gui.Api._TURNOVER_HIST_DAYS if days is None else days)
+            d = int(gui.Api._TURNOVER_HIST_DAYS if days is None else days)
             self.calls.append(d)
             out = {"available": True, "days": [{"date": "D%04d" % i} for i in range(d)]}
-            t_gui.Api._turnover_hist_cache[d] = (_time.time(), out)   # 与真实现同：写自己的槽
+            gui.Api._turnover_hist_cache[d] = (_time.time(), out)   # 与真实现同：写自己的槽
             return out
 
-        t_gui.Api._turnover_history_cached = _stub
-        t_gui._snapshot_read = lambda k: None
+        gui.Api._turnover_history_cached = _stub
+        gui._snapshot_read = lambda k: None
 
     def tearDown(self):
-        t_gui.Api._turnover_hist_cache = self._cache
-        t_gui._snapshot_read = self._snap
-        t_gui.Api._turnover_history_cached = self._fn
+        gui.Api._turnover_hist_cache = self._cache
+        gui._snapshot_read = self._snap
+        gui.Api._turnover_history_cached = self._fn
 
     def test_stale_60d_cache_does_not_satisfy_250d(self):
-        t_gui.Api._turnover_hist_cache[60] = (_time.time(),
+        gui.Api._turnover_hist_cache[60] = (_time.time(),
                                              {"available": True, "days": [{"date": "x"}] * 60})
-        got = t_gui.Api.load_turnover_history(t_gui.Api, 250)
+        got = gui.Api.load_turnover_history(gui.Api, 250)
         self.assertEqual(len(got["days"]), 250,
                          "250 的请求被 60 天的旧缓存顶掉了 —— 就是 owner 截图那个症状")
 
     def test_250d_cache_does_not_satisfy_60d(self):
-        got = t_gui.Api.load_turnover_history(t_gui.Api, 250)     # 先填 250
+        got = gui.Api.load_turnover_history(gui.Api, 250)     # 先填 250
         self.assertEqual(len(got["days"]), 250)
-        got2 = t_gui.Api.load_turnover_history(t_gui.Api, 60)
+        got2 = gui.Api.load_turnover_history(gui.Api, 60)
         self.assertEqual(len(got2["days"]), 60, "反向也不能串槽")
 
     def test_second_call_hits_the_same_slot(self):
-        t_gui.Api.load_turnover_history(t_gui.Api, 250)
+        gui.Api.load_turnover_history(gui.Api, 250)
         n = len(self.calls)
-        t_gui.Api.load_turnover_history(t_gui.Api, 250)
+        gui.Api.load_turnover_history(gui.Api, 250)
         self.assertEqual(len(self.calls), n, "同宽度的第二次调用应命中缓存、不再算")
 
     def test_default_is_the_chart_window(self):
         """裸调（`prewarm_overview` 就这么调）必须与图窗口同宽，否则预热是白热。"""
-        self.assertEqual(t_gui.Api._TURNOVER_HIST_DAYS, 250)
-        got = t_gui.Api.load_turnover_history(t_gui.Api)
+        self.assertEqual(gui.Api._TURNOVER_HIST_DAYS, 250)
+        got = gui.Api.load_turnover_history(gui.Api)
         self.assertEqual(len(got["days"]), 250)
 
 
@@ -577,13 +577,13 @@ class TestHsLegValidation(unittest.TestCase):
         return [one(sh_amount), one(sz_amount)]
 
     def test_both_legs_good_sums(self):
-        good, bad = t_gui.Api._hs_daily_from_frames(self.frames(7.744e11, 8.586e11))
+        good, bad = gui.Api._hs_daily_from_frames(self.frames(7.744e11, 8.586e11))
         self.assertAlmostEqual(good["2026-10-15"], 1.633e12, delta=1e9)
         self.assertEqual(bad, [])
 
     def test_degraded_leg_rejects_the_whole_day(self):
         """一腿是成交量级（腾讯回退）⇒ **整条拒收**，绝不吐一个腰斩的值。"""
-        good, bad = t_gui.Api._hs_daily_from_frames(self.frames(7.744e11, 5.10e8))
+        good, bad = gui.Api._hs_daily_from_frames(self.frames(7.744e11, 5.10e8))
         self.assertEqual(good, {}, "半截值必须被拒 —— 它就是 owner 截图里那个 +99% 的来源")
         self.assertEqual(bad, ["2026-10-15"])
 
@@ -591,15 +591,15 @@ class TestHsLegValidation(unittest.TestCase):
         """某天只有一条腿有数据（另一腿未覆盖）⇒ 同样拒收，不拿单腿充总数。"""
         sh = pd.DataFrame([{"date": "2026-10-15", "amount": 7.744e11}])
         sz = pd.DataFrame([{"date": "2026-10-16", "amount": 8.229e11}])
-        good, bad = t_gui.Api._hs_daily_from_frames([sh, sz])
+        good, bad = gui.Api._hs_daily_from_frames([sh, sz])
         self.assertEqual(good, {})
         self.assertEqual(bad, ["2026-10-15", "2026-10-16"])
 
     def test_threshold_is_about_magnitude_not_source_label(self):
         """判据是**量级**（真成交额 ≥1e10 元），不是 source 标签 —— 标签分不出"缓存里的旧值"。"""
-        good, _ = t_gui.Api._hs_daily_from_frames(self.frames(1.0e10, 1.0e10))
+        good, _ = gui.Api._hs_daily_from_frames(self.frames(1.0e10, 1.0e10))
         self.assertIn("2026-10-15", good, "正好卡在阈值上的应算可信")
-        good2, bad2 = t_gui.Api._hs_daily_from_frames(self.frames(9.9e9, 9.9e9))
+        good2, bad2 = gui.Api._hs_daily_from_frames(self.frames(9.9e9, 9.9e9))
         self.assertEqual(good2, {})
         self.assertEqual(bad2, ["2026-10-15"])
 
@@ -610,28 +610,28 @@ class TestHsFreezeCache(unittest.TestCase):
     def setUp(self):
         import tempfile
         from pathlib import Path
-        self._fp = t_gui._HS_DAILY_CACHE_FP
-        t_gui._HS_DAILY_CACHE_FP = Path(tempfile.mkdtemp()) / "hs.json"
+        self._fp = gui._HS_DAILY_CACHE_FP
+        gui._HS_DAILY_CACHE_FP = Path(tempfile.mkdtemp()) / "hs.json"
 
     def tearDown(self):
-        t_gui._HS_DAILY_CACHE_FP = self._fp
+        gui._HS_DAILY_CACHE_FP = self._fp
 
     def test_round_trip(self):
-        t_gui._save_hs_daily_cache({"2026-10-15": 1.6461e12, "2026-10-16": 1.5692e12})
-        got = t_gui._load_hs_daily_cache()
+        gui._save_hs_daily_cache({"2026-10-15": 1.6461e12, "2026-10-16": 1.5692e12})
+        got = gui._load_hs_daily_cache()
         self.assertAlmostEqual(got["2026-10-15"], 1.6461e12, delta=1e8)
         self.assertEqual(len(got), 2)
 
     def test_missing_file_is_empty_not_raise(self):
-        self.assertEqual(t_gui._load_hs_daily_cache(), {})
+        self.assertEqual(gui._load_hs_daily_cache(), {})
 
     def test_corrupt_file_is_empty_not_raise(self):
-        t_gui._HS_DAILY_CACHE_FP.write_text("{ not json", encoding="utf-8")
-        self.assertEqual(t_gui._load_hs_daily_cache(), {})
+        gui._HS_DAILY_CACHE_FP.write_text("{ not json", encoding="utf-8")
+        self.assertEqual(gui._load_hs_daily_cache(), {})
 
     def test_capped_at_400_days(self):
-        t_gui._save_hs_daily_cache({f"D{i:04d}": 1e12 for i in range(500)})
-        self.assertEqual(len(t_gui._load_hs_daily_cache()), 400, "别无限长，够 1 年窗口 + 裕度")
+        gui._save_hs_daily_cache({f"D{i:04d}": 1e12 for i in range(500)})
+        self.assertEqual(len(gui._load_hs_daily_cache()), 400, "别无限长，够 1 年窗口 + 裕度")
 
 
 if __name__ == "__main__":

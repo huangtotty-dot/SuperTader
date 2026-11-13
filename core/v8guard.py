@@ -7,7 +7,7 @@ V8 直接 abort 整进程（FATAL:partition_address_space）。项目已在「�
 但其它经 worker 线程调 akshare 的路径（如扫描线程内 stock_zh_a_hist/新浪日线兜底）同样会踩。
 
 对策：进程启动后**第一时间在主线程**初始化一次 py_mini_racer，令 V8 pool 落在主线程，
-此后任何线程内的懒初始化都安全。调用点：main.py __main__ / t_gui __main__ 等长驻进程入口。
+此后任何线程内的懒初始化都安全。调用点：main.py __main__ / gui __main__ 等长驻进程入口。
 """
 import sys
 

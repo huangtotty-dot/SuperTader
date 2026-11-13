@@ -4,7 +4,7 @@
 ## 为什么要有这个测试
 
 owner 需求：猎手里出现「符合建仓条件」的股票时推送到飞书，按板块划分。
-「符合建仓条件」= GUI「建仓」列的绿色 `x·GO`，即 `t_gui._hunter_build_conformance`
+「符合建仓条件」= GUI「建仓」列的绿色 `x·GO`，即 `gui._hunter_build_conformance`
 的时机门控 GO（市场有方向/多头结构/回撤到位/金叉加分）。
 
 本测试**只测纯提取函数 `build_build_candidates`**（不联网、不发消息）。
@@ -176,21 +176,21 @@ class TestPushDedup(unittest.TestCase):
         self._td = tempfile.TemporaryDirectory()
         self._fp = Path(self._td.name) / "pushed.json"
 
-        import t_gui
-        self.t_gui = t_gui
-        self._orig_fp = t_gui._HUNTER_BUILD_PUSHED_FP
-        t_gui._HUNTER_BUILD_PUSHED_FP = self._fp
+        import gui
+        self.gui = gui
+        self._orig_fp = gui._HUNTER_BUILD_PUSHED_FP
+        gui._HUNTER_BUILD_PUSHED_FP = self._fp
 
         self.calls = []
         self._orig_send = pf.send_build_candidates
         pf.send_build_candidates = lambda cfg, groups, d: (
             self.calls.append([(g["sector"], sorted(s["代码"] for s in g["stocks"])) for g in groups])
             or {"ok": True, "sent": len(groups), "failed": 0})
-        self.api = t_gui.Api()
+        self.api = gui.Api()
 
     def tearDown(self):
         pf.send_build_candidates = self._orig_send
-        self.t_gui._HUNTER_BUILD_PUSHED_FP = self._orig_fp
+        self.gui._HUNTER_BUILD_PUSHED_FP = self._orig_fp
         self._td.cleanup()
 
     @staticmethod
@@ -243,13 +243,13 @@ class TestIntradayForce(unittest.TestCase):
     """
 
     def setUp(self):
-        import t_gui
-        self.t_gui = t_gui
-        self.api = t_gui.Api()
-        self._orig_dt = t_gui.datetime
+        import gui
+        self.gui = gui
+        self.api = gui.Api()
+        self._orig_dt = gui.datetime
 
     def tearDown(self):
-        self.t_gui.datetime = self._orig_dt
+        self.gui.datetime = self._orig_dt
 
     def _freeze(self, y, mo, d, hh, mm):
         real = self._orig_dt
@@ -259,7 +259,7 @@ class TestIntradayForce(unittest.TestCase):
             def now(cls, tz=None):
                 return real(y, mo, d, hh, mm)
 
-        self.t_gui.datetime = _FrozenDT
+        self.gui.datetime = _FrozenDT
 
     def test_manual_computes_intraday(self):
         # 2026-09-21 是周一；10:30 属原盘中跳过窗口(09:15-15:00)
@@ -276,14 +276,14 @@ class TestIntradayForce(unittest.TestCase):
 class TestAutorunSlots(unittest.TestCase):
     """猎手定时轮询的**时段闸**。
 
-    2026-10-11 变更：旧的 `t_gui.HUNTER_AUTORUN_SLOTS`（整点档）已随 2026-10-10 的
+    2026-10-11 变更：旧的 `gui.HUNTER_AUTORUN_SLOTS`（整点档）已随 2026-10-10 的
     「禁止自动跑」一起删除；owner 现在要求改为 **每 30 分钟轮询 + 异常必发飞书**，
     判据落在 `core.hunter_poll`（`in_trading_hours` / `should_poll` / `POLL_INTERVAL_SEC`），
     由 **main.py 主循环**驱动（无头，不依赖 GUI）。本用例改为守这套新判据。
     """
 
     def test_slots(self):
-        import t_gui
+        import gui
         from datetime import datetime
         from core.hunter_poll import POLL_INTERVAL_SEC, in_trading_hours, should_poll
         self.assertEqual(POLL_INTERVAL_SEC, 1800, "owner 指定 30 分钟一轮")
@@ -296,7 +296,7 @@ class TestAutorunSlots(unittest.TestCase):
         self.assertFalse(should_poll(datetime(2026, 10, 12, 10, 29), t0))
         self.assertTrue(should_poll(datetime(2026, 10, 12, 10, 30), t0))
         # 2026-10-10 的约束仍在：导入 GUI 不得自带自动扫描
-        self.assertFalse(hasattr(t_gui, "HUNTER_AUTORUN_SLOTS"),
+        self.assertFalse(hasattr(gui, "HUNTER_AUTORUN_SLOTS"),
                          "旧的整点档常量应已删除（改由 core.hunter_poll 的 30 分钟闸驱动）")
 
 

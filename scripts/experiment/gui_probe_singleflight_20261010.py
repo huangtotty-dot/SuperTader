@@ -13,14 +13,14 @@ import time
 
 sys.path.insert(0, BASE)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 counts = {"turnover": 0, "hist": 0, "indices": 0}
 lk = threading.Lock()
 
-_o_tov = t_gui.Api._market_turnover_impl
-_o_hist = t_gui.Api._turnover_history_cached
-_o_idx = t_gui.Api._load_indices_impl
+_o_tov = gui.Api._market_turnover_impl
+_o_hist = gui.Api._turnover_history_cached
+_o_idx = gui.Api._load_indices_impl
 
 
 def wrap(key, orig):
@@ -31,16 +31,16 @@ def wrap(key, orig):
     return _w
 
 
-t_gui.Api._market_turnover_impl = wrap("turnover", _o_tov)
-t_gui.Api._turnover_history_cached = wrap("hist", _o_hist)
-t_gui.Api._load_indices_impl = wrap("indices", _o_idx)
+gui.Api._market_turnover_impl = wrap("turnover", _o_tov)
+gui.Api._turnover_history_cached = wrap("hist", _o_hist)
+gui.Api._load_indices_impl = wrap("indices", _o_idx)
 
 # 冷缓存（内存），但保留磁盘快照 → 走「秒返快照 + 踢单飞刷新」分支
-t_gui.Api._turnover_cache.clear()
-t_gui.Api._turnover_hist_cache.clear()
-t_gui.Api._indices_cache.clear()
+gui.Api._turnover_cache.clear()
+gui.Api._turnover_hist_cache.clear()
+gui.Api._indices_cache.clear()
 
-api = t_gui.Api()
+api = gui.Api()
 
 
 def worker(i):

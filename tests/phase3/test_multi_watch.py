@@ -12,7 +12,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 _HTML = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
@@ -35,7 +35,7 @@ def _frame(n=120):
 
 class TestLoadMultiChart:
     def test_trims_every_series_to_tail(self, monkeypatch):
-        api = t_gui.Api()
+        api = gui.Api()
         monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (_frame(120), "fresh"))
         r = api.load_multi_chart(["600000"], "min5", 90)
         it = r["items"][0]
@@ -47,14 +47,14 @@ class TestLoadMultiChart:
         assert it["quote"]["price"] == 10.0
 
     def test_warming_item_is_reported_not_raised(self, monkeypatch):
-        api = t_gui.Api()
+        api = gui.Api()
         monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (None, "warming"))
         r = api.load_multi_chart(["600000"], "min5", 90)
         it = r["items"][0]
         assert it["ok"] is False and it["warming"] is True
 
     def test_capped_at_12_and_strips_underscore_suffix(self, monkeypatch):
-        api = t_gui.Api()
+        api = gui.Api()
         monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (_frame(60), "fresh"))
         codes = [f"{600000 + i}" for i in range(20)]
         r = api.load_multi_chart(codes, "min5", 40)
@@ -65,7 +65,7 @@ class TestLoadMultiChart:
         assert r2["items"][0]["code"] == "600000"
 
     def test_never_raises_on_bad_frame(self, monkeypatch):
-        api = t_gui.Api()
+        api = gui.Api()
 
         def _boom(c, period="min5"):
             raise RuntimeError("x")
@@ -81,7 +81,7 @@ class TestSlimUnchanged:
     """
 
     def test_known_sig_returns_slim_frame(self, monkeypatch):
-        api = t_gui.Api()
+        api = gui.Api()
         fr = _frame(120)
         fr["sig"] = "d119|2.000|120"
         monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (fr, "fresh"))
@@ -94,12 +94,12 @@ class TestSlimUnchanged:
 
     def test_帧自带sig(self):
         """`_mw_compute` 必须给帧打 sig（末根时间|收|根数，与单图同一约定）。"""
-        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        py = (_ROOT / "gui.py").read_text(encoding="utf-8")
         assert '"sig": _sig,' in py
         assert '_sig = f"{_dates_out[-1] if _dates_out else \'\'}|{_close_last:.3f}|{len(_dates_out)}"' in py
 
     def test_different_sig_sends_full_series(self, monkeypatch):
-        api = t_gui.Api()
+        api = gui.Api()
         fr = _frame(120)
         fr["sig"] = "d119|2.000|120"
         monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (fr, "fresh"))
@@ -113,19 +113,19 @@ class TestQuietTtl:
 
     def test_TTL放宽后旧帧仍判fresh(self, monkeypatch):
         import time as _t
-        api = t_gui.Api.__new__(t_gui.Api)
+        api = gui.Api.__new__(gui.Api)
         key = "600000|min5"
-        t_gui._MW_CACHE.clear()
-        t_gui._MW_CACHE[key] = (_t.time() - 10.0, _frame(30))   # 10s 前：交易时段已过期
+        gui._MW_CACHE.clear()
+        gui._MW_CACHE[key] = (_t.time() - 10.0, _frame(30))   # 10s 前：交易时段已过期
         monkeypatch.setattr(api, "_mw_worker", lambda *a, **k: None)
-        monkeypatch.setattr(t_gui, "_mw_ttl_now", lambda: 60.0)   # 盘前/盘后
+        monkeypatch.setattr(gui, "_mw_ttl_now", lambda: 60.0)   # 盘前/盘后
         _fr, st = api._mw_frame("600000", "min5")
         assert st == "fresh", "盘前 10s 的帧应判新鲜（quiet TTL 60s）"
-        monkeypatch.setattr(t_gui, "_mw_ttl_now", lambda: 4.6)    # 交易时段
+        monkeypatch.setattr(gui, "_mw_ttl_now", lambda: 4.6)    # 交易时段
         _fr, st = api._mw_frame("600000", "min5")
         assert st == "stale", "交易时段 10s 已超 4.6s ⇒ stale（后台刷新）"
-        t_gui._MW_CACHE.clear()
-        t_gui._MW_RUN.clear()
+        gui._MW_CACHE.clear()
+        gui._MW_RUN.clear()
 
     def test_竞价窗口用10s(self, monkeypatch):
         """09:15-09:30：价格在动、K 线不动 ⇒ 既不是 4.6s 也不是 60s。"""
@@ -135,14 +135,14 @@ class TestQuietTtl:
             @staticmethod
             def strftime(fmt):
                 return "09:20"
-        monkeypatch.setattr(t_gui, "datetime", type("D", (), {
+        monkeypatch.setattr(gui, "datetime", type("D", (), {
             "now": staticmethod(lambda: _Now)}))
-        assert t_gui._mw_ttl_now() == t_gui._MW_TTL_AUCTION
+        assert gui._mw_ttl_now() == gui._MW_TTL_AUCTION
 
 
 class TestWebViewNoThrottle:
     def test_关闭遮挡_后台节流(self):
-        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        py = (_ROOT / "gui.py").read_text(encoding="utf-8")
         assert "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" in py
         for flag in ("--disable-background-timer-throttling",
                      "--disable-renderer-backgrounding",
@@ -157,7 +157,7 @@ class TestDma30_60:
     def test_后端均线包包含30和60(self, monkeypatch):
         import pandas as pd
         import core.chart_cache as cc
-        api = t_gui.Api.__new__(t_gui.Api)
+        api = gui.Api.__new__(gui.Api)
         api._dma_memo = {}
         dates = pd.date_range("2026-01-01", periods=100).strftime("%Y-%m-%d").tolist()
         df = pd.DataFrame({"date": dates, "close": [10.0 + i * 0.01 for i in range(100)]})
@@ -297,7 +297,7 @@ class TestLightweightFrame:
         **不碰** MACD/RSI/BOLL/黄金分割（细胞只有 1/6 屏宽，用不着）。
         """
         import inspect
-        src = inspect.getsource(t_gui.Api._mw_compute)
+        src = inspect.getsource(gui.Api._mw_compute)
         assert "_fetch_min_df" in src
         assert "tail(120)" in src
         assert "_calc_ma_and_indicators" not in src, "轻量帧不该跑整套指标"
@@ -305,7 +305,7 @@ class TestLightweightFrame:
 
     def test_multi_does_not_use_single_chart_cache(self):
         import inspect
-        src = inspect.getsource(t_gui.Api.load_multi_chart)
+        src = inspect.getsource(gui.Api.load_multi_chart)
         assert "_mw_frame" in src
         assert "_chart_live_frame" not in src, "别再复用单图的深档帧"
 
@@ -351,7 +351,7 @@ class TestMacdPanel:
         """后端轻量帧必须带 MACD，且**在完整 340 根上算完再截尾** ——
         EMA12/26 的头几十根严重受种子影响，只喂 120 根算出来与单图对不上。"""
         import inspect
-        src = inspect.getsource(t_gui.Api._mw_compute)
+        src = inspect.getsource(gui.Api._mw_compute)
         assert "_ema_macd" in src
         assert "df.tail(120)" in src
         # 先算（用 _closes_all）再截尾
@@ -361,7 +361,7 @@ class TestMacdPanel:
         """与单图 `_calc_ma_and_indicators` 的 MACD 同口径（EMA12/26/9，hist=(dif-dea)×2）。"""
         import pandas as pd
         closes = [10.0, 10.2, 10.1, 10.4, 10.3, 10.6, 10.5, 10.8, 10.7, 11.0] * 6
-        dif, dea, hist = t_gui._ema_macd(closes)
+        dif, dea, hist = gui._ema_macd(closes)
         assert len(dif) == len(dea) == len(hist) == len(closes)
         for d, e, h in zip(dif, dea, hist):
             assert h == pytest.approx((d - e) * 2.0, rel=1e-9)
@@ -423,7 +423,7 @@ class TestSupportResistance:
 
     def test_levels_are_computed_offline(self, monkeypatch):
         import core.chart_cache as cc
-        api = t_gui.Api()
+        api = gui.Api()
         monkeypatch.setattr(cc, "load_daily_display", lambda code: self._fake_daily())
         monkeypatch.setattr(api, "_lvl_memo", {}, raising=False)
         lv = api._daily_levels("600000")
@@ -435,7 +435,7 @@ class TestSupportResistance:
     def test_short_history_returns_none(self, monkeypatch):
         """历史不足 30 根 ⇒ 直接判无，别拿 NaN 均线去算。"""
         import core.chart_cache as cc
-        api = t_gui.Api()
+        api = gui.Api()
         monkeypatch.setattr(cc, "load_daily_display", lambda code: self._fake_daily(10))
         monkeypatch.setattr(api, "_lvl_memo", {}, raising=False)
         assert api._daily_levels("600000") is None
@@ -458,7 +458,7 @@ class TestKlineSearchFuzzy:
     """
 
     def _api(self, monkeypatch):
-        import t_gui as G
+        import gui as G
         api = G.Api()
         monkeypatch.setattr(api, "_instrument_names",
                             lambda: {"002600": "领益智造", "600519": "贵州茅台",
@@ -494,11 +494,11 @@ class TestTradeMarkersInCells:
 
     def test_backend_slices_trades_to_window(self):
         import inspect
-        src = inspect.getsource(t_gui.Api._mw_trades)
+        src = inspect.getsource(gui.Api._mw_trades)
         assert "_chart_trades" in src
         assert "dates[0]" in src          # 只取窗口内的
         assert "_out[-200:]" in src       # 上限，九宫格 9 只也不至于把包撑大
-        src2 = inspect.getsource(t_gui.Api.load_multi_chart)
+        src2 = inspect.getsource(gui.Api.load_multi_chart)
         assert '"trades"' in src2
 
     def test_frontend_buckets_same_as_main_chart(self):
@@ -602,8 +602,8 @@ class TestPeriodSwitch:
 
 class TestPeriodBackend:
     def test_load_multi_chart_透传周期(self):
-        import t_gui
-        api = t_gui.Api()
+        import gui
+        api = gui.Api()
         seen = {}
 
         def _fake_frame(code, period="min5"):
@@ -618,8 +618,8 @@ class TestPeriodBackend:
         assert r2["period"] == "min5", "非法周期回落 5 分钟"
 
     def test_周期记忆往返(self, tmp_path):
-        import t_gui
-        api = t_gui.Api()
+        import gui
+        api = gui.Api()
         api._MW_STATE_FP = tmp_path / "mw.json"
         api.save_multi_watch(["600000"], "3x2", "min60")
         d = api.load_multi_watch()
@@ -639,7 +639,7 @@ class TestDailyMaFallback:
     def test_盘中半成品根不再让日均线消失(self, monkeypatch):
         import datetime as _dt
         import core.chart_cache as cc
-        api = t_gui.Api.__new__(t_gui.Api)
+        api = gui.Api.__new__(gui.Api)
         api._dma_memo = {}
         rows = []
         d0 = _dt.date(2026, 6, 1)
@@ -648,6 +648,6 @@ class TestDailyMaFallback:
                          "high": 10.2 + i * 0.01, "low": 9.8 + i * 0.01,
                          "close": 10.0 + i * 0.01, "volume": 1e6})
         monkeypatch.setattr(cc, "load_daily_display", lambda c: None)   # 模拟 display 闸返回 None
-        monkeypatch.setattr(t_gui, "_daily_rows_before_today", lambda c: rows)
+        monkeypatch.setattr(gui, "_daily_rows_before_today", lambda c: rows)
         d = api._daily_ma_bundle("600584")
         assert d and d["ma5"] > 0 and d["ma60"] > 0

@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-"""`t_gui.py` 的 `__main__` 段不得引用未定义的名字（2026-10-21）。
+"""`gui.py` 的 `__main__` 段不得引用未定义的名字（2026-10-21）。
 
 事故：`164d565` 在 `__main__` 里加了线程级 CPU 归因的启动段，写的是
-`PARAMS.get("thread_watch_sec", ...)` 和 `log.info/warning(...)` —— 而 t_gui.py **既没有
+`PARAMS.get("thread_watch_sec", ...)` 和 `log.info/warning(...)` —— 而 gui.py **既没有
 模块级 `PARAMS`（配置在 `config.PARAMS`）也没有 `log`**。于是：
     try 里 NameError → 被 `except` 接住 → `except` 里 `log.warning` 再抛 NameError
     → 进程在 import 阶段就退出 → **窗口根本不出现**，
 而 `main.py` 拉起子进程时 `stdout/stderr` 都是 `DEVNULL`（`main._launch_gui`）⇒ 连报错都看不见。
 owner 的表现就是「运行 python main.py 之后无法打开 GUI」。
 
-`import t_gui` 是绿的**掩盖不了它**（崩在 `__main__`，只有真跑才触发）⇒ 这条静态检查补上。
+`import gui` 是绿的**掩盖不了它**（崩在 `__main__`，只有真跑才触发）⇒ 这条静态检查补上。
 """
 import ast
 import builtins
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
-_SRC = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+_SRC = (_ROOT / "gui.py").read_text(encoding="utf-8")
 
 
 def _module_level_names(tree):
@@ -100,11 +100,11 @@ def _free_names(node, known):
 def test_main_block_has_no_undefined_names():
     tree = ast.parse(_SRC)
     block = _main_block(tree)
-    assert block is not None, "t_gui.py 里找不到 __main__ 段"
+    assert block is not None, "gui.py 里找不到 __main__ 段"
     known = _module_level_names(tree) | {"__name__", "__file__", "__doc__"}
     missing = _free_names(block, known)
     assert not missing, (
-        "t_gui.py 的 __main__ 段引用了模块里不存在的名字（会 NameError 直接退出、"
+        "gui.py 的 __main__ 段引用了模块里不存在的名字（会 NameError 直接退出、"
         f"且 main.py 把子进程输出丢了看不见）：{sorted(missing)}")
 
 
@@ -114,4 +114,4 @@ def test_specific_landmines_gone():
     block = _main_block(tree)
     ids = {n.id for n in ast.walk(block) if isinstance(n, ast.Name)}
     assert "PARAMS" not in ids, "配置一律走 `config.PARAMS`（`import config as _cfg` 后取）"
-    assert "log" not in ids, "t_gui.py 没有模块级 logger，日志用 print(..., flush=True)"
+    assert "log" not in ids, "gui.py 没有模块级 logger，日志用 print(..., flush=True)"

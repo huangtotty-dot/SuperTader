@@ -22,7 +22,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from src.holdings_repo import (load_manual, load_auto, load_union,
+from core.holdings_repo import (load_manual, load_auto, load_union,
                                load_auto_pool)
 
 # config 是目录非 package，按绝对路径加载 auto_pool（与 goldminer/position_builder 同款）

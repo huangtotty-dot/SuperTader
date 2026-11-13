@@ -8,7 +8,7 @@ owner：「最后根据加权合成一个指数，因为我看那么多指标容
 以及"单看最强项 vs 合成"到底差多少。
 
 结论：合成 = 可读性工具，不是更好的信号（触板 3.35pp → 合成 1.39pp）。
-生产权重取 0.5 触板 / 0.3 封板质量 / 0.2 跌停（见 t_gui.load_market_sentiment）。
+生产权重取 0.5 触板 / 0.3 封板质量 / 0.2 跌停（见 gui.load_market_sentiment）。
 """
 import json
 import pathlib

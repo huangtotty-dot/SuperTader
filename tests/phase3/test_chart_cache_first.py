@@ -24,7 +24,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 import pandas as pd  # noqa: E402
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 import core.chart_cache as cc  # noqa: E402
 
 
@@ -42,7 +42,7 @@ def _daily_df(n=400, start=10.0):
 
 class TestCacheFirst(unittest.TestCase):
     def setUp(self):
-        self.api = t_gui.Api()
+        self.api = gui.Api()
 
     def test_01_日线缓存命中_绕开网络(self):
         calls = {"fetch": 0}
@@ -52,7 +52,7 @@ class TestCacheFirst(unittest.TestCase):
             raise AssertionError("命中了日线缓存却仍调用 fetch_daily_kline")
         with mock.patch.object(cc, "load_payload", return_value=None), \
              mock.patch.object(cc, "load_daily_display", return_value=_daily_df()), \
-             mock.patch("t_gui._fetch_min_bars", return_value=pd.DataFrame()), \
+             mock.patch("gui._fetch_min_bars", return_value=pd.DataFrame()), \
              mock.patch("core.position_builder.fetch_daily_kline", _fake_fetch):
             r = self.api.load_stock_chart("600000")
         self.assertTrue(r.get("available"))
@@ -66,7 +66,7 @@ class TestCacheFirst(unittest.TestCase):
             return _daily_df()
         with mock.patch.object(cc, "load_payload", return_value=None), \
              mock.patch.object(cc, "load_daily_display", return_value=None), \
-             mock.patch("t_gui._fetch_min_bars", return_value=pd.DataFrame()), \
+             mock.patch("gui._fetch_min_bars", return_value=pd.DataFrame()), \
              mock.patch("core.position_builder.fetch_daily_kline", _fake_fetch):
             r = self.api.load_stock_chart("600000")
         self.assertTrue(r.get("available"))
@@ -100,7 +100,7 @@ class TestCacheFirst(unittest.TestCase):
             return pd.DataFrame()
         with mock.patch.object(cc, "load_payload", return_value=None), \
              mock.patch.object(cc, "load_daily_display", return_value=_daily_df()), \
-             mock.patch("t_gui._fetch_min_bars", _fake_min), \
+             mock.patch("gui._fetch_min_bars", _fake_min), \
              mock.patch("core.position_builder.fetch_daily_kline", lambda c: _daily_df()):
             r1 = self.api.load_stock_chart("600000")
             self.assertEqual(calls["min"], 0, "日线视图默认不应取分时（want_minutes=False）")
@@ -123,7 +123,7 @@ class TestCacheFirst(unittest.TestCase):
             return pd.DataFrame()
         with mock.patch.object(cc, "load_payload", return_value=hit), \
              mock.patch.object(cc, "load_daily_display", return_value=_daily_df()), \
-             mock.patch("t_gui._fetch_min_bars", _fake_min), \
+             mock.patch("gui._fetch_min_bars", _fake_min), \
              mock.patch("core.position_builder.fetch_daily_kline", lambda c: _daily_df()):
             r = self.api.load_stock_chart("600000", None, True)
         self.assertTrue(r.get("available"))
@@ -150,10 +150,10 @@ class TestCacheFirst(unittest.TestCase):
             __import__("json").dumps({"rows": old_rows}), encoding="utf-8")
         _P(tmp, "600000.SH_30min.json").write_text(
             __import__("json").dumps({"date": "2026-10-01", "rows": new_rows}), encoding="utf-8")
-        with mock.patch.object(t_gui, "_MIN_BARS_DIR", _P(tmp)), \
+        with mock.patch.object(gui, "_MIN_BARS_DIR", _P(tmp)), \
              mock.patch.object(cc, "_MINUTE_CACHE_DIR", _P(tmp, "empty_none")), \
              mock.patch.object(cc, "load_minute_history", return_value=None):
-            df = t_gui._fetch_min_bars_disk("600000.SH", "30min")
+            df = gui._fetch_min_bars_disk("600000.SH", "30min")
         self.assertFalse(df.empty)
         self.assertEqual(str(df["time"].iloc[-1])[:10], "2026-10-01", "应取更晚的 plain 档而非陈旧 _d540")
 

@@ -418,16 +418,16 @@ class TestIncrementalImport(unittest.TestCase):
     """
 
     def setUp(self):
-        import t_gui
-        self.t_gui = t_gui
+        import gui
+        self.gui = gui
         self._tmp = tempfile.TemporaryDirectory()
         self.d = Path(self._tmp.name)
-        self._orig = t_gui.TRADE_HISTORY_LEDGER
-        t_gui.TRADE_HISTORY_LEDGER = self.d / "led.json"
-        self.api = t_gui.Api()
+        self._orig = gui.TRADE_HISTORY_LEDGER
+        gui.TRADE_HISTORY_LEDGER = self.d / "led.json"
+        self.api = gui.Api()
 
     def tearDown(self):
-        self.t_gui.TRADE_HISTORY_LEDGER = self._orig
+        self.gui.TRADE_HISTORY_LEDGER = self._orig
         self._tmp.cleanup()
 
     def _mk(self, name, rows):

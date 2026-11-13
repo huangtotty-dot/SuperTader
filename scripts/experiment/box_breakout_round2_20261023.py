@@ -5,14 +5,14 @@
 
 第一轮判了「负 alpha」，但它落盘的 `t_io/cache/box_breakout_study.parquet` 只有
 **833 只 × 20 个交易日**（2026-09-09~10-14），不是文档写的「1000 只 × 250 交易日」。
-根因在生产代码里：`t_gui.Api._detect_boxes` 有一道 `days_since_end > 45: continue`
+根因在生产代码里：`gui.Api._detect_boxes` 有一道 `days_since_end > 45: continue`
 （只保留「结束距今 ≤45 天」的箱体），用的是 **`datetime.now()` 而不是 as-of 日期** ⇒
 回测任何历史日时，只有「距今天 45 天内结束」的箱体可见 —— 长窗口回测被它截成最后约 20 个交易日。
 本轮用 **as-of 版判箱**（其余逐字符沿用生产源码）重跑长窗口。
 
 同时测**两套箱体口径**（产品里是两套，别混）：
 
-* `rich`  = `t_gui.Api._detect_boxes`（选股猎手「🚀 突破箱体」卡片、K 线图箱体、`_breakout_probe_one`）
+* `rich`  = `gui.Api._detect_boxes`（选股猎手「🚀 突破箱体」卡片、K 线图箱体、`_breakout_probe_one`）
 * `simple`= `core.position_builder._detect_boxes_simple`（**建仓信号扫描 c2_box_breakout**，即"第一优先级"那条）
 
 ## 一次扫描、离线多规则
@@ -59,7 +59,7 @@ _DET_NS = None
 
 
 def _detect_boxes_asof(daily, asof):
-    """**as-of 版** `t_gui.Api._detect_boxes`。
+    """**as-of 版** `gui.Api._detect_boxes`。
 
     ⚠️ 生产版里的 `if b["days_since_end"] > 45: continue` 用的是 `datetime.now()` —— 回测历史日时
     所有 45 天前结束的箱体都被丢掉。这里把 `now()` 换成 as-of 日期，其余逻辑**逐字符沿用生产源码**
@@ -71,11 +71,11 @@ def _detect_boxes_asof(daily, asof):
         import textwrap
 
         import pandas as pd
-        import t_gui
-        src = textwrap.dedent(inspect.getsource(t_gui.Api._detect_boxes))
+        import gui
+        src = textwrap.dedent(inspect.getsource(gui.Api._detect_boxes))
         if 'now_dt = _dt.datetime.strptime(str(last_date)[:10], "%Y-%m-%d")' in src:
             # 生产已改为 as-of（2026-10-23 修复）→ 原函数即正确，无需补丁
-            _DET_NS = {"fn": t_gui.Api._detect_boxes, "patched": False}
+            _DET_NS = {"fn": gui.Api._detect_boxes, "patched": False}
         else:
             key = "now_dt = _dt.datetime.now()"
             assert key in src, "生产 _detect_boxes 已变，as-of 补丁需同步"
@@ -531,7 +531,7 @@ def cmd_analyze(a):
     lines = ["# 箱体突破 第二轮：回踩 / 站稳 vs 追突破（2026-10-23 续）", "",
              f"* 回踩口径：tol={a.tol:.1%} / deep={a.deep:.1%} / hold={a.hold:.1%} · 观察 K={K_PATH} 天",
              "* 超额 = 减**同日全市场同口径均值**；t 按**进场日聚类**；进场价 = 次日/回踩次日**开盘**",
-             "* `rich` = 猎手「🚀 突破箱体」卡片（t_gui._detect_boxes，含 as-of 修复）",
+             "* `rich` = 猎手「🚀 突破箱体」卡片（gui._detect_boxes，含 as-of 修复）",
              "* `simple` = 建仓扫描「突破箱体」c2（core.position_builder._detect_boxes_simple）", ""]
     sec = {"rich": "A. rich（猎手卡片）", "simple": "B. simple（建仓扫描 c2）"}
     for det, (r1, r2, r3, r4, ev) in out.items():

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""市场风向标（`t_gui.load_market_beacon`）+ 它的两个地基件 的单测（2026-10-13）。
+"""市场风向标（`gui.load_market_beacon`）+ 它的两个地基件 的单测（2026-10-13）。
 
 ## 为什么要有这个文件
 
@@ -7,7 +7,7 @@
 的东西上，任一块漂移都会让面板**静默变错**（不报错、只是显示成别的意思）：
 
 1. **`_jiuyan_board()` 是「主板块」口径的第二份实现。** 真源是策略包的
-   `oversold_gap_confirm.prescreen.sym2board_map()`，但 t_gui **不该 import 策略包**
+   `oversold_gap_confirm.prescreen.sym2board_map()`，但 gui **不该 import 策略包**
    （`execution/auto/` 是实盘宿主目录、且策略包只存在于某一个部署里）。⇒ 刻意复制一份，
    由本文件**逐码比对**守卫 —— 这是 2026-10-13 那次「背离判定副本漂移、同一个 bug 发作第二次」
    的教训：**副本可以存在，但必须有机械闸**。
@@ -32,7 +32,7 @@ if str(_ROOT) not in sys.path:
 if str(_ROOT / "execution" / "auto") not in sys.path:
     sys.path.insert(0, str(_ROOT / "execution" / "auto"))
 
-import t_gui                                              # noqa: E402
+import gui                                              # noqa: E402
 
 
 class TestBoardMapSingleSource(unittest.TestCase):
@@ -45,7 +45,7 @@ class TestBoardMapSingleSource(unittest.TestCase):
     def setUpClass(cls):
         from oversold_gap_confirm import prescreen
         cls.ref = prescreen.sym2board_map()
-        cls.mine = t_gui._jiuyan_board()
+        cls.mine = gui._jiuyan_board()
 
     def test_same_codes(self):
         self.assertEqual(set(self.ref), set(self.mine),
@@ -74,7 +74,7 @@ class TestSectorJoin(unittest.TestCase):
         s = json.loads(fp.read_text(encoding="utf-8"))
         days = sorted(k for k in s if s.get(k))
         self.assertTrue(days, "daily_summary 里没有非空日")
-        bmap = t_gui._jiuyan_board()
+        bmap = gui._jiuyan_board()
         from collections import Counter
         cnt = Counter(v for v in bmap.values() if v)
         missing = [x.get("板块") for x in (s[days[-1]] or [])[:20]
@@ -97,10 +97,10 @@ class TestLoadMarketBeacon(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.api = t_gui.Api()
+        cls.api = gui.Api()
         # 冷缓存：这样才能证明首帧**不在主线程同步算**（否则会命中上一轮的缓存）
-        t_gui._BEACON_SKELETON.update({"key": None, "ts": 0.0, "val": None, "running": False})
-        t_gui._BEACON_ENRICH.update({"key": None, "ts": 0.0, "rows": None, "running": False})
+        gui._BEACON_SKELETON.update({"key": None, "ts": 0.0, "val": None, "running": False})
+        gui._BEACON_ENRICH.update({"key": None, "ts": 0.0, "rows": None, "running": False})
         cls.first = cls.api.load_market_beacon()          # 冷：骨架都还没算
         cls.r = cls._poll(lambda rr: not rr.get("pending"), 60)   # 等骨架落地
 

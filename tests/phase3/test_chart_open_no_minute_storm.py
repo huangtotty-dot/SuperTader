@@ -22,7 +22,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
@@ -42,7 +42,7 @@ class _Rec:
 
 @pytest.fixture()
 def api(monkeypatch):
-    a = t_gui.Api()
+    a = gui.Api()
     a._stock_chart_cache = {}
     # 日线缓存给足行长，避免走网络/重建分支（本测试只关心 want_minutes 的收口）
     monkeypatch.setattr(a, "_serve_payload_cache", _Rec(a))
@@ -56,7 +56,7 @@ class TestBackendCoercion:
         assert api._serve_payload_cache.seen == [False], (
             f"{period} 视图不该要分钟线（会触发四档全抓）")
 
-    @pytest.mark.parametrize("period", list(t_gui._MIN_PERIODS))
+    @pytest.mark.parametrize("period", list(gui._MIN_PERIODS))
     def test_minute_period_keeps_want_minutes(self, api, period):
         api.load_stock_chart("600176", None, True, period)
         assert api._serve_payload_cache.seen == [True], "分钟 Tab 必须按档抓"

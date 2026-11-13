@@ -159,7 +159,7 @@ class TestWiring(unittest.TestCase):
             _ROOT / "core" / "market_data" / "tencent_provider.py").read_text(encoding="utf-8"))
 
     def test_图表payload按收盘价比对(self):
-        tg = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        tg = (_ROOT / "gui.py").read_text(encoding="utf-8")
         self.assertIn("payload 里存的是盘中快照根", tg, "日期/长度闸相同，必须按值比对")
 
 

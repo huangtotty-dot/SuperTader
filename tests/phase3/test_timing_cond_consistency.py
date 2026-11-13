@@ -5,7 +5,7 @@ owner 2026-10-16：「选股猎手的时机条件列与建仓信号扫描的该�
 
 ## 缺陷是什么（本文件要钉住的）
 
-真源 `t_gui.COND_LABELS` 在 2026-10-15 从 4 条扩到 **6 条**（新增 `t_ma20`/`t_ma5`
+真源 `gui.COND_LABELS` 在 2026-10-15 从 4 条扩到 **6 条**（新增 `t_ma20`/`t_ma5`
 两条**硬约束** —— 正是"解释 NO-GO 为什么 NO-GO"的那两条）。但：
 
   · **后端**：`_hunter_build_conformance` 的 `conds` **没有**这两个键 ⇒ 猎手/风向标的
@@ -35,7 +35,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-_TGUI_SRC = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+_TGUI_SRC = (_ROOT / "gui.py").read_text(encoding="utf-8")
 _APPJS_SRC = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 
@@ -64,14 +64,14 @@ _TABLES = {
 
 
 def _cond_labels_keys() -> set:
-    """从 t_gui.py 源码里取出真源 `COND_LABELS` 的键（不 import t_gui：导入重且有副作用）。"""
+    """从 gui.py 源码里取出真源 `COND_LABELS` 的键（不 import gui：导入重且有副作用）。"""
     tree = ast.parse(_TGUI_SRC)
     for node in tree.body:
         if isinstance(node, ast.Assign):
             for t in node.targets:
                 if isinstance(t, ast.Name) and t.id == "COND_LABELS":
                     return {k.value for k in node.value.keys}
-    raise AssertionError("t_gui.py 里找不到 COND_LABELS —— 真源被改名/删除了？")
+    raise AssertionError("gui.py 里找不到 COND_LABELS —— 真源被改名/删除了？")
 
 
 def _hunter_conds_keys() -> set:

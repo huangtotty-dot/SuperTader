@@ -32,18 +32,19 @@ import core.position_sizer as position_sizer
 import core.signal_engine as signal_engine
 import core.utils as utils
 import execution.daily_sentiment as daily_sentiment
-import src.data_fetcher as data_fetcher
+import core.data_fetcher as data_fetcher
+import core.index_alerts as index_alerts
 
 assert main.SignalEngine is signal_engine.SignalEngine
 assert main.EngineContext is signal_engine.EngineContext
-assert main.detect_index_regime is index_regime.detect_index_regime
+assert index_alerts.detect_index_regime is index_regime.detect_index_regime
 assert daily_sentiment._detect_index_regime is index_regime.detect_index_regime
 assert main.MarketRegime is market_regime.MarketRegime
 assert main.detect_regime is market_regime.detect_regime
 assert main.calc_buy_qty is position_sizer.calc_buy_qty
 assert main.calc_sell_qty is position_sizer.calc_sell_qty
 assert main.HOLDINGS is config.HOLDINGS
-assert main.INDEX_REGIME_CONTEXT is config.INDEX_REGIME_CONTEXT
+assert index_alerts.INDEX_REGIME_CONTEXT is config.INDEX_REGIME_CONTEXT
 assert main.SIGNAL_OUTCOME_TRACKER is config.SIGNAL_OUTCOME_TRACKER
 assert main.AI_REVIEW_STATS is utils.AI_REVIEW_STATS
 assert main.DAILY_DECISION_STATS is utils.DAILY_DECISION_STATS
@@ -63,7 +64,7 @@ print("import main OK; canonical identities OK")
         self.assertIn("canonical identities OK", result.stdout)
 
     def test_data_fetcher_indicator_delegates_are_identical(self):
-        data_fetcher = importlib.import_module("src.data_fetcher")
+        data_fetcher = importlib.import_module("core.data_fetcher")
         indicators = importlib.import_module("analysis.indicators")
         for name in ("add_indicators", "add_5min_indicators",
                      "add_15min_indicators"):

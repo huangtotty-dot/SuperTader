@@ -3,7 +3,7 @@
 
 为什么单独一个进程 / 用 tkinter：
   · 它要能拖到屏幕任意位置、**置顶常驻**，不受 GUI 窗口边界约束 —— DOM 浮层做不到；
-  · 与 t_gui 的窗口完全无关：GUI 关掉、最小化、切到别的页面，它都在；
+  · 与 gui 的窗口完全无关：GUI 关掉、最小化、切到别的页面，它都在；
   · 只是几行数字，不值得再起一套 WebView2（内存/CPU），tkinter 是标准库、零依赖。
 
 更新频率 = **10 秒**（owner 2026-10-27）。这带来一个必须说清楚的取舍：
@@ -14,11 +14,11 @@
   · 因此浮窗的大数字改走**腾讯指数实时快照**（`qt.gtimg.cn` 三腿：沪/深/北，字段 37 = 万元），
     10 秒一跳是真的在跳。主数字因此按**亿**显示（`11,742亿`）：若写「1.17万亿」，
     两位小数 = 100 亿一格，10 秒才成交十几亿，看着仍像没动。
-  · 对比基准（昨日同期累计）仍然来自 `t_gui.Api.load_market_turnover()`（每 60s 取一次，
+  · 对比基准（昨日同期累计）仍然来自 `gui.Api.load_market_turnover()`（每 60s 取一次，
     它本身就是 5 分钟口径），所以浮窗底部会**同时标出两个时刻**：
     `实时 14:21:05 · 基准 2026-10-27 14:20` —— 不把"混了两个口径"藏起来。
   · ⚠️ 分母**只认 `amount_prev_same_hm`**（2026-10-28 owner：「比的是昨天的此时不是全天」）。
-    旧实现直接拿 `amount_prev`：开盘头几分钟当日还没有 5min bar ⇒ t_gui 退化成
+    旧实现直接拿 `amount_prev`：开盘头几分钟当日还没有 5min bar ⇒ gui 退化成
     "前日全日"，09:33 于是显示 −91.92%（1,301亿 对 10-26 全日 16,088亿）。见 `choose_base`。
   · 任一条腿取不到 ⇒ **立刻退回卡片口径**并在底部写明原因（绝不静默少算北交所那 0.8%）。
 
@@ -59,7 +59,7 @@ LIVE_EVERY_S = 10     # 实时快照节拍（owner 2026-10-27：10 秒更新一�
 BASE_EVERY_S = 60     # 对比基准（昨日同期/预计全日）是 5 分钟口径，1 分钟取一次足够
 TICK_MS = 1000
 
-# 三腿 = 沪(上证指数) + 深(深证综指) + 北(北证50) —— 与 t_gui 的 _market_turnover 同口径。
+# 三腿 = 沪(上证指数) + 深(深证综指) + 北(北证50) —— 与 gui 的 _market_turnover 同口径。
 # ⚠️ 深度用**深证综指 sz399106**（不是深证成指 sz399001）：后者的分钟 amount 只有成分股。
 TENCENT_URL = "https://qt.gtimg.cn/q=sh000001,sz399106,bj899050"
 LEG_CODES = ("sh000001", "sz399106", "bj899050")
@@ -95,10 +95,10 @@ def choose_base(payload, now=None):
     owner 2026-10-28：「两市成交额比的时昨天的此时不是全天」。
     截图实况 09:33:05：1,301亿 / **−91.92%** / 「vs昨日全日　增量 −14,787亿」/「基准 15:00」。
     旧实现直接拿载荷里的 `amount_prev` 当分母，而开盘头几分钟当日还没有 5min bar
-    （bar 按结束时刻打戳，第一根叫 09:35），t_gui 那条链会退化成"**前日**全日 vs 昨日全日"
+    （bar 按结束时刻打戳，第一根叫 09:35），gui 那条链会退化成"**前日**全日 vs 昨日全日"
     ⇒ 分母 = 10-26 的 16,088亿，配今天开盘 3 分钟的实时累计，两个数都不是一个东西。
 
-    现在只认 `amount_prev_same_hm`（t_gui 按时钟 hm 截断上一交易日算出来的）。缺失 ⇒
+    现在只认 `amount_prev_same_hm`（gui 按时钟 hm 截断上一交易日算出来的）。缺失 ⇒
     不给对比（只报实时总额），绝不用全日量冒充同期 —— 那正是"看着像真的"的假数字。
 
     返回 {base, day, hm, label, in_session}。
@@ -196,12 +196,12 @@ def fetch_live_amount():
 
 
 class Feed(threading.Thread):
-    """数据线程：10 秒取一次**实时**三腿；60 秒取一次**基准**（t_gui 的 5 分钟口径）。"""
+    """数据线程：10 秒取一次**实时**三腿；60 秒取一次**基准**（gui 的 5 分钟口径）。"""
 
     def __init__(self):
         super().__init__(daemon=True, name="turnover-feed")
         self._lock = threading.Lock()
-        self.payload = {}          # t_gui 的载荷（基准/口径/快照标记）
+        self.payload = {}          # gui 的载荷（基准/口径/快照标记）
         self.live = None           # 实时三腿合计（元）；None = 实时源不可用
         self.live_at = 0.0
         self.error = ""
@@ -229,8 +229,8 @@ class Feed(threading.Thread):
             if time.time() - base_at >= BASE_EVERY_S or not self.payload:
                 try:
                     if api is None:
-                        import t_gui        # 顶层 import 很轻（实测 0.13s / 24MB）
-                        api = t_gui.Api()
+                        import gui        # 顶层 import 很轻（实测 0.13s / 24MB）
+                        api = gui.Api()
                     self.payload = api.load_market_turnover() or {}
                     base_at = time.time()
                 except Exception as e:

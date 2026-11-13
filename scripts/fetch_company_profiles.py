@@ -67,7 +67,7 @@ def main():
     args = ap.parse_args()
 
     import importlib.util
-    spec = importlib.util.spec_from_file_location("tg_fetch", os.path.join(ROOT, "t_gui.py"))
+    spec = importlib.util.spec_from_file_location("tg_fetch", os.path.join(ROOT, "gui.py"))
     tg = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(tg)

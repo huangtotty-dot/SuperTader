@@ -18,7 +18,7 @@ sys.path.insert(0, str(_ROOT))
 
 _WL = json.loads((_ROOT / "stock_hunter" / "watchlist_jiuyan.json").read_text(encoding="utf-8"))
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
-_PY = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+_PY = (_ROOT / "gui.py").read_text(encoding="utf-8")
 
 
 def _pairs(e):

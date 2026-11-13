@@ -338,12 +338,12 @@ class TestLoadQuotesForContract(unittest.TestCase):
         self._QB._MEMO["store"] = None
 
     def _call(self, payload):
-        import t_gui
+        import gui
         from core.market_data import tencent_provider as TP
         orig = TP.TencentProvider.snapshot_auction_many
         TP.TencentProvider.snapshot_auction_many = lambda self, codes, chunk_size=None: payload
         try:
-            api = t_gui.Api.__new__(t_gui.Api)          # 不跑 __init__（会建一堆东西）
+            api = gui.Api.__new__(gui.Api)          # 不跑 __init__（会建一堆东西）
             api.report_client_diag = lambda *a, **k: None
             return api.load_quotes_for(["300821", "300019"])
         finally:
@@ -442,7 +442,7 @@ class TestTencentQtConnectionReuse(unittest.TestCase):
     """T6（2026-10-16）：qt.gtimg.cn **必须复用连接**，不许每个请求新建 TLS。
 
     实测（本机，同一 URL 连打 12 次）：裸 `urlopen` 中位 **350.9ms**、复用连接 **61.4ms**
-    ⇒ 建连本身 ≈290ms/次。而 `snapshot()` 是**逐只**调的（`t_gui._live_quote_forming`
+    ⇒ 建连本身 ≈290ms/次。而 `snapshot()` 是**逐只**调的（`gui._live_quote_forming`
     → `snapshot([code])`）⇒ 一屏 50 只票 = 50 次握手 ≈14.5s，全压在后台线程上。
     2026-10-16 的卡死线程栈里**实测 5 个线程同时卡在 `socket.create_connection`**
     （另有 1 个在读 TLS）—— 这就是"打开 GUI 卡顿"的直接来源。

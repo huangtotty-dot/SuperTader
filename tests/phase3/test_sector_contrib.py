@@ -23,7 +23,7 @@ for _p in (str(_ROOT), str(_ROOT / "stock_hunter")):
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 from modules.data_loader import DataLoader  # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
@@ -79,9 +79,9 @@ def _write_fake_summary(base: Path) -> None:
 
 
 def test_contrib接口_按板块返回每日细分(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(t_gui, "BASE", tmp_path)
+    monkeypatch.setattr(gui, "BASE", tmp_path)
     _write_fake_summary(tmp_path)
-    api = t_gui.Api.__new__(t_gui.Api)
+    api = gui.Api.__new__(gui.Api)
     r = api.load_sector_contrib("电力", 10)
     assert r["available"] and r["has_detail"]
     assert [d["ymd"] for d in r["days"]] == ["20261105", "20261106"]
@@ -93,9 +93,9 @@ def test_contrib接口_按板块返回每日细分(tmp_path, monkeypatch) -> Non
 
 
 def test_contrib接口_未知板块(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(t_gui, "BASE", tmp_path)
+    monkeypatch.setattr(gui, "BASE", tmp_path)
     _write_fake_summary(tmp_path)
-    api = t_gui.Api.__new__(t_gui.Api)
+    api = gui.Api.__new__(gui.Api)
     r = api.load_sector_contrib("不存在的板块", 10)
     assert r["available"] is False and "没有排名记录" in r["error"]
 

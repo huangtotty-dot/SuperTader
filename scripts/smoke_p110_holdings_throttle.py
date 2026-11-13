@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("t_gui", r"E:\superTrader\t_gui.py")
+spec = importlib.util.spec_from_file_location("gui", r"E:\superTrader\gui.py")
 m = importlib.util.module_from_spec(spec)
 try:
     spec.loader.exec_module(m)

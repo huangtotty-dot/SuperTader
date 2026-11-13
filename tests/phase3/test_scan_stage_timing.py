@@ -10,8 +10,8 @@
 日志级别 INFO 下从未落盘）。故加本组计时；本文件把它钉住，重点是钉**"只观测、不改行为"**。
 
 ⚠️ **刻意不 `import main`**：main.py 是主程序（实盘副作用：起线程、联网、发飞书）。
-本测试改为**按标记从源码里切出计时那一段真实代码**再 exec —— 测的是真源码，
-但没有任何导入副作用。
+计时逻辑已抽到 `core.scan_timing`（2026-11-13），本测试直接 import 它 ——
+测的是真逻辑，但没有任何主程序副作用。
 
 运行：python -m unittest tests.phase3.test_scan_stage_timing -v
 """
@@ -27,23 +27,28 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+import core.scan_timing as _scan_timing  # 计时逻辑已抽模块（2026-11-13），不再切 main.py 源码
+
 _MAIN_SRC = (_ROOT / "main.py").read_text(encoding="utf-8")
-_START = "# ── scan_once 逐阶段计时"
-_END = "def scan_once():"
+# 2026-11-13：scan_once 抽到 core/scan.py（#3 参数注入），逐阶段计时断言改读它。
+_SCAN_SRC = (_ROOT / "core" / "scan.py").read_text(encoding="utf-8")
+# 2026-11-13：MA5 watcher 抽到 core/hunter_watch.py，`run_live_watch` 断言改读它。
+_HW_SRC = (_ROOT / "core" / "hunter_watch.py").read_text(encoding="utf-8")
+_LOG_NAME = _scan_timing.log.name  # config.log → "做T助手"
 
 
 def _load_timing_block():
-    """切出 main.py 里计时那一段源码并 exec —— 用真源码，但不 import 主程序。"""
-    a = _MAIN_SRC.index(_START)
-    b = _MAIN_SRC.index(_END)
-    ns = {"_time": _time, "log": logging.getLogger("test.scan_timing")}
-    exec(compile(_MAIN_SRC[a:b], "main.py:scan_timing", "exec"), ns)
-    return ns
+    """返回计时模块的命名空间（含 _ScanStage / _SCAN_STAGES / _log_scan_round 等）。"""
+    return vars(_scan_timing)
 
 
 class TestScanStageTimer(unittest.TestCase):
     def setUp(self):
         self.ns = _load_timing_block()
+        # 模块级状态跨测试共享（不再 exec 新鲜命名空间），这里重置成原始初值，
+        # 避免 _SCAN_ROUNDS 计数残留让 test_fast_round_is_quiet 偶发刷 INFO。
+        self.ns["_SCAN_STAGES"].clear()
+        self.ns["_SCAN_ROUNDS"][:] = [0, 0.0, 0.0]
 
     def test_stage_accumulates_count_and_max(self):
         Stage = self.ns["_ScanStage"]
@@ -102,7 +107,7 @@ class TestScanStageTimer(unittest.TestCase):
         """超过阈值必须落 INFO —— 这正是"看不到 15 分钟切在哪"的修复点。"""
         self.ns["_SCAN_STAGES"].clear()
         self.ns["_scan_stage_add"]("B指数背离 ←嫌疑", 400.0)
-        with self.assertLogs("test.scan_timing", level="INFO") as cm:
+        with self.assertLogs(_LOG_NAME, level="INFO") as cm:
             self.ns["_log_scan_round"](900.0)
         joined = "\n".join(cm.output)
         self.assertIn("900.0", joined)
@@ -110,7 +115,7 @@ class TestScanStageTimer(unittest.TestCase):
 
     def test_fast_round_is_quiet(self):
         """正常轮次不许刷屏（否则一天几百行，等于没有日志）。"""
-        logger = logging.getLogger("test.scan_timing")
+        logger = logging.getLogger(_LOG_NAME)
         with self.assertNoLogs(logger, level="INFO"):
             self.ns["_log_scan_round"](3.0)
 
@@ -144,7 +149,7 @@ class TestScanStagesWired(unittest.TestCase):
 
     def test_every_maybe_call_is_timed(self):
         for fn in self.MUST_WRAP:
-            m = re.search(r'with _ScanStage\("[^"]*"\):\s*\n\s*' + re.escape(fn) + r'\(', _MAIN_SRC)
+            m = re.search(r'with _ScanStage\("[^"]*"\):\s*\n\s*' + re.escape(fn) + r'\(', _SCAN_SRC)
             self.assertIsNotNone(m, f"{fn} 没有被 _ScanStage 包住 —— 归因会漏掉它")
 
     def test_hunter_ma5_watch_is_decoupled_from_main_loop(self):
@@ -153,12 +158,15 @@ class TestScanStagesWired(unittest.TestCase):
         self.assertIn("_start_hunter_ma5_watch()", _MAIN_SRC)
         self.assertNotIn("_maybe_check_hunter_ma5_alert(", _MAIN_SRC,
                          "旧的主循环告警路径应已删除，避免与新 watcher 重复推送")
-        self.assertIn("run_live_watch", _MAIN_SRC)
+        self.assertNotIn("_maybe_check_hunter_ma5_alert(", _SCAN_SRC,
+                         "scan_once（已抽 core/scan.py）里也不得残留旧的主循环告警路径")
+        self.assertIn("run_live_watch", _HW_SRC,
+                      "MA5 watcher 本体（已抽到 core/hunter_watch.py）须仍用独立线程 run_live_watch")
 
     def test_holdings_loop_and_inner_steps_timed(self):
-        self.assertIn('_scan_stage_add("I0持仓循环(全部)"', _MAIN_SRC)
-        self.assertIn('_ScanStage("I1分钟线取数")', _MAIN_SRC)
-        self.assertIn('_ScanStage("I2engine.evaluate")', _MAIN_SRC)
+        self.assertIn('_scan_stage_add("I0持仓循环(全部)"', _SCAN_SRC)
+        self.assertIn('_ScanStage("I1分钟线取数")', _SCAN_SRC)
+        self.assertIn('_ScanStage("I2engine.evaluate")', _SCAN_SRC)
 
     def test_round_report_hooked_into_main_loop(self):
         self.assertIn("_log_scan_round(elapsed)", _MAIN_SRC,

@@ -2,7 +2,7 @@
 """公司简介**后台落盘**的回归测试（2026-10-20）。
 
 线上症状：K 线弹窗「业务简介」永远停在「⏳ 正在查询完整简介」——
-根因是 `_company_profile._bg()` 里 `os.replace(...)` 抛 **NameError**（t_gui 当时没有
+根因是 `_company_profile._bg()` 里 `os.replace(...)` 抛 **NameError**（gui 当时没有
 module 级 `import os`），又被 `except Exception: pass` 吞掉 ⇒ 从 2026-10-17 起
 **缓存一次都没写进去过**，只有预取脚本写的那几十只能用。
 
@@ -18,12 +18,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 
 
 class TestCompanyProfileBackgroundWrite:
     def _make_api(self):
-        return t_gui.Api()
+        return gui.Api()
 
     def _wait(self, fp, code, timeout=3.0):
         t0 = time.time()
@@ -39,7 +39,7 @@ class TestCompanyProfileBackgroundWrite:
 
     def test_background_fetch_is_persisted(self, tmp_path, monkeypatch):
         """抓到简介后必须**落盘**，否则每次打开都要重抓、界面永远"⏳"。"""
-        monkeypatch.setattr(t_gui, "BASE", tmp_path)
+        monkeypatch.setattr(gui, "BASE", tmp_path)
         (tmp_path / "t_io" / "cache").mkdir(parents=True, exist_ok=True)
         fp = tmp_path / "t_io" / "cache" / "company_profile.json"
         fp.write_text("{}", encoding="utf-8")
@@ -60,7 +60,7 @@ class TestCompanyProfileBackgroundWrite:
 
     def test_empty_fetch_does_not_write_and_clears_inflight(self, tmp_path, monkeypatch):
         """抓取为空（风控/网络）⇒ 不写缓存，但 inflight 必须释放，否则该票再也不会重试。"""
-        monkeypatch.setattr(t_gui, "BASE", tmp_path)
+        monkeypatch.setattr(gui, "BASE", tmp_path)
         (tmp_path / "t_io" / "cache").mkdir(parents=True, exist_ok=True)
         fp = tmp_path / "t_io" / "cache" / "company_profile.json"
         fp.write_text("{}", encoding="utf-8")
@@ -75,7 +75,7 @@ class TestCompanyProfileBackgroundWrite:
         assert "600001" not in getattr(api, "_prof_inflight", set())
         assert json.loads(fp.read_text(encoding="utf-8")) == {}
 
-    def test_t_gui_imports_os(self):
-        """直接钉死当年那个 NameError：`os` 必须是 t_gui 的模块级名字。"""
-        assert hasattr(t_gui, "os"), "t_gui 缺少模块级 `import os`（`_company_profile` 落盘会抛 NameError）"
-        assert hasattr(t_gui.os, "replace")
+    def test_gui_imports_os(self):
+        """直接钉死当年那个 NameError：`os` 必须是 gui 的模块级名字。"""
+        assert hasattr(gui, "os"), "gui 缺少模块级 `import os`（`_company_profile` 落盘会抛 NameError）"
+        assert hasattr(gui.os, "replace")

@@ -16,7 +16,7 @@ from datetime import datetime
 
 sys.path.insert(0, BASE)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 TODAY = datetime.now().strftime("%Y-%m-%d")
 
@@ -67,7 +67,7 @@ def run_one(api, name):
 
 
 def prewarm_storm(api):
-    """复刻 t_gui.py __main__ 里的后台预热（8 个重活线程）。"""
+    """复刻 gui.py __main__ 里的后台预热（8 个重活线程）。"""
     def _imports():
         for m in ("core.position_builder", "core.timing_gate", "core.chart_cache",
                   "core.market_data", "analysis.indicators", "analysis.m30_features",
@@ -86,19 +86,19 @@ def prewarm_storm(api):
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "A"
-    api = t_gui.Api()
+    api = gui.Api()
     # 强制冷缓存
-    t_gui.Api._turnover_cache.clear()
-    t_gui.Api._turnover_hist_cache.clear()
-    t_gui.Api._em_cache.clear()
-    if hasattr(t_gui.Api, "_indices_cache"):
-        t_gui.Api._indices_cache.clear()
+    gui.Api._turnover_cache.clear()
+    gui.Api._turnover_hist_cache.clear()
+    gui.Api._em_cache.clear()
+    if hasattr(gui.Api, "_indices_cache"):
+        gui.Api._indices_cache.clear()
     if hasattr(api, "_dates_cache"):
         api._dates_cache = None
     # "S" 后缀 = 删掉磁盘快照（模拟「首次运行，从没成功过」）
     if "S" in mode:
         import shutil as _sh
-        _dir = getattr(t_gui, "_OVERVIEW_SNAPSHOT_DIR", None)
+        _dir = getattr(gui, "_OVERVIEW_SNAPSHOT_DIR", None)
         if _dir is not None:
             _sh.rmtree(_dir, ignore_errors=True)
             print("[已删除磁盘快照 → 模拟首次运行]")

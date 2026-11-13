@@ -6,7 +6,7 @@
 
 守四条：
   ① 判定口径与 GUI「突破箱体」卡**同源**：四道闸（昨收≤上沿<现价 / 幅度 0.3~3% /
-     当日涨幅 ≤7% / ≥30 根历史）一个都不能少，常量不许与 `t_gui.Api._BK_*` 漂移；
+     当日涨幅 ≤7% / ≥30 根历史）一个都不能少，常量不许与 `gui.Api._BK_*` 漂移；
   ② 「刚刚」= **一天一只只提示一次**（去重文件按日期存 code）；
   ③ 提示**并进本轮那张卡**（心跳/异常卡各一份），不额外多发一条 ——
      owner 2026-10-12 定的「每轮恰好一条消息」；
@@ -96,11 +96,11 @@ class TestBreakoutDetect(unittest.TestCase):
         self.assertEqual(HP.find_box_breakouts(_wl(), TODAY), [], "单只失败只跳过，不抛")
 
     def test_常量与GUI同源(self):
-        import t_gui
-        self.assertAlmostEqual(HP.BK_MIN_PCT, t_gui.Api._BK_MIN_PCT)
-        self.assertAlmostEqual(HP.BK_MAX_PCT, t_gui.Api._BK_MAX_PCT)
-        self.assertAlmostEqual(HP.BK_MAX_CHG, t_gui.Api._BK_MAX_CHG)
-        self.assertEqual(HP.BK_MIN_BARS, t_gui.Api._BK_MIN_BARS)
+        import gui
+        self.assertAlmostEqual(HP.BK_MIN_PCT, gui.Api._BK_MIN_PCT)
+        self.assertAlmostEqual(HP.BK_MAX_PCT, gui.Api._BK_MAX_PCT)
+        self.assertAlmostEqual(HP.BK_MAX_CHG, gui.Api._BK_MAX_CHG)
+        self.assertEqual(HP.BK_MIN_BARS, gui.Api._BK_MIN_BARS)
 
 
 class TestBreakoutCard(unittest.TestCase):

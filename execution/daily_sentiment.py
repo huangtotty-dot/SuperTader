@@ -71,20 +71,14 @@ from config import (
 )
 from core.paths import BASE_DIR as _BASE_DIR
 from core.utils import _append_jsonl as _append_jsonl_fn
+# 2026-11-13：飞书卡片构建器收敛到单一真源 core/feishu_cards（此前与 main.py 逐字重复）。
+from core.feishu_cards import (
+    feishu_card_header as _feishu_card_header_fn,
+    feishu_hr as _feishu_hr_fn,
+    feishu_md_div as _feishu_md_div_fn,
+)
 
 _now_fn = datetime.now
-
-
-def _feishu_md_div_fn(content: str) -> dict:
-    return {"tag": "div", "text": {"content": content, "tag": "lark_md"}}
-
-
-def _feishu_card_header_fn(title: str, template: str) -> dict:
-    return {"template": template, "title": {"tag": "plain_text", "content": title}}
-
-
-def _feishu_hr_fn() -> dict:
-    return {"tag": "hr"}
 
 
 def _holdings() -> Dict[str, dict]:

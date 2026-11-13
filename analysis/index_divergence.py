@@ -193,7 +193,7 @@ def _em_kline(secid: str, klt: int, lmt: int = 400, attempts: int = 8) -> list:
     """东财 K 线（平均股价等腾讯/GM 都无代码的标的）。
 
     push2his **有风控**（间歇断连），仓库既有做法是重试 8 次（多数 3-6 次内成功，
-    见 t_gui.load_stock_chart 的 em 分支）。返回原始 klines 字符串列表，失败返回 []。
+    见 gui.load_stock_chart 的 em 分支）。返回原始 klines 字符串列表，失败返回 []。
     """
     # 连接复用（2026-10-20）：raw http.client 天然不走环境代理，等价于旧的手动清代理。
     path = (f"/api/qt/stock/kline/get?secid={secid}"

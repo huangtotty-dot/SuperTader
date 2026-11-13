@@ -15,10 +15,10 @@ from pathlib import Path
 
 sys.path.insert(0, BASE)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 TODAY = datetime.now().strftime("%Y-%m-%d")
-SNAP = t_gui._OVERVIEW_SNAPSHOT_DIR
+SNAP = gui._OVERVIEW_SNAPSHOT_DIR
 ok = True
 
 
@@ -32,13 +32,13 @@ def check(cond, msg):
 print("=== 0) 清干净：删快照 + 清内存缓存 ===")
 if SNAP.exists():
     shutil.rmtree(SNAP, ignore_errors=True)
-t_gui.Api._turnover_cache.clear()
-t_gui.Api._turnover_hist_cache.clear()
-t_gui.Api._indices_cache.clear()
-t_gui.Api._em_cache.clear()
+gui.Api._turnover_cache.clear()
+gui.Api._turnover_hist_cache.clear()
+gui.Api._indices_cache.clear()
+gui.Api._em_cache.clear()
 print("  快照目录存在:", SNAP.exists())
 
-api = t_gui.Api()
+api = gui.Api()
 
 print("\n=== 1) 首次冷调（无快照）：三个端点都打一遍，触发各自单飞刷新 ===")
 for _nm, _call in (("load_indices", api.load_indices),
@@ -69,9 +69,9 @@ if has_idx:
     check("stale" not in pl, "落盘的 payload 自身不带 stale（stale 是读时包装的）")
 
 print("\n=== 3) 清内存缓存后冷调：应秒返且标 stale ===")
-t_gui.Api._indices_cache.clear()
-t_gui.Api._turnover_cache.clear()
-t_gui.Api._turnover_hist_cache.clear()
+gui.Api._indices_cache.clear()
+gui.Api._turnover_cache.clear()
+gui.Api._turnover_hist_cache.clear()
 if has_idx:
     t0 = time.perf_counter()
     ind2 = api.load_indices()
@@ -92,7 +92,7 @@ if has_idx:
     rec = json.loads(fp.read_text(encoding="utf-8"))
     rec["snapshot_day"] = "2020-01-01"
     fp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
-    t_gui.Api._indices_cache.clear()
+    gui.Api._indices_cache.clear()
     t0 = time.perf_counter()
     ind3 = api.load_indices()
     d3 = (time.perf_counter() - t0) * 1000
@@ -105,7 +105,7 @@ if fp.exists():
     rec = json.loads(fp.read_text(encoding="utf-8"))
     rec["snapshot_day"] = "2020-01-01"
     fp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
-    t_gui.Api._turnover_hist_cache.clear()
+    gui.Api._turnover_hist_cache.clear()
     h = api.load_turnover_history()
     print(f"  stale={h.get('stale')} days={len(h.get('days') or [])} "
           f"in_progress={h.get('in_progress')}")

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """CPU 采样器 —— superTrader 全栈 CPU 归因（只读，零风险）。
 
-为什么需要它：系统里跑着多个互不相干的进程（main.py / t_gui.py / gm_main.py /
+为什么需要它：系统里跑着多个互不相干的进程（main.py / gui.py / gm_main.py /
 guardian / iopv / watcher），此前所有"哪里慢"的判断都靠推断或单次日志，**没有
 按时间序列、按进程、按线程的 CPU 证据**。看不到就无法系统优化。
 
@@ -48,13 +48,29 @@ _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 DEFAULT_JSONL = os.path.join(_BASE, "t_io", "logs", "cpu_samples.jsonl")
 THREAD_JSONL = os.path.join(_BASE, "t_io", "logs", "thread_cpu.jsonl")
 
+
+def _cap_log(fp, max_mb=10.0):
+    """超过 max_mb 就把采样 JSONL 改名成 `fp.1`（覆盖旧 .1），下次 append 新起文件。
+
+    内联版（不 import 业务模块，守住本脚本"只读零依赖"的保证），失败静默。
+    """
+    try:
+        if os.path.getsize(fp) <= max_mb * 1024 * 1024:
+            return
+        bak = fp + ".1"
+        if os.path.exists(bak):
+            os.remove(bak)
+        os.rename(fp, bak)
+    except OSError:
+        pass
+
 # 进程角色识别（按命令行关键字 → 角色名），顺序即优先级
 ROLE_RULES = [
     ("gm_main.py", "gm_main(交易)"),
     ("auto_process_guardian", "guardian(守护)"),
     ("iopv_snapshot", "iopv"),
     ("watcher", "watcher(桥告警)"),
-    ("t_gui.py", "GUI(看板)"),
+    ("gui.py", "GUI(看板)"),
     ("main.py", "main(盯盘)"),
     ("daily_sentiment", "sentiment(热度)"),
     ("daily_review", "daily_review"),
@@ -206,7 +222,7 @@ def cmd_report_threads(path: str) -> int:
     """
     if not os.path.exists(path):
         print(f"⛔ 无线程级数据：{path}")
-        print("   （需重启 t_gui.py —— 采样在进程内跑，见 core/thread_watch.py）")
+        print("   （需重启 gui.py —— 采样在进程内跑，见 core/thread_watch.py）")
         return 0
     by_day: dict[str, dict[str, list[float]]] = {}
     n = 0
@@ -268,7 +284,7 @@ def main() -> int:
 
     procs = list(iter_targets(args.all))
     if not procs:
-        print("⚠️ 未发现相关进程（main.py / t_gui.py / gm_main.py 都没在跑？）")
+        print("⚠️ 未发现相关进程（main.py / gui.py / gm_main.py 都没在跑？）")
     print(f"目标进程 {len(procs)} 个 ｜ 间隔 {args.interval}s ｜ "
           f"时长 {'无限' if duration == 0 else f'{duration:.0f}s'} ｜ 落盘 {args.jsonl}")
 
@@ -290,6 +306,7 @@ def main() -> int:
             n_samples += 1
             rec = {"ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                    "dt": round(dt, 2), "procs": rows, "threads": threads}
+            _cap_log(args.jsonl)
             with open(args.jsonl, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             if not args.quiet:

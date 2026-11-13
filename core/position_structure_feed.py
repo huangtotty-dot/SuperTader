@@ -38,9 +38,9 @@ _FRESH_GAP_DAYS = 5      # 末根距今超过此自然日数 ⇒ 视为陈旧，
 
 def ts_code_of(code: str) -> str:
     """6 位码 / sh600000 / 600000.SH → tushare ts_code。认不出返回 ''。
-    与 `t_gui._min_bars_ts_code` 同规则（后者不 import，避免 core→t_gui 反向依赖）。
+    与 `gui._min_bars_ts_code` 同规则（后者不 import，避免 core→gui 反向依赖）。
 
-    ⚠️ 已修 t_gui 版本的一个笔误：判「已是 ts_code 形式」时它写的是 `c[3] == "."`，
+    ⚠️ 已修 gui 版本的一个笔误：判「已是 ts_code 形式」时它写的是 `c[3] == "."`，
        而 `NNNNNN.XX` 的句点在 **索引 6**（`c[3]` 恒为数字）⇒ 该分支在 GUI 侧实际从不命中
        （现网无影响：调用方传的都是 6 位码；此处按正确索引实现，勿回抄旧写法）。"""
     c = str(code).split("_")[0].strip()

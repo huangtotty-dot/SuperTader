@@ -6,9 +6,9 @@ import sys, time
 T0 = time.perf_counter()
 def mark(msg): print(f"[{time.perf_counter()-T0:6.2f}s] {msg}", flush=True)
 sys.path.insert(0, BASE)
-import t_gui
-mark("import t_gui 完成")
-t_gui._start_ctrlc_abort_watchdog(grace_s=1.0, poll_s=0.2)
+import gui
+mark("import gui 完成")
+gui._start_ctrlc_abort_watchdog(grace_s=1.0, poll_s=0.2)
 mark("看门狗已启动")
 from webview.platforms import winforms as _wfw
 mark("import winforms 完成")

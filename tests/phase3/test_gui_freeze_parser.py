@@ -9,7 +9,7 @@
 本测试钉住：**两种 header 顺序都必须能解析**（历史日志不能变瞎），
 且**哨兵 dump 不能被当成卡死**（它只是"按需落栈"，不是心跳停）。
 
-运行：python -m unittest tests.phase3.test_gui_freeze_parser -v
+运行：python -m unittest tests.phase3.tesgui_freeze_parser -v
 """
 import importlib.util
 import sys
@@ -66,10 +66,10 @@ class TestWriterHeaderShape(unittest.TestCase):
     """
 
     def test_watchdog_writes_date_before_parenthesis(self):
-        src = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        src = (_ROOT / "gui.py").read_text(encoding="utf-8")
         # _dump 的写行必须是 `{head} {时间}{tail} 线程栈`
         self.assertIn('f"\\n===== {head} {datetime.now().strftime(\'%Y-%m-%d %H:%M:%S\')}"',
-                      src, "t_gui._dump 的 header 形状被改动了 —— 看板解析依赖它")
+                      src, "gui._dump 的 header 形状被改动了 —— 看板解析依赖它")
         # 卡死分支必须把「心跳停」放进 tail（而不是 head）
         self.assertIn('_dump("疑似界面卡死", f"（主线程心跳停 {_now - _ts:.0f}s）")', src,
                       "卡死分支应把心跳停放 tail，保证时间是紧跟 head 的第一个字段")

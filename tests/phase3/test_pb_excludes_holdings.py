@@ -22,7 +22,7 @@ sys.path.insert(0, str(_ROOT))
 
 def _api():
     import importlib.util
-    spec = importlib.util.spec_from_file_location("_tg_pb_test", _ROOT / "t_gui.py")
+    spec = importlib.util.spec_from_file_location("_tg_pb_test", _ROOT / "gui.py")
     mod = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(mod)
@@ -35,7 +35,7 @@ class TestPbExcludesHoldings(unittest.TestCase):
     def setUp(self):
         self.mod, self.api = _api()
         self._orig_load_json = self.mod._load_json
-        import src.holdings_repo as hr
+        import core.holdings_repo as hr
         self._orig_auto = hr.load_auto
 
         fake_manual = {"600001": {"name": "甲", "qty": 1000, "pool": "manual"}}
@@ -59,7 +59,7 @@ class TestPbExcludesHoldings(unittest.TestCase):
 
     def tearDown(self):
         self.mod._load_json = self._orig_load_json
-        import src.holdings_repo as hr
+        import core.holdings_repo as hr
         hr.load_auto = self._orig_auto
 
     def test_held_codes_are_gone(self):

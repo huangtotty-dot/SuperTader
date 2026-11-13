@@ -4,7 +4,7 @@
 reclaim5 = 昨收 < 昨MA5 且 今价 > 今MA5：
   basis = 截至昨日收盘；prev_MA5 = mean(basis[-5:])；cur_MA5 = (sum(basis[-4:]) + price) / 5。
 与 core/position_builder.check_ma_break 口径一致；此处是「日线帧」版，供**批量**扫描
-（t_gui 全市场站上5日线扫描 / 猎手热门板块飞书告警）共用，避免两处实现漂移。
+（gui 全市场站上5日线扫描 / 猎手热门板块飞书告警）共用，避免两处实现漂移。
 """
 import numpy as np
 

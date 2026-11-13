@@ -145,7 +145,7 @@ class TestReclaimToday(unittest.TestCase):
 
 
 class TestBackendCompute(unittest.TestCase):
-    """`t_gui.Api._ma_reclaim_compute`：本地日线（**不含当日**）+ 今日 5min → 三张表共用的载荷。"""
+    """`gui.Api._ma_reclaim_compute`：本地日线（**不含当日**）+ 今日 5min → 三张表共用的载荷。"""
 
     def _daily_file(self, tmpdir):
         import json
@@ -170,15 +170,15 @@ class TestBackendCompute(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from unittest import mock
-        import t_gui
+        import gui
 
         tmpdir = Path(tempfile.mkdtemp())
         self._daily_file(tmpdir)
         bars = _bars([("09:35", 9.50), ("09:45", 9.90), ("15:00", 10.00)])
-        with mock.patch.object(t_gui, "_DAILY_KLINE_DIR", tmpdir), \
-                mock.patch.object(t_gui, "_fetch_min_bars_tencent",
+        with mock.patch.object(gui, "_DAILY_KLINE_DIR", tmpdir), \
+                mock.patch.object(gui, "_fetch_min_bars_tencent",
                                   lambda code, freq: bars):
-            out = t_gui.Api()._ma_reclaim_compute("600000", "2026-10-23")
+            out = gui.Api()._ma_reclaim_compute("600000", "2026-10-23")
         self.assertEqual(out["basis"], "2026-10-22", "均线基准日要如实带出（缓存陈旧时前端 tooltip 会标）")
         ma = out["ma"]
         self.assertEqual(sorted(ma), [5, 10, 20, 30, 60])
@@ -197,7 +197,7 @@ class TestBackendCompute(unittest.TestCase):
         from pathlib import Path
         from datetime import date, timedelta
         from unittest import mock
-        import t_gui
+        import gui
 
         tmpdir = Path(tempfile.mkdtemp())
         days, d = [], date(2026, 10, 20)
@@ -216,9 +216,9 @@ class TestBackendCompute(unittest.TestCase):
             {"time": "2026-10-23 09:35:00", "close": 9.90},
             {"time": "2026-10-23 10:00:00", "close": 10.20},
         ])
-        with mock.patch.object(t_gui, "_DAILY_KLINE_DIR", tmpdir), \
-                mock.patch.object(t_gui, "_fetch_min_bars_tencent", lambda code, freq: bars):
-            out = t_gui.Api()._ma_reclaim_compute("600000", "2026-10-23")
+        with mock.patch.object(gui, "_DAILY_KLINE_DIR", tmpdir), \
+                mock.patch.object(gui, "_fetch_min_bars_tencent", lambda code, freq: bars):
+            out = gui.Api()._ma_reclaim_compute("600000", "2026-10-23")
         self.assertEqual(out["basis"], "2026-10-22", "基准日必须用分钟补齐到昨天")
         self.assertIn(5, out["ma"], "补齐后应判出 5 日线回站")
         self.assertEqual(out["ma"][5]["time"], "10:00")
@@ -230,7 +230,7 @@ class TestBackendCompute(unittest.TestCase):
         from pathlib import Path
         from datetime import date, timedelta
         from unittest import mock
-        import t_gui
+        import gui
 
         tmpdir = Path(tempfile.mkdtemp())
         d0, days = date(2026, 10, 22), []
@@ -245,10 +245,10 @@ class TestBackendCompute(unittest.TestCase):
         (tmpdir / "600000.json").write_text(json.dumps({"rows": rows}), encoding="utf-8")
         called = []
         bars = _bars([("09:35", 10.10), ("15:00", 10.10)])
-        with mock.patch.object(t_gui, "_DAILY_KLINE_DIR", tmpdir), \
-                mock.patch.object(t_gui, "_fetch_min_bars_tencent",
+        with mock.patch.object(gui, "_DAILY_KLINE_DIR", tmpdir), \
+                mock.patch.object(gui, "_fetch_min_bars_tencent",
                                   lambda code, freq: called.append(code) or bars):
-            out = t_gui.Api()._ma_reclaim_compute("600000", "2026-10-23")
+            out = gui.Api()._ma_reclaim_compute("600000", "2026-10-23")
         self.assertTrue(called, "分钟取数现在总会发（要先补齐日线缓存缺的天）")
         self.assertEqual(out["ma"], {}, "昨收在所有均线上方 ⇒ 不该有回站")
         self.assertIs(out["above5"], True, "above5 仍要算出来（行底色用它）")
@@ -260,29 +260,29 @@ class TestKickDedupe(unittest.TestCase):
     ⇒ owner 看到的就是「均线突破时刻更新太慢」。"""
 
     def setUp(self):
-        import t_gui
-        self.t_gui = t_gui
-        self._cache = dict(t_gui._MA_RC_CACHE)
-        t_gui._MA_RC_CACHE.clear()
+        import gui
+        self.gui = gui
+        self._cache = dict(gui._MA_RC_CACHE)
+        gui._MA_RC_CACHE.clear()
         # ⚠️ 预热 worker 是**进程内全局**的：同一次 pytest 里别的用例（或真实计算）可能正让它
         #    running=True，此时本用例的 kick 会被当成"已有 worker 在跑"直接 return ⇒ 假失败。
-        self._warm = (set(t_gui._MA_RC_WARM["queued"]), t_gui._MA_RC_WARM["running"])
-        t_gui._MA_RC_WARM["queued"].clear()
-        t_gui._MA_RC_WARM["running"] = False
+        self._warm = (set(gui._MA_RC_WARM["queued"]), gui._MA_RC_WARM["running"])
+        gui._MA_RC_WARM["queued"].clear()
+        gui._MA_RC_WARM["running"] = False
 
     def tearDown(self):
-        self.t_gui._MA_RC_CACHE.clear()
-        self.t_gui._MA_RC_CACHE.update(self._cache)
+        self.gui._MA_RC_CACHE.clear()
+        self.gui._MA_RC_CACHE.update(self._cache)
         q, run = self._warm
-        self.t_gui._MA_RC_WARM["queued"].clear()
-        self.t_gui._MA_RC_WARM["queued"].update(q)
-        self.t_gui._MA_RC_WARM["running"] = run
+        self.gui._MA_RC_WARM["queued"].clear()
+        self.gui._MA_RC_WARM["queued"].update(q)
+        self.gui._MA_RC_WARM["running"] = run
 
     def _drain(self, timeout=5.0):
         import time
         t0 = time.time()
         while time.time() - t0 < timeout:
-            if not self.t_gui._MA_RC_WARM["running"]:
+            if not self.gui._MA_RC_WARM["running"]:
                 return
             time.sleep(0.02)
 
@@ -295,8 +295,8 @@ class TestKickDedupe(unittest.TestCase):
             calls.append(code)
             return {"basis": "2026-10-22", "ma": {}}
 
-        api = self.t_gui.Api()
-        with mock.patch.object(self.t_gui.Api, "_ma_reclaim_compute", _fake):
+        api = self.gui.Api()
+        with mock.patch.object(self.gui.Api, "_ma_reclaim_compute", _fake):
             api._kick_ma_reclaim_warm(["600000", "600001"], "2026-10-23")
             self._drain()
             n1 = len(calls)
@@ -310,9 +310,9 @@ class TestKickDedupe(unittest.TestCase):
         import time
         from core.ma_reclaim import RECLAIM_PERIODS  # noqa: F401
         rec = {"date": "2026-10-23", "ts": time.time(), "err": True, "ma": {}}
-        self.assertTrue(self.t_gui._ma_rc_fresh(rec, "2026-10-23", time.time(), 6 * 3600))
+        self.assertTrue(self.gui._ma_rc_fresh(rec, "2026-10-23", time.time(), 6 * 3600))
         old = {"date": "2026-10-23", "ts": time.time() - 700, "err": True, "ma": {}}
-        self.assertFalse(self.t_gui._ma_rc_fresh(old, "2026-10-23", time.time(), 6 * 3600),
+        self.assertFalse(self.gui._ma_rc_fresh(old, "2026-10-23", time.time(), 6 * 3600),
                          "失败条目不能用 6 小时 TTL 把一列永久钉成 —")
 
 
@@ -325,37 +325,37 @@ class TestObOverlayWiring(unittest.TestCase):
     """
 
     def setUp(self):
-        import t_gui
-        self.t_gui = t_gui
-        self._cache = dict(t_gui._MA_RC_CACHE)
-        t_gui._MA_RC_CACHE.clear()
+        import gui
+        self.gui = gui
+        self._cache = dict(gui._MA_RC_CACHE)
+        gui._MA_RC_CACHE.clear()
         # ⚠️ 预热 worker 是**进程内全局**的：同一次 pytest 里别的用例（或真实计算）可能正让它
         #    running=True，此时本用例的 kick 会被当成"已有 worker 在跑"直接 return ⇒ 假失败。
-        self._warm = (set(t_gui._MA_RC_WARM["queued"]), t_gui._MA_RC_WARM["running"])
-        t_gui._MA_RC_WARM["queued"].clear()
-        t_gui._MA_RC_WARM["running"] = False
+        self._warm = (set(gui._MA_RC_WARM["queued"]), gui._MA_RC_WARM["running"])
+        gui._MA_RC_WARM["queued"].clear()
+        gui._MA_RC_WARM["running"] = False
 
     def tearDown(self):
-        self.t_gui._MA_RC_CACHE.clear()
-        self.t_gui._MA_RC_CACHE.update(self._cache)
+        self.gui._MA_RC_CACHE.clear()
+        self.gui._MA_RC_CACHE.update(self._cache)
         q, run = self._warm
-        self.t_gui._MA_RC_WARM["queued"].clear()
-        self.t_gui._MA_RC_WARM["queued"].update(q)
-        self.t_gui._MA_RC_WARM["running"] = run
+        self.gui._MA_RC_WARM["queued"].clear()
+        self.gui._MA_RC_WARM["queued"].update(q)
+        self.gui._MA_RC_WARM["running"] = run
 
     def test_get_可省略date(self):
         """覆盖层不传 date —— 缺默认值会 TypeError，被 except 吞成 pending。"""
-        self.t_gui.Api()._ma_reclaim_get("600000", kick=False)
+        self.gui.Api()._ma_reclaim_get("600000", kick=False)
 
     def test_覆盖层从缓存读到值并清掉pending标记(self):
         import time
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
-        self.t_gui._MA_RC_CACHE["600000"] = {
+        self.gui._MA_RC_CACHE["600000"] = {
             "date": today, "ts": time.time(), "basis": "2026-10-22",
             "ma": {5: {"time": "10:35", "ma": 10.0, "dev_pct": 1.0}}}
         out = {"stocks": [{"code": "600000"}]}
-        self.t_gui.Api()._ob_overlay_live(out)
+        self.gui.Api()._ob_overlay_live(out)
         mr = out["stocks"][0]["ma_reclaim"]
         self.assertNotIn("pending", mr, "缓存里有值却还报 pending —— 覆盖层没读到")
         self.assertEqual(mr["ma"][5]["time"], "10:35")
@@ -364,7 +364,7 @@ class TestObOverlayWiring(unittest.TestCase):
     def test_pending标记不会粘住(self):
         """上一轮挂上的 True 必须在本轮被清掉（否则前端永远 3s 轮询）。"""
         out = {"stocks": [], "ma_reclaim_pending": True}
-        self.t_gui.Api()._ob_overlay_live(out)
+        self.gui.Api()._ob_overlay_live(out)
         self.assertNotIn("ma_reclaim_pending", out)
 
 
@@ -372,29 +372,29 @@ class TestHunterEndpoint(unittest.TestCase):
     """选股猎手：池子 2000+ 只，不能全量算 ⇒ 前端只把**展开板块当前页**的码传上来。"""
 
     def setUp(self):
-        import t_gui
-        self.t_gui = t_gui
-        self._cache = dict(t_gui._MA_RC_CACHE)
-        t_gui._MA_RC_CACHE.clear()
+        import gui
+        self.gui = gui
+        self._cache = dict(gui._MA_RC_CACHE)
+        gui._MA_RC_CACHE.clear()
         # ⚠️ 预热 worker 是**进程内全局**的：同一次 pytest 里别的用例（或真实计算）可能正让它
         #    running=True，此时本用例的 kick 会被当成"已有 worker 在跑"直接 return ⇒ 假失败。
-        self._warm = (set(t_gui._MA_RC_WARM["queued"]), t_gui._MA_RC_WARM["running"])
-        t_gui._MA_RC_WARM["queued"].clear()
-        t_gui._MA_RC_WARM["running"] = False
+        self._warm = (set(gui._MA_RC_WARM["queued"]), gui._MA_RC_WARM["running"])
+        gui._MA_RC_WARM["queued"].clear()
+        gui._MA_RC_WARM["running"] = False
 
     def tearDown(self):
-        self.t_gui._MA_RC_CACHE.clear()
-        self.t_gui._MA_RC_CACHE.update(self._cache)
+        self.gui._MA_RC_CACHE.clear()
+        self.gui._MA_RC_CACHE.update(self._cache)
         q, run = self._warm
-        self.t_gui._MA_RC_WARM["queued"].clear()
-        self.t_gui._MA_RC_WARM["queued"].update(q)
-        self.t_gui._MA_RC_WARM["running"] = run
+        self.gui._MA_RC_WARM["queued"].clear()
+        self.gui._MA_RC_WARM["queued"].update(q)
+        self.gui._MA_RC_WARM["running"] = run
 
     def test_只算传入的码_去重_封顶(self):
         from unittest import mock
         kicked = []
-        api = self.t_gui.Api()
-        with mock.patch.object(self.t_gui.Api, "_kick_ma_reclaim_warm",
+        api = self.gui.Api()
+        with mock.patch.object(self.gui.Api, "_kick_ma_reclaim_warm",
                                lambda self_, codes, date=None: kicked.extend(codes)):
             r = api.load_ma_reclaim(["600000", "600000_1", "000001"])
             self.assertEqual(sorted(r["items"]), ["000001", "600000"], "重复码要去重")
@@ -404,7 +404,7 @@ class TestHunterEndpoint(unittest.TestCase):
             self.assertEqual(len(r2["items"]), 200, "单次上限 200（防前端误传全池打爆预热队列）")
 
     def test_空输入不炸(self):
-        self.assertEqual(self.t_gui.Api().load_ma_reclaim([]), {"items": {}})
+        self.assertEqual(self.gui.Api().load_ma_reclaim([]), {"items": {}})
 
 
 class TestFrontendWiring(unittest.TestCase):

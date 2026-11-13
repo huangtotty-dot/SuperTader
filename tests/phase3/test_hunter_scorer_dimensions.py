@@ -5,7 +5,7 @@
   ① **启用集合与满分**：config 里启用 11 项、满分 47（D12=8）。任何一项权重被改、
      或被误加进/移出 config，这里立刻红。
   ② **D12 的判定**：站上 20 日线 = 8 分；未站上/字段缺失 = 0 分（缺失不能抛）。
-  ③ **GUI 的「D分」明细映射**：`t_gui._score_dims` 把 "D12趋势性" 归成 "D12"、
+  ③ **GUI 的「D分」明细映射**：`gui._score_dims` 把 "D12趋势性" 归成 "D12"、
      "大成交额额外加分" 归成 "大额"，且**只留非零项**。
 
 运行：python -m unittest tests.phase3.test_hunter_scorer_dimensions -v
@@ -74,7 +74,7 @@ class TestScoreDimsMapping(unittest.TestCase):
 
     def setUp(self):
         import importlib.util
-        spec = importlib.util.spec_from_file_location("_tg_for_test", _ROOT / "t_gui.py")
+        spec = importlib.util.spec_from_file_location("_tg_for_test", _ROOT / "gui.py")
         mod = importlib.util.module_from_spec(spec)
         try:
             spec.loader.exec_module(mod)

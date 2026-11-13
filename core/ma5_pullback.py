@@ -4,7 +4,7 @@
 ## 扫描范围（owner 2026-10-20 拍板）
 三个来源的**并集**，命中后按来源分组展示：
   · `ob`     **30 分钟风险体检**里那批票 = `holdings_manual.json` 中 qty>0 的持仓
-             （与 `t_gui._load_ob_analysis_impl` 同一个口径：跳过 `_` 开头的键与已清仓）
+             （与 `gui._load_ob_analysis_impl` 同一个口径：跳过 `_` 开头的键与已清仓）
   · `pb`     **建仓信号扫描**那批票 = `watchlist_buy.json` 的 stocks
   · `pool`   **异常监控池**（GUI 手动维护，`t_io/state/abnormal_pool.json`）
              —— 2026-10-22 owner：「取消选股猎手的推送飞书，异常监控池需要实时播报」，

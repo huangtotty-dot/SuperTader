@@ -21,7 +21,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 import core.position_builder as _pb  # noqa: E402
 
 
@@ -40,16 +40,16 @@ class TestAutoPnlLedger(unittest.TestCase):
         for d in (self.bridge, self.state, self.daily):
             d.mkdir(parents=True, exist_ok=True)
         # 模块级路径改指向临时目录
-        # ⚠️ 2026-10-11 起 t_gui 不再 `from core.position_builder import _DAILY_CACHE_DIR`
-        #    （那会连带 pandas 进 GUI 冷启动首帧），改用**本地常量** `t_gui._DAILY_KLINE_DIR`
+        # ⚠️ 2026-10-11 起 gui 不再 `from core.position_builder import _DAILY_CACHE_DIR`
+        #    （那会连带 pandas 进 GUI 冷启动首帧），改用**本地常量** `gui._DAILY_KLINE_DIR`
         #    ⇒ 只 patch `_pb._DAILY_CACHE_DIR` **已不再生效**（会静默去读真实日线缓存，
         #    本用例用真实 600000 的价格 9.54 顶掉期望的 22.0）。两个都 patch。
-        self._orig = (t_gui.BRIDGE_DIR, t_gui.STATE_DIR, _pb._DAILY_CACHE_DIR,
-                      t_gui._DAILY_KLINE_DIR)
-        t_gui.BRIDGE_DIR = self.bridge
-        t_gui.STATE_DIR = self.state
+        self._orig = (gui.BRIDGE_DIR, gui.STATE_DIR, _pb._DAILY_CACHE_DIR,
+                      gui._DAILY_KLINE_DIR)
+        gui.BRIDGE_DIR = self.bridge
+        gui.STATE_DIR = self.state
         _pb._DAILY_CACHE_DIR = self.daily
-        t_gui._DAILY_KLINE_DIR = self.daily
+        gui._DAILY_KLINE_DIR = self.daily
         # 名称源
         (self.state / "holdings_auto.json").write_text(
             json.dumps({"600000": {"name": "测试甲"}, "000001": {"name": "测试乙"}}),
@@ -92,13 +92,13 @@ class TestAutoPnlLedger(unittest.TestCase):
             json.dumps({"rows": [{"date": "2026-01-02", "close": 12.0},
                                  {"date": "2026-01-03", "close": 13.0},
                                  {"date": "2026-02-01", "close": 22.0}]}), encoding="utf-8")
-        self.api = t_gui.Api()
-        t_gui._AUTO_PNL_CACHE.update({"ts": 0.0, "date": None, "data": None})
+        self.api = gui.Api()
+        gui._AUTO_PNL_CACHE.update({"ts": 0.0, "date": None, "data": None})
 
     def tearDown(self):
-        (t_gui.BRIDGE_DIR, t_gui.STATE_DIR, _pb._DAILY_CACHE_DIR,
-         t_gui._DAILY_KLINE_DIR) = self._orig
-        t_gui._AUTO_PNL_CACHE.update({"ts": 0.0, "date": None, "data": None})
+        (gui.BRIDGE_DIR, gui.STATE_DIR, _pb._DAILY_CACHE_DIR,
+         gui._DAILY_KLINE_DIR) = self._orig
+        gui._AUTO_PNL_CACHE.update({"ts": 0.0, "date": None, "data": None})
         self._tmp.cleanup()
 
     def _stock(self, d, code):
@@ -209,18 +209,18 @@ class TestAutoPnlLedger(unittest.TestCase):
 
     def test_08_尾块读取只解析末条(self):
         # 只在尾部出现的一条才能被取到；同时验证半截行被跳过
-        got = t_gui._tail_last_json_line(self.bridge / "heartbeat_2026-01-02.jsonl")
+        got = gui._tail_last_json_line(self.bridge / "heartbeat_2026-01-02.jsonl")
         self.assertEqual(got["bar"], "14:58")
         # 文件不存在 / 不可解析 → None，不抛
-        self.assertIsNone(t_gui._tail_last_json_line(self.bridge / "nope.jsonl"))
+        self.assertIsNone(gui._tail_last_json_line(self.bridge / "nope.jsonl"))
         p = self.bridge / "junk.jsonl"
         p.write_text("not json\n", encoding="utf-8")
-        self.assertIsNone(t_gui._tail_last_json_line(p))
+        self.assertIsNone(gui._tail_last_json_line(p))
         # 尾块窗口内没有任何完整行 → None（而不是读到文件头）
         big = self.bridge / "big_one_line.jsonl"
         big.write_text(json.dumps({"bar": "x", "pad": "y" * 200}) + "\n", encoding="utf-8")
-        self.assertIsNone(t_gui._tail_last_json_line(big, max_bytes=32))
-        self.assertEqual(t_gui._tail_last_json_line(big)["bar"], "x")
+        self.assertIsNone(gui._tail_last_json_line(big, max_bytes=32))
+        self.assertEqual(gui._tail_last_json_line(big)["bar"], "x")
 
     def test_09_孤儿卖出不能当纯利(self):
         """事件流起点之前建的仓 ⇒ 首笔就是卖出、没有买腿。
@@ -237,8 +237,8 @@ class TestAutoPnlLedger(unittest.TestCase):
             f.write(json.dumps({"event": "heartbeat", "time": "2026-03-02 14:58:00",
                                 "bar": "14:58", "positions": {}, "cash": 10000.0},
                                ensure_ascii=False) + "\n")
-        t_gui._AUTO_PNL_CACHE.update({"ts": 0.0, "date": None, "data": None})
-        t_gui._AUTO_COST_CACHE.update({"ts": 0.0, "data": None})
+        gui._AUTO_PNL_CACHE.update({"ts": 0.0, "date": None, "data": None})
+        gui._AUTO_COST_CACHE.update({"ts": 0.0, "data": None})
         d = self.api.load_auto_pnl()
         # 000002 全程无买入腿 ⇒ 这笔卖出不得产生任何已实现，realized_cum 应与前一日持平
         prev = [r for r in d["daily"] if r["date"] < "2026-03-02"]

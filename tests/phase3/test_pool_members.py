@@ -24,39 +24,39 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 class TestPoolMembers(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.mkdtemp()
-        self._old_s = t_gui.Api._SHELTER_FP
-        self._old_a = t_gui.Api._ABN_FP
-        t_gui.Api._SHELTER_FP = type(self._old_s)(os.path.join(self.td, "shelter.json"))
-        t_gui.Api._ABN_FP = type(self._old_a)(os.path.join(self.td, "abn.json"))
-        self.api = t_gui.Api()
+        self._old_s = gui.Api._SHELTER_FP
+        self._old_a = gui.Api._ABN_FP
+        gui.Api._SHELTER_FP = type(self._old_s)(os.path.join(self.td, "shelter.json"))
+        gui.Api._ABN_FP = type(self._old_a)(os.path.join(self.td, "abn.json"))
+        self.api = gui.Api()
 
     def tearDown(self):
-        t_gui.Api._SHELTER_FP = self._old_s
-        t_gui.Api._ABN_FP = self._old_a
+        gui.Api._SHELTER_FP = self._old_s
+        gui.Api._ABN_FP = self._old_a
 
     def _write(self, fp, stocks):
         with open(fp, "w", encoding="utf-8") as f:
             json.dump({"stocks": stocks}, f, ensure_ascii=False)
 
     def test_basic(self):
-        self._write(t_gui.Api._SHELTER_FP, {
+        self._write(gui.Api._SHELTER_FP, {
             "600900": {"name": "长江电力", "added_at": "2026-11-01"},
             "000001_OLD": {"name": "平安银行"},          # 带后缀也要归一到裸码
         })
-        self._write(t_gui.Api._ABN_FP, {"600519": {"name": "贵州茅台"}})
+        self._write(gui.Api._ABN_FP, {"600519": {"name": "贵州茅台"}})
         r = self.api.load_pool_members()
         self.assertEqual(r["shelter"], [{"code": "600900", "name": "长江电力"},
                                         {"code": "000001", "name": "平安银行"}])
         self.assertEqual(r["abnormal"], [{"code": "600519", "name": "贵州茅台"}])
 
     def test_name_fallback_and_bad_codes(self):
-        self._write(t_gui.Api._SHELTER_FP, {
+        self._write(gui.Api._SHELTER_FP, {
             "600000": {},                                  # 无 name ⇒ 韭研名/代码兜底
             "ABC": {"name": "x"},                          # 非 6 位 ⇒ 丢
             "12345": {"name": "y"},                        # 5 位 ⇒ 丢
@@ -71,7 +71,7 @@ class TestPoolMembers(unittest.TestCase):
         self.assertEqual(r, {"shelter": [], "abnormal": []})
 
     def test_fast(self):
-        self._write(t_gui.Api._SHELTER_FP, {"600900": {"name": "长江电力"}})
+        self._write(gui.Api._SHELTER_FP, {"600900": {"name": "长江电力"}})
         t0 = time.time()
         for _ in range(20):
             self.api.load_pool_members()

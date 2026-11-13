@@ -3,7 +3,7 @@
 
 守三条：
   ① 行构造与「异常监控池」**共用** `_pool_rows` —— 两个池的列/样式不可能各写一份漂掉；
-  ② 增删走自己的 store（`t_gui.shelter_pool_*`），不污染异常监控池；
+  ② 增删走自己的 store（`gui.shelter_pool_*`），不污染异常监控池；
   ③ 前端 section / 渲染器就位，且复用建仓表那套单元格渲染（bias5/dev365/时机条件）。
 
 铁律：全离线（`_hunter_build_conformance` / 标签批 / 均线回踩 全部打桩）。
@@ -21,30 +21,30 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 class TestShelterPoolBackend(unittest.TestCase):
     def setUp(self):
-        self.api = t_gui.Api()
+        self.api = gui.Api()
         self._fp = self.api._SHELTER_FP
         self.api._SHELTER_FP = Path(tempfile.mkdtemp(prefix="shelter_")) / "shelter_pool.json"
-        self._orig = (t_gui._jiuyan_names, self.api._hunter_build_conformance,
+        self._orig = (gui._jiuyan_names, self.api._hunter_build_conformance,
                       self.api.load_stock_tags_batch, self.api._attach_ma_reclaim)
-        t_gui._jiuyan_names = lambda: {"600900": "长江电力", "002176": "江特电机"}
+        gui._jiuyan_names = lambda: {"600900": "长江电力", "002176": "江特电机"}
         self.api._hunter_build_conformance = lambda codes, date=None: {}
         self.api.load_stock_tags_batch = lambda codes, offline=False, date=None: {"tags": {}}
         self.api._attach_ma_reclaim = lambda rows, date=None: None
 
     def tearDown(self):
         self.api._SHELTER_FP = self._fp
-        (t_gui._jiuyan_names, self.api._hunter_build_conformance,
+        (gui._jiuyan_names, self.api._hunter_build_conformance,
          self.api.load_stock_tags_batch, self.api._attach_ma_reclaim) = self._orig
 
     def test_两个池共用同一个行构造(self):
-        self.assertIn("_pool_rows", inspect.getsource(t_gui.Api.load_abnormal_pool),
+        self.assertIn("_pool_rows", inspect.getsource(gui.Api.load_abnormal_pool),
                       "异常监控池必须走共用行构造，否则两张表迟早各长一套")
-        self.assertIn("_pool_rows", inspect.getsource(t_gui.Api.load_shelter_pool))
+        self.assertIn("_pool_rows", inspect.getsource(gui.Api.load_shelter_pool))
 
     def test_增删与行字段形状(self):
         self.assertTrue(self.api.shelter_pool_add("600900")["ok"])
@@ -72,7 +72,7 @@ class TestShelterPoolBackend(unittest.TestCase):
         self.assertEqual(len(self.api.load_shelter_pool()["rows"]), 1)
 
     def test_名称歧义与查无此票(self):
-        t_gui._jiuyan_names = lambda: {"600001": "张三科技", "600002": "张三控股"}
+        gui._jiuyan_names = lambda: {"600001": "张三科技", "600002": "张三控股"}
         r = self.api.shelter_pool_add("张三")
         self.assertFalse(r["ok"])
         self.assertIn("匹配到多只", r.get("error", ""))

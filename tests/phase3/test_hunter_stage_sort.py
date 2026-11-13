@@ -25,6 +25,6 @@ def test_分组内多头优先():
 def test_字段由后端注入_前端不重算():
     """build_stage 由后端 `_hunter_build_conformance` 注入（1=多头/2=震荡/3=空头），
     前端只按它排序；不要在前端另算一套 MA60 斜率。"""
-    assert 's["build_stage"] = c.get("stage")' in (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+    assert 's["build_stage"] = c.get("stage")' in (_ROOT / "gui.py").read_text(encoding="utf-8")
     assert "MA60" not in _JS.split("const subGroups = {};")[1].split("const stockRows")[0], \
         "排序区不应计算均线（口径只认后端 build_stage）"

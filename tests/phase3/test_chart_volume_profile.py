@@ -169,7 +169,7 @@ class TestVolumeProfileWiring(unittest.TestCase):
         self.assertIn("mwEnterWindowMode(codes, opts)", JS)
         self.assertIn("typeof opts.vp === \"boolean\"", JS)
         self.assertIn('apiCall("open_multi_window", _codes, { vp: !!_vpOn })', JS)
-        tg = (Path(_ROOT) / "t_gui.py").read_text(encoding="utf-8")
+        tg = (Path(_ROOT) / "gui.py").read_text(encoding="utf-8")
         self.assertIn("def open_multi_window(self, codes=None, opts=None)", tg)
         self.assertIn("mwEnterWindowMode(%s, %s)", tg)
 

@@ -22,7 +22,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 from core.market_data import facade as F   # noqa: E402
 from core.market_data import sina_index   # noqa: E402
 
@@ -81,7 +81,7 @@ def patch_env(monkeypatch):
         monkeypatch.setattr(sina_index, "fetch_index_minutes",
                             lambda sym, scale=5, datalen=400:
                             sina_frames.get(sym, pd.DataFrame()))
-        monkeypatch.setattr(t_gui, "datetime", _DT(datetime(2026, 10, 21, 10, 0)))
+        monkeypatch.setattr(gui, "datetime", _DT(datetime(2026, 10, 21, 10, 0)))
     return _apply
 
 
@@ -96,14 +96,14 @@ class TestFallback:
     def test_normal_uses_gm(self, patch_env):
         prov = _Prov(_GM)
         patch_env(prov, _SINA)
-        out = t_gui.Api()._market_turnover()
+        out = gui.Api()._market_turnover()
         assert out["available"] is True
         assert prov.calls == ["sh000001", "sz399106"]
         assert "index_minute_sina" not in (out.get("degraded") or [])
 
     def test_gm_empty_falls_back_to_sina(self, patch_env):
         patch_env(_Prov({}), _SINA)          # GM 回空表（不可用时的真实行为）
-        out = t_gui.Api()._market_turnover()
+        out = gui.Api()._market_turnover()
         assert out["available"] is True
         # 每腿 4 根 5 分钟线：沪 4×1e10 + 深 4×2e10 + 北 4×1e9
         assert out["amount"] == pytest.approx(4e10 + 8e10 + 4e9), "沪深各 4 根 × 额度 + 北交所"
@@ -111,7 +111,7 @@ class TestFallback:
 
     def test_gm_exception_falls_back(self, patch_env):
         patch_env(_Prov(boom=True), _SINA)
-        out = t_gui.Api()._market_turnover()
+        out = gui.Api()._market_turnover()
         assert out["available"] is True and "index_minute_sina" in out["degraded"]
 
     def test_cooldown_does_not_call_gm(self, patch_env):
@@ -119,7 +119,7 @@ class TestFallback:
         from datetime import timedelta
         prov._gm_down_until = datetime(2026, 10, 21, 10, 0) + timedelta(seconds=60)
         patch_env(prov, _SINA)
-        out = t_gui.Api()._market_turnover()
+        out = gui.Api()._market_turnover()
         assert prov.calls == [], "冷却窗内不该再去敲 GM（要付 12s 硬超时）"
         assert out["available"] is True and "index_minute_sina" in out["degraded"]
 
@@ -139,7 +139,7 @@ class TestFreshness:
         sina["sz399106"] = _mk((_PREV, 2e10), (_TODAY, 6e10))
         sina["bj899050"] = _mk((_PREV, 1e9), (_TODAY, 1e9))
         patch_env(_Prov(gm), sina)
-        out = t_gui.Api()._market_turnover()
+        out = gui.Api()._market_turnover()
         assert out["available"] is True
         assert out["basis"] == "同期"
         assert out["day"] == _TODAY, "GM 停在昨天 ⇒ 必须换到新鲜的新浪"
@@ -149,7 +149,7 @@ class TestFreshness:
         """假期/盘前：两源都停在上一交易日 ⇒ **照常显示上一交易日全日额**，不能空白。"""
         gm, sina = self._stale_everywhere()
         patch_env(_Prov(gm), sina)
-        out = t_gui.Api()._market_turnover()
+        out = gui.Api()._market_turnover()
         assert out["available"] is True, "两个源都不新鲜 ≠ 没数据"
         assert out["basis"] == "全日"
         assert "index_minute_prevday" in out["degraded"]
@@ -157,8 +157,8 @@ class TestFreshness:
 
 class TestFastRetry:
     def test_failure_ttl_is_short(self):
-        assert t_gui.Api._turnover_ttl_for({"available": False}) <= 10.0
-        assert t_gui.Api._turnover_ttl_for({"available": True}) == t_gui.Api._TURNOVER_TTL
+        assert gui.Api._turnover_ttl_for({"available": False}) <= 10.0
+        assert gui.Api._turnover_ttl_for({"available": True}) == gui.Api._TURNOVER_TTL
 
     def test_frontend_shows_warming_not_error(self):
         i = _JS.index("function turnoverCard")

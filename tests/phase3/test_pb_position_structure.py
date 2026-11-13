@@ -3,7 +3,7 @@
 
 背景：owner 要「跟建仓信号扫描保持一致，用 30 分钟/10 分钟周期辅助仓位管理」。
 本层把 `core/position_structure.py`（纯函数、无 IO）接到 `core/position_structure_feed.py`
-（取数适配）+ 建仓表新列（t_gui `_PB_STRUCT_*`，与「30min 判定」列同纪律：主线程零计算零网络）。
+（取数适配）+ 建仓表新列（gui `_PB_STRUCT_*`，与「30min 判定」列同纪律：主线程零计算零网络）。
 
 ⚠️ 纪律：本层是**结构参考、不是买卖信号**（模块实测：机械按阶段加减仓纯择时贡献不显著，
 「破前低就清仓」−30pp 强有害；唯一有证据的是破位后在下档支撑挂限价补仓）。
@@ -34,7 +34,7 @@ import pandas as pd  # noqa: E402
 import threading as _th  # noqa: E402
 import time as _time_mod  # noqa: E402
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 from core import chart_cache as cc  # noqa: E402
 from core import position_structure as PS  # noqa: E402
 from core import position_structure_feed as F  # noqa: E402
@@ -301,13 +301,13 @@ class TestFeed(unittest.TestCase):
 
 class TestGuiWiring(unittest.TestCase):
     def setUp(self):
-        self.api = t_gui.Api()
-        self._saved = dict(t_gui._PB_STRUCT_CACHE)
-        t_gui._PB_STRUCT_CACHE.clear()
+        self.api = gui.Api()
+        self._saved = dict(gui._PB_STRUCT_CACHE)
+        gui._PB_STRUCT_CACHE.clear()
 
     def tearDown(self):
-        t_gui._PB_STRUCT_CACHE.clear()
-        t_gui._PB_STRUCT_CACHE.update(self._saved)
+        gui._PB_STRUCT_CACHE.clear()
+        gui._PB_STRUCT_CACHE.update(self._saved)
 
     def test_01_cold_is_pending_no_compute(self):
         """冷缓存必须返回 pending —— 主线程零计算零网络（防 GUI 冻结）。"""
@@ -316,8 +316,8 @@ class TestGuiWiring(unittest.TestCase):
         self.assertFalse(s["ok"])
 
     def test_02_warm_returns_cached(self):
-        key = f"002176_{t_gui._min_bars_slot()}"
-        t_gui._PB_STRUCT_CACHE[key] = {"ok": True, "stop_level": 8.48, "text": "x"}
+        key = f"002176_{gui._min_bars_slot()}"
+        gui._PB_STRUCT_CACHE[key] = {"ok": True, "stop_level": 8.48, "text": "x"}
         s = self.api._pb_struct_get("002176")
         self.assertTrue(s["ok"])
         self.assertEqual(s["stop_level"], 8.48)
@@ -328,14 +328,14 @@ class TestGuiWiring(unittest.TestCase):
 
     def test_04_hist_caches_result(self):
         key = "002176_2026-09-18"
-        t_gui._PB_STRUCT_HIST.pop(key, None)
+        gui._PB_STRUCT_HIST.pop(key, None)
         try:
             s = self.api._pb_struct_hist("002176", "2026-09-18", compute=True)
             self.assertIsNotNone(s)                 # 磁盘有无数据都要有结论
-            self.assertIn(key, t_gui._PB_STRUCT_HIST, "结论须入缓存（浏览历史不重算）")
+            self.assertIn(key, gui._PB_STRUCT_HIST, "结论须入缓存（浏览历史不重算）")
             self.assertIs(self.api._pb_struct_hist("002176", "2026-09-18"), s)
         finally:
-            t_gui._PB_STRUCT_HIST.pop(key, None)
+            gui._PB_STRUCT_HIST.pop(key, None)
 
 
 def _chart_payload(n=60):
@@ -407,7 +407,7 @@ class TestStageDaily(unittest.TestCase):
 # 本测试原先按"无绑定"方式调用（`Api._mk_forming_bar(...)`），签名补正后少一个参数 ⇒
 # 改为绑定调用。⚠️ 别再改回无绑定 —— 那会和生产口径脱节（函数体不用 self，
 # 用 `__new__` 拿实例即可，跳过 __init__ 无副作用）。
-_API = t_gui.Api.__new__(t_gui.Api)
+_API = gui.Api.__new__(gui.Api)
 
 
 class TestFormingBarPlaceholderGuard(unittest.TestCase):
@@ -433,7 +433,7 @@ class TestFormingBarPlaceholderGuard(unittest.TestCase):
 
     def test_03_consumer_heals_bad_payload(self):
         """磁盘上**已存在**的坏 payload 也要能自愈（只修写入侧不够）。"""
-        api = t_gui.Api()
+        api = gui.Api()
         rows = [{"date": f"2026-09-{20+i:02d}", "open": 45.0 - i * 0.8, "high": 45.2 - i * 0.8,
                  "low": 44.8 - i * 0.8, "close": 45.0 - i * 0.8, "volume": 1e5} for i in range(9)]
         rows += [{"date": "2026-10-08", "open": 42.03, "high": 42.65, "low": 41.58,
@@ -447,7 +447,7 @@ class TestFormingBarPlaceholderGuard(unittest.TestCase):
 
     def test_04_consumer_keeps_interior_zero_volume(self):
         """只剔**尾部**：中间的零成交根可能是真实历史（停牌等），不得连带剔除。"""
-        api = t_gui.Api()
+        api = gui.Api()
         rows = [{"date": f"2026-09-{20+i:02d}", "open": 40.0 + i, "high": 40.5 + i,
                  "low": 39.5 + i, "close": 40.0 + i, "volume": 1e5} for i in range(9)]
         rows.insert(4, {"date": "2026-09-24", "open": 44.0, "high": 44.0, "low": 44.0,
@@ -472,7 +472,7 @@ class TestSectorTier(unittest.TestCase):
         """**多龙头**：并列涨停的两只都应标龙头（不硬凑 1 个）。"""
         st = self._mk([(10.0, 16.8e8), (10.0, 4.3e8), (2.0, 39.5e8), (1.0, 37.2e8),
                        (0.0, 30e8), (-1.0, 5e8), (-2.0, 4e8), (-3.0, 3e8)])
-        t_gui._tier_sector_stocks(st)
+        gui._tier_sector_stocks(st)
         leads = [s for s in st if s["tier"] == "龙头"]
         self.assertEqual(len(leads), 2, f"并列最强应有两个龙头，实际 {[s['tier'] for s in st]}")
         mids = [s for s in st if s["tier"] == "中军"]
@@ -482,7 +482,7 @@ class TestSectorTier(unittest.TestCase):
         """**无龙头**：板块整体没行情时不硬凑（且整块未分层 ⇒ 全不标，不是全打杂毛）。"""
         st = self._mk([(1.1, 19.6e8), (-4.5, 18.2e8), (-5.0, 16.5e8), (-9.9, 11.3e8),
                        (-7.5, 10e8), (-3.6, 3e8), (-2.0, 2e8), (-1.0, 1e8)])
-        t_gui._tier_sector_stocks(st)
+        gui._tier_sector_stocks(st)
         self.assertNotIn("龙头", [s["tier"] for s in st], "最高 +1.1% 不应硬凑龙头")
         self.assertNotIn("杂毛", [s["tier"] for s in st],
                          "整个板块都没分层 ⇒ 不得全打杂毛（它们只是成员）")
@@ -490,7 +490,7 @@ class TestSectorTier(unittest.TestCase):
     def test_03_mid_can_be_zero(self):
         """中军也可能 0 个（成交额都够不上门槛）——不硬凑。"""
         st = self._mk([(12.0, 10e8), (1.0, 1.1e8), (0.5, 1.0e8), (0.2, 0.9e8), (0.1, 0.8e8)])
-        t_gui._tier_sector_stocks(st)
+        gui._tier_sector_stocks(st)
         tiers = [s["tier"] for s in st]
         self.assertEqual(tiers.count("龙头"), 1)
         self.assertEqual(tiers.count("中军"), 0, f"不该硬凑中军: {tiers}")
@@ -499,17 +499,17 @@ class TestSectorTier(unittest.TestCase):
         """龙头不只是"涨停"：科创板/创业板涨停 20%，按涨停判会漏掉 +14% 的最强者。"""
         st = self._mk([(14.1, 10.2e8), (2.0, 109e8), (1.0, 100e8), (0.5, 4e8),
                        (0.2, 3e8), (0.1, 2e8)])
-        t_gui._tier_sector_stocks(st)
+        gui._tier_sector_stocks(st)
         self.assertEqual(st[0]["tier"], "龙头", "+14.1% 未涨停也应是龙头")
 
     def test_05_small_sector_unlabeled(self):
         st = self._mk([(10.0, 9e8)] * 4)
-        t_gui._tier_sector_stocks(st)
+        gui._tier_sector_stocks(st)
         self.assertEqual([s["tier"] for s in st], [""] * 4, "成分不足不得标")
 
     def test_06_missing_amount_graceful(self):
         st = [{"code": str(i), "change_pct": 1.0, "amount": 0} for i in range(9)]
-        t_gui._tier_sector_stocks(st)
+        gui._tier_sector_stocks(st)
         self.assertEqual([s["tier"] for s in st], [""] * 9, "无成交额不得乱标")
 
     def test_07_does_not_touch_score_or_order(self):
@@ -517,7 +517,7 @@ class TestSectorTier(unittest.TestCase):
         st = self._mk([(9.9, 1e8), (5.0, 9e8), (3.0, 8e8), (1.0, 7e8), (-2.0, 5e6),
                        (0.5, 4e6), (-1.0, 3e6), (0.1, 2e6), (0.2, 1e6)])
         before = [(s["code"], s["score"]) for s in st]
-        t_gui._tier_sector_stocks(st)
+        gui._tier_sector_stocks(st)
         self.assertEqual([(s["code"], s["score"]) for s in st], before,
                          "分层不得改动顺序或任何既有字段（只加 tier）")
         self.assertTrue(all("tier" in s for s in st))
@@ -535,10 +535,10 @@ class TestOfflineTagPath(unittest.TestCase):
         # 跨测试污染：别的用例可能已把 ("600000", False, "") 写进逐只标签缓存 ⇒ 本用例的
         # `_stock_tags_one` 直接命中缓存、跳过"补当日 forming bar"，断言随执行顺序飘
         #（既有缺陷，2026-10-29 修：只在本类里清，不动全局语义）。
-        t_gui._TAGS_ONE_CACHE.clear()
+        gui._TAGS_ONE_CACHE.clear()
 
     def _api_with_cache(self, rows):
-        api = t_gui.Api()
+        api = gui.Api()
         api._daily_rows_cache_first = lambda code: rows
         # 趋势口径另说，本测试只测"日线来源"；注意生产代码解包 (trend, src)
         api._trend30_trend = lambda code: ("flat", "stub")
@@ -550,7 +550,7 @@ class TestOfflineTagPath(unittest.TestCase):
 
         ⚠️ 必须与"今天"解耦：`_append_today_forming_bar` 只在"末根不是今天"时才去打实时快照。
         原先写死 `2026-09/10-xx`，等真实日期走到与末行重合（2026-10-12）时该分支被跳过，
-        断言就随日历飘（本仓既有 `test_buyback_chains_persist::test_08` 同型日期腐烂）。
+        断言就随日历飘（写死日期的断言会随真实日期推进而腐烂）。
         """
         today = datetime.now().date()
         rows = []
@@ -628,35 +628,35 @@ class TestPanelWiring(unittest.TestCase):
     """持仓体检(OB) 与 猎手板块 复用同一结构层（同一真源、同一渲染）。"""
 
     def setUp(self):
-        self.api = t_gui.Api()
-        self._saved_cache = dict(t_gui._PB_STRUCT_CACHE)
-        self._saved_warm = dict(t_gui._PB_STRUCT_WARM)
-        self._saved_load_json = t_gui._load_json
-        t_gui._PB_STRUCT_CACHE.clear()
-        t_gui._PB_STRUCT_WARM.clear()
+        self.api = gui.Api()
+        self._saved_cache = dict(gui._PB_STRUCT_CACHE)
+        self._saved_warm = dict(gui._PB_STRUCT_WARM)
+        self._saved_load_json = gui._load_json
+        gui._PB_STRUCT_CACHE.clear()
+        gui._PB_STRUCT_WARM.clear()
         # 持仓：一只；图表缓存：命中（否则 OB 会记 pending 并跳过，测不到注入）
         self._today = datetime.now().strftime("%Y-%m-%d")
         self.api._stock_chart_cache = {f"{self._today}_000001": (0, _chart_payload())}
         _orig = self._saved_load_json
 
         def _fake(fp, default=None):
-            if str(fp) == str(t_gui.HOLDINGS_MANUAL):
+            if str(fp) == str(gui.HOLDINGS_MANUAL):
                 return {"000001": {"name": "测试甲", "qty": 100}}
             return _orig(fp, default)
 
-        t_gui._load_json = _fake
+        gui._load_json = _fake
 
     def tearDown(self):
-        t_gui._load_json = self._saved_load_json
-        t_gui._PB_STRUCT_CACHE.clear()
-        t_gui._PB_STRUCT_CACHE.update(self._saved_cache)
-        t_gui._PB_STRUCT_WARM.clear()
-        t_gui._PB_STRUCT_WARM.update(self._saved_warm)
+        gui._load_json = self._saved_load_json
+        gui._PB_STRUCT_CACHE.clear()
+        gui._PB_STRUCT_CACHE.update(self._saved_cache)
+        gui._PB_STRUCT_WARM.clear()
+        gui._PB_STRUCT_WARM.update(self._saved_warm)
 
     def test_01_ob_row_carries_structure_from_same_cache(self):
         """OB 行的 structure 必须来自**同一个** `_PB_STRUCT_CACHE`（与建仓表同源）。"""
-        key = f"000001_{t_gui._min_bars_slot()}"
-        t_gui._PB_STRUCT_CACHE[key] = {"ok": True, "stop_level": 9.87,
+        key = f"000001_{gui._min_bars_slot()}"
+        gui._PB_STRUCT_CACHE[key] = {"ok": True, "stop_level": 9.87,
                                        "stage10": "①蓄势", "mid_trend_30": "走平", "text": "x"}
         ob = self.api._load_ob_analysis_impl()
         self.assertTrue(ob["stocks"], f"应产出 1 行持仓，实际 {len(ob['stocks'])}")
@@ -682,7 +682,7 @@ class TestPanelWiring(unittest.TestCase):
         r = self.api.load_structure_batch(["000001", "000002"])
         self.assertEqual(r["structures"], {})
         self.assertEqual(r["pending"], 2)
-        t_gui._PB_STRUCT_CACHE[f"000001_{t_gui._min_bars_slot()}"] = {"ok": True, "stop_level": 1.0}
+        gui._PB_STRUCT_CACHE[f"000001_{gui._min_bars_slot()}"] = {"ok": True, "stop_level": 1.0}
         r2 = self.api.load_structure_batch(["000001", "000002"])
         self.assertEqual(list(r2["structures"].keys()), ["000001"])
         self.assertEqual(r2["pending"], 1)
@@ -713,7 +713,7 @@ class TestPanelWiring(unittest.TestCase):
         self.assertTrue(seen, "应触发后台预热")
         self.assertTrue(all(t != "MainThread" for t, _, _ in seen),
                         f"不得在主线程跑：{ {t for t, _, _ in seen} }")
-        self.assertLessEqual(len(seen), t_gui._PB_STRUCT_POOL_MAX,
+        self.assertLessEqual(len(seen), gui._PB_STRUCT_POOL_MAX,
                              f"预热池必须有上限，实际 {len(seen)}")
         self.assertTrue(all(d == "2026-10-09" for _, _, d in seen), "日期须透传")
 
@@ -728,7 +728,7 @@ class TestPanelWiring(unittest.TestCase):
         finally:
             self.api._kick_pb_struct_warm = orig
         self.assertTrue(seen, "应触发预热")
-        self.assertLessEqual(seen[0], t_gui._PB_STRUCT_POOL_MAX, f"预热池未设上限: {seen[0]}")
+        self.assertLessEqual(seen[0], gui._PB_STRUCT_POOL_MAX, f"预热池未设上限: {seen[0]}")
 
 
 if __name__ == "__main__":

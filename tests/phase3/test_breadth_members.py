@@ -17,7 +17,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "stock_hunter"))
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 from modules.sector_phase import members_of  # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
@@ -56,7 +56,7 @@ def test_缺失日期返回不可用():
 
 
 def test_接口透传():
-    api = t_gui.Api.__new__(t_gui.Api)
+    api = gui.Api.__new__(gui.Api)
     r = api.get_theme_members("theme", "冰雪经济", "2026-11-09")
     assert r["available"] and r["count"] == 5
 

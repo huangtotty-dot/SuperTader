@@ -26,7 +26,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 import core.chart_cache as _cc  # noqa: E402
 
 TODAY = "2026-11-13"
@@ -43,19 +43,19 @@ def _fake_now(hh, mm):
 class _Base(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.mkdtemp()
-        self._old_dir = t_gui._DAILY_KLINE_DIR
-        self._old_dt = t_gui.datetime
-        self._old_live = t_gui.Api._live_price_for
-        t_gui._DAILY_KLINE_DIR = type(self._old_dir)(self.td)
-        t_gui.datetime = _fake_now(10, 30)
-        t_gui.Api._MA5_STREAK_CACHE.clear()
+        self._old_dir = gui._DAILY_KLINE_DIR
+        self._old_dt = gui.datetime
+        self._old_live = gui.Api._live_price_for
+        gui._DAILY_KLINE_DIR = type(self._old_dir)(self.td)
+        gui.datetime = _fake_now(10, 30)
+        gui.Api._MA5_STREAK_CACHE.clear()
         _cc.invalidate_daily_close_cache()
 
     def tearDown(self):
-        t_gui._DAILY_KLINE_DIR = self._old_dir
-        t_gui.datetime = self._old_dt
-        t_gui.Api._live_price_for = self._old_live
-        t_gui.Api._MA5_STREAK_CACHE.clear()
+        gui._DAILY_KLINE_DIR = self._old_dir
+        gui.datetime = self._old_dt
+        gui.Api._live_price_for = self._old_live
+        gui.Api._MA5_STREAK_CACHE.clear()
         _cc.invalidate_daily_close_cache()
 
     def _mk(self, code, closes, dates=None, forming=()):
@@ -67,51 +67,51 @@ class _Base(unittest.TestCase):
             json.dump(rec, f)
 
     def _live(self, v):
-        t_gui.Api._live_price_for = classmethod(lambda cls, b, d: v)
+        gui.Api._live_price_for = classmethod(lambda cls, b, d: v)
 
 
 class TestMa5StreakLive(_Base):
     def test_rising_series_baseline_and_history(self):
         self._mk("000001", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         self._live(None)
-        self.assertEqual(t_gui.Api._ma5_streak("000001", "2026-01-09"), 5)
-        t_gui.Api._MA5_STREAK_CACHE.clear()
-        self.assertEqual(t_gui.Api._ma5_streak("000001"), 6)
+        self.assertEqual(gui.Api._ma5_streak("000001", "2026-01-09"), 5)
+        gui.Api._MA5_STREAK_CACHE.clear()
+        self.assertEqual(gui.Api._ma5_streak("000001"), 6)
 
     def test_live_price_appended_when_today_missing(self):
         self._mk("000001", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         self._live(11.0)
-        self.assertEqual(t_gui.Api._ma5_streak("000001"), 7)
+        self.assertEqual(gui.Api._ma5_streak("000001"), 7)
 
     def test_live_price_breaks_below_ma5(self):
         self._mk("000001", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         self._live(8.0)                       # 8 < MA5=(7+8+9+10+8)/5=8.4
-        self.assertEqual(t_gui.Api._ma5_streak("000001"), 0)
+        self.assertEqual(gui.Api._ma5_streak("000001"), 0)
 
     def test_history_date_never_uses_live(self):
         self._mk("000001", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         self._live(11.0)
-        self.assertEqual(t_gui.Api._ma5_streak("000001", "2026-01-10"), 6)
+        self.assertEqual(gui.Api._ma5_streak("000001", "2026-01-10"), 6)
 
     def test_forming_bar_replaced_by_live(self):
         self._mk("000002", [1, 2, 3, 4, 5, 6, 7, 8, 9, 9],
                  dates=["2026-01-%02d" % (i + 1) for i in range(9)] + [TODAY],
                  forming=[TODAY])
         self._live(6.0)                       # 顶替掉旧价 9 ⇒ 6 < MA5=(6+7+8+9+6)/5=7.2
-        self.assertEqual(t_gui.Api._ma5_streak("000002"), 0)
+        self.assertEqual(gui.Api._ma5_streak("000002"), 0)
 
     def test_settled_bar_not_replaced(self):
         self._mk("000003", [1, 2, 3, 4, 5, 6, 7, 8, 9, 9],
                  dates=["2026-01-%02d" % (i + 1) for i in range(9)] + [TODAY],
                  forming=[])
         self._live(8.0)
-        self.assertEqual(t_gui.Api._ma5_streak("000003"), 6)
+        self.assertEqual(gui.Api._ma5_streak("000003"), 6)
 
     def test_preopen_auction_never_uses_live(self):
         self._mk("000001", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         self._live(11.0)
-        t_gui.datetime = _fake_now(9, 20)
-        self.assertEqual(t_gui.Api._ma5_streak("000001"), 6)
+        gui.datetime = _fake_now(9, 20)
+        self.assertEqual(gui.Api._ma5_streak("000001"), 6)
 
     def test_stale_forming_tail_dropped(self):
         """过去某天仍挂 forming ⇒ 那根是盘中快照，不许当收盘（11-12 全池 2050 只）。"""
@@ -119,14 +119,14 @@ class TestMa5StreakLive(_Base):
         self._mk("000004", [1, 2, 3, 4, 5, 6, 7, 8, 9] + [100],
                  dates=dates + ["2026-11-12"], forming=["2026-11-12"])
         self._live(None)
-        self.assertEqual(t_gui.Api._ma5_streak("000004"), 5)      # 丢掉 100 后按 1..9 算
-        t_gui.Api._MA5_STREAK_CACHE.clear()
+        self.assertEqual(gui.Api._ma5_streak("000004"), 5)      # 丢掉 100 后按 1..9 算
+        gui.Api._MA5_STREAK_CACHE.clear()
         self._live(11.0)
-        self.assertEqual(t_gui.Api._ma5_streak("000004"), 6)      # 前一日 + 今日实时价
+        self.assertEqual(gui.Api._ma5_streak("000004"), 6)      # 前一日 + 今日实时价
 
     def test_missing_cache_is_none(self):
         self._live(9.0)
-        self.assertIsNone(t_gui.Api._ma5_streak("000999"))
+        self.assertIsNone(gui.Api._ma5_streak("000999"))
 
 
 class TestPeekQuotesNeverFetches(unittest.TestCase):

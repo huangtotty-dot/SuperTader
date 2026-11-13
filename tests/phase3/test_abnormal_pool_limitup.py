@@ -26,7 +26,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 HTML = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
@@ -53,19 +53,19 @@ class TestParseMarketCsv(unittest.TestCase):
                 ("300001", "", 1, 1),
                 ("000002", "万科A", 1, 3),
             ])
-            lst = t_gui._limitup_from_market_csv(fp)
+            lst = gui._limitup_from_market_csv(fp)
         self.assertEqual([x["code"] for x in lst], ["000002", "600000", "300001"])
         self.assertEqual([x["board"] for x in lst], [3, 2, 1])
         self.assertEqual(lst[2]["name"], "", "CSV 名称列常为空，名称由韭研表兜底")
         self.assertEqual(lst[1]["limit_price"], 10.0, "涨停价要一起解析出来（涨停时间要用）")
 
     def test_文件缺失返回空(self):
-        self.assertEqual(t_gui._limitup_from_market_csv(Path("no_such.csv")), [])
+        self.assertEqual(gui._limitup_from_market_csv(Path("no_such.csv")), [])
 
     def test_日期路径(self):
-        p = t_gui._market_csv_fp("2026-11-02")
+        p = gui._market_csv_fp("2026-11-02")
         self.assertTrue(str(p).replace("\\", "/").endswith("stock_hunter/data/market_20261102.csv"))
-        self.assertIsNone(t_gui._market_csv_fp("11-02"))
+        self.assertIsNone(gui._market_csv_fp("11-02"))
 
 
 class TestAddLimitupAccumulates(unittest.TestCase):
@@ -73,23 +73,23 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         self._td = tempfile.TemporaryDirectory()
         self.tmp = Path(self._td.name)
         self.csv = {}
-        self._old_fp = t_gui._market_csv_fp
-        self._old_names = t_gui._jiuyan_names
+        self._old_fp = gui._market_csv_fp
+        self._old_names = gui._jiuyan_names
         # 与生产一致：合法日期永远给出一条路径（文件不存在由解析函数返回 []）
-        t_gui._market_csv_fp = lambda d: self.tmp / f"market_{str(d)[:10].replace('-', '')}.csv"
-        t_gui._jiuyan_names = lambda: {"600000": "浦发银行", "300001": "特锐德"}
-        self.api = t_gui.Api()
+        gui._market_csv_fp = lambda d: self.tmp / f"market_{str(d)[:10].replace('-', '')}.csv"
+        gui._jiuyan_names = lambda: {"600000": "浦发银行", "300001": "特锐德"}
+        self.api = gui.Api()
         self.api._ABN_FP = self.tmp / "abnormal_pool.json"
         # 测试禁网：腾讯兜底默认返回空，个别用例再覆盖
         self.api._tencent_limit_time = lambda code, day, lp: ("", None, "")
         # 复盘兜底默认空（个别用例覆盖），避免读真实 sector_breadth.json
-        self._old_recap = t_gui._limitup_from_recap
-        t_gui._limitup_from_recap = lambda d, fp=None: []
+        self._old_recap = gui._limitup_from_recap
+        gui._limitup_from_recap = lambda d, fp=None: []
 
     def tearDown(self):
-        t_gui._market_csv_fp = self._old_fp
-        t_gui._jiuyan_names = self._old_names
-        t_gui._limitup_from_recap = self._old_recap
+        gui._market_csv_fp = self._old_fp
+        gui._jiuyan_names = self._old_names
+        gui._limitup_from_recap = self._old_recap
         self._td.cleanup()
 
     def _mk(self, date, rows, data_date=""):
@@ -232,7 +232,7 @@ class TestAddLimitupAccumulates(unittest.TestCase):
             return "09:31", True, "2026-11-03"
 
         self.api._tdx_first_limit_time = _fake_tdx
-        t_gui._limitup_from_recap = lambda d, fp=None: [
+        gui._limitup_from_recap = lambda d, fp=None: [
             {"code": "600000", "name": "", "board": 2, "limit_price": 0.0, "data_date": d},
             {"code": "300001", "name": "", "board": 1, "limit_price": 0.0, "data_date": d},
         ]
@@ -264,7 +264,7 @@ class TestTdxLimitTime(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
         self.tmp = Path(self._td.name)
-        self.api = t_gui.Api()
+        self.api = gui.Api()
         self.api._TDX_VIPDOC = self.tmp / "vipdoc"
         for sub in ("sz/lday", "sz/minline"):
             (self.api._TDX_VIPDOC / sub).mkdir(parents=True, exist_ok=True)
@@ -326,22 +326,22 @@ class TestLimitTimeFromDf(unittest.TestCase):
             "high": [10.9, 10.96, 11.0, 10.99, 11.0],
             "close": [10.9, 10.95, 11.0, 10.98, 11.0],
         })
-        t, sealed = t_gui._limit_time_from_min_df(df, "2026-11-02", 11.0)
+        t, sealed = gui._limit_time_from_min_df(df, "2026-11-02", 11.0)
         self.assertEqual(t, "09:33")
         self.assertFalse(sealed, "收盘 10.98 < 11.00 ⇒ 未封板")
 
     def test_该日不在帧里返回空(self):
         import pandas as pd
         df = pd.DataFrame({"time": ["2026-11-01 09:31"], "high": [11.0], "close": [11.0]})
-        self.assertEqual(t_gui._limit_time_from_min_df(df, "2026-11-02", 11.0), ("", None))
+        self.assertEqual(gui._limit_time_from_min_df(df, "2026-11-02", 11.0), ("", None))
 
 class TestFallbacks(unittest.TestCase):
     def test_涨跌停比例(self):
-        assert t_gui._limitup_ratio("600000") == 0.10
-        assert t_gui._limitup_ratio("300001") == 0.20
-        assert t_gui._limitup_ratio("688001") == 0.20
-        assert t_gui._limitup_ratio("830001") == 0.30
-        assert t_gui._limitup_ratio("600000", "*ST某某") == 0.05
+        assert gui._limitup_ratio("600000") == 0.10
+        assert gui._limitup_ratio("300001") == 0.20
+        assert gui._limitup_ratio("688001") == 0.20
+        assert gui._limitup_ratio("830001") == 0.30
+        assert gui._limitup_ratio("600000", "*ST某某") == 0.05
 
     def test_复盘成员解析与去重(self):
         with tempfile.TemporaryDirectory() as td:
@@ -351,10 +351,10 @@ class TestFallbacks(unittest.TestCase):
                                      {"code": "300001", "name": "特锐德", "board": 1}]},
                 "其他": {"members": [{"code": "600000", "name": "浦发", "board": 3}]},
             }}}}, ensure_ascii=False), encoding="utf-8")
-            lst = t_gui._limitup_from_recap("2026-11-03", fp=fp)
+            lst = gui._limitup_from_recap("2026-11-03", fp=fp)
         assert [x["code"] for x in lst] == ["600000", "300001"]
         assert lst[0]["board"] == 3, "同日多段出现取更大板数"
-        assert t_gui._limitup_from_recap("2026-12-01", fp=fp) == []
+        assert gui._limitup_from_recap("2026-12-01", fp=fp) == []
 
     def test_按昨收推算涨停价(self):
         with tempfile.TemporaryDirectory() as td:
@@ -362,18 +362,18 @@ class TestFallbacks(unittest.TestCase):
             (d / "600000.json").write_text(json.dumps({"rows": [
                 {"date": "2026-10-30", "close": 10.0}, {"date": "2026-11-02", "close": 11.0},
                 {"date": "2026-11-03", "close": 12.0}]}), encoding="utf-8")
-            old_dir = t_gui._DAILY_KLINE_DIR
-            old_names = t_gui._jiuyan_names
-            t_gui._DAILY_KLINE_DIR = d
-            t_gui._jiuyan_names = lambda: {"600000": "浦发银行"}
+            old_dir = gui._DAILY_KLINE_DIR
+            old_names = gui._jiuyan_names
+            gui._DAILY_KLINE_DIR = d
+            gui._jiuyan_names = lambda: {"600000": "浦发银行"}
             try:
-                api = t_gui.Api()
+                api = gui.Api()
                 assert api._limit_price_guess("600000", "2026-11-02") == 11.0   # 10.0×1.1
                 assert api._limit_price_guess("600000", "2026-11-03") == 12.1   # 11.0×1.1
                 assert api._limit_price_guess("600000", "2026-10-30") == 0.0    # 没有昨收
             finally:
-                t_gui._DAILY_KLINE_DIR = old_dir
-                t_gui._jiuyan_names = old_names
+                gui._DAILY_KLINE_DIR = old_dir
+                gui._jiuyan_names = old_names
 
 
 class TestFrontendTime(unittest.TestCase):

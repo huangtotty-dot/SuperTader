@@ -31,6 +31,8 @@ import threading
 import time
 from datetime import datetime
 
+from core.log_rotation import cap_log_file
+
 _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOG_FP = os.path.join(_BASE, "t_io", "logs", "thread_cpu.jsonl")
 
@@ -164,6 +166,7 @@ def _loop(interval: float, flush_sec: float, stop_event, label: str = ""):
         rec = make_record(top, now - t_last_flush, label)
         try:
             os.makedirs(os.path.dirname(_LOG_FP), exist_ok=True)
+            cap_log_file(_LOG_FP)
             with open(_LOG_FP, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         except Exception:

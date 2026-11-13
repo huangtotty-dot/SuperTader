@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-t_gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
-用法: python t_gui.py
+gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
+用法: python gui.py
 
 数据只读，不改动任何现有系统行为。前端为 web/ 目录下的纯 HTML/CSS/JS，
 通过 pywebview js_api 调用本文件的 Api 方法获取聚合后的当日决策数据。
@@ -151,7 +151,7 @@ def _jiuyan_board() -> dict:
     同口径**（取第 1 个有值的 `jiuyan_category{1..9}`，再过 MERGES；全空则按 `jiuyan_category`
     的 `|` 拆分取首段）。
 
-    ⚠️ 这是**刻意的第二份实现**，不是疏漏：t_gui 不该 import 策略包（`execution/auto/` 是
+    ⚠️ 这是**刻意的第二份实现**，不是疏漏：gui 不该 import 策略包（`execution/auto/` 是
     实盘宿主目录、且策略包只在一个部署里存在）。两份口径由
     `tests/phase3/test_market_beacon.py::TestBoardMapSingleSource` 逐码比对守卫 ——
     **改任一侧都要同步另一侧**，否则测试红。这是 2026-10-13 背离那次的教训（副本漂移无人知）。
@@ -553,6 +553,7 @@ COND_LABELS = {
 # 图表算法与全市场扫描器：实现位于轻量 core 模块，这里仅保留兼容别名。
 from core import chart_analytics as _chart_analytics
 from core import scanners as _scanners
+from core.log_rotation import cap_log_file as _cap_log
 
 _FIB_LOOKBACK = _chart_analytics._FIB_LOOKBACK
 _FIB_FRACTAL_N = _chart_analytics._FIB_FRACTAL_N
@@ -3398,7 +3399,7 @@ class Api:
         撞在预热线程还没导完的时刻 ⇒ **全堵在 import 锁**上。实测把这一项打桩后，
         首帧 **2.11s → 0.92s**，`load_day` 本身 **1854ms → 133ms**。
 
-        为什么可以跳过而不错：`refresh_pb`（[`t_gui.py:refresh_pb`]）调的是**同一个**
+        为什么可以跳过而不错：`refresh_pb`（[`gui.py:refresh_pb`]）调的是**同一个**
         `_agg_position_builder`，且前端 `_startStaggered("live", …, offset=0)` 在
         `init()` 之后**几乎立即**触发 `refreshLive` → `refresh_pb`，把结果**覆盖**回去
         （而且它的版本还多带个股技术标签）。即冷启动那次同步计算**算了就扔**。
@@ -4502,6 +4503,7 @@ class Api:
         try:
             log_fp = BASE / "t_io" / "logs" / "gui_client_diag.log"
             log_fp.parent.mkdir(parents=True, exist_ok=True)
+            _cap_log(log_fp)
             with open(log_fp, "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
                         f"{str(kind)[:16]:<10} {float(value):9.0f}ms  {str(note)[:80]}\n")
@@ -4512,7 +4514,7 @@ class Api:
     def dump_threads(self, tag=""):
         """**按需落线程栈**（2026-10-10）：前端测到投递层极慢时自动调它。
 
-        为什么需要：看门狗（`_start_gui_freeze_watchdog`）只在**心跳停 >12s** 时才落栈，而 2s 的
+        为什么需要：看门狗（`_stargui_freeze_watchdog`）只在**心跳停 >12s** 时才落栈，而 2s 的
         `load_console` 一直在续心跳 ⇒ 即使每次调用 20s 也触发不了。这里由前端主动触发，
         把"投递层慢时 Python 侧卡在哪一帧"抓下来。失败静默。
         """
@@ -4520,6 +4522,7 @@ class Api:
             import faulthandler
             log_fp = BASE / "t_io" / "logs" / "gui_thread_dumps.log"
             log_fp.parent.mkdir(parents=True, exist_ok=True)
+            _cap_log(log_fp)
             with open(log_fp, "a", encoding="utf-8") as f:
                 f.write(f"\n===== 按需线程栈 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                         f" tag={str(tag)[:60]} 活线程={_th.active_count()} =====\n")
@@ -4534,6 +4537,7 @@ class Api:
         try:
             log_fp = BASE / "t_io" / "logs" / "gui_slow_calls.log"
             log_fp.parent.mkdir(parents=True, exist_ok=True)
+            _cap_log(log_fp)
             with open(log_fp, "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {str(name)[:40]} {float(ms):.0f}ms\n")
         except Exception:
@@ -4550,6 +4554,7 @@ class Api:
         try:
             fp = BASE / "t_io" / "logs" / "chart_zoom.log"
             fp.parent.mkdir(parents=True, exist_ok=True)
+            _cap_log(fp)
             rec = {"ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
                    "event": str(event)[:60], "detail": str(detail)[:600]}
             with open(fp, "a", encoding="utf-8") as f:
@@ -5061,7 +5066,7 @@ class Api:
                 today = datetime.now().strftime("%Y-%m-%d")
                 if daily is not None and not daily.empty and len(daily) >= 2:
                     # 仅当日线最新一根是今天时，才能确定昨收 = 倒数第二根
-                    # （不引 pandas：t_gui 只在函数内局部 import pd）
+                    # （不引 pandas：gui 只在函数内局部 import pd）
                     if str(daily["time"].iloc[-1])[:10] == today:
                         pc = float(daily["close"].iloc[-2])
                 if pc:
@@ -5302,7 +5307,7 @@ class Api:
                                   "ts_date": d.get("ts_date")}
         except Exception as e:
             # ⚠️ **不许静默**（2026-10-12）：这条链断在哪一层，光看界面分不出来。
-            # 写进与 jsblock/ping 同一个诊断通道 —— t_gui 没有日志处理器，`log.info` 落不到文件。
+            # 写进与 jsblock/ping 同一个诊断通道 —— gui 没有日志处理器，`log.info` 落不到文件。
             self.report_client_diag("hunter_hq", (_time_mod.time() - _t0) * 1000,
                                     f"EXC {type(e).__name__}: {str(e)[:50]}")
             return {}
@@ -7847,7 +7852,7 @@ class Api:
 
         def _bg():
             # ⚠️ 这里**不许裸 except: pass**（2026-10-20 排查"业务简介一直不补上"时踩到）：
-            #    线上真凶是本函数里 `os.replace` 抛 NameError —— **t_gui 当时没有 module 级
+            #    线上真凶是本函数里 `os.replace` 抛 NameError —— **gui 当时没有 module 级
             #    `import os`**，而异常被 `except: pass` 吞掉 ⇒ 缓存从 2026-10-17 起**一次都没写进去过**，
             #    界面永远停在「⏳ 正在查询完整简介」。静默失败查了两小时，最后靠"手工复刻这段代码"
             #    才看出差一个 import。教训：后台线程的失败必须留痕。
@@ -8849,7 +8854,7 @@ class Api:
             watchlist = loader.load_watchlist()
             if watchlist is None or watchlist.empty:
                 # 诊断信息：输出更多细节帮助排查问题
-                # ⚠️ 2026-10-21：这里原来写的是 `log.warning(...)`，而 t_gui.py **没有 `log`**
+                # ⚠️ 2026-10-21：这里原来写的是 `log.warning(...)`，而 gui.py **没有 `log`**
                 # （没有模块级 logger）⇒ 这条"加载失败"分支自己会抛 NameError，把
                 # `out["error"]` 的干净返回变成异常。本文件日志口径是 print(flush=True)。
                 watchlist_path = HUNTER_DIR / "watchlist_jiuyan.json"
@@ -13987,7 +13992,7 @@ class Api:
             _entry = {"name": name, "status": "monitoring", "composite_score": 0,
                       "criteria_met": {}, "suggested_qty": 0, "in_holdings": False}
             try:
-                from src.holdings_repo import get_entry
+                from core.holdings_repo import get_entry
                 _h = get_entry(code)
                 if _h and str(_h.get("pool") or "") in ("auto", "both"):
                     _entry["pool"] = str(_h.get("pool"))
@@ -14983,7 +14988,7 @@ class Api:
         # 手动盘 / 自动盘**任一** qty>0 都算持仓（自动盘目前是仿真，但口径一致）。
         _auto_hold = set()
         try:
-            from src.holdings_repo import load_auto as _load_auto
+            from core.holdings_repo import load_auto as _load_auto
             _auto_hold = {str(c) for c, h in (_load_auto() or {}).items()
                           if int((h or {}).get("qty") or 0) > 0}
         except Exception:
@@ -15351,7 +15356,7 @@ def start_ob_m30_refresher(api):
     _th.Thread(target=_loop, daemon=True, name="ob-m30-refresher").start()
 
 
-def _start_gui_freeze_watchdog(threshold_s=12.0):
+def _stargui_freeze_watchdog(threshold_s=12.0):
     """界面卡死看门狗（2026-10-08 需求①）：js_api 全在 pywebview 主线程串行执行，任何长阻塞都会冻界面。
     高频轮询（`load_console` 2s / `load_live` 10s）每次给 `_GUI_HB` 打点；本守护线程发现心跳停
     >threshold_s 秒即判「卡死」，把**全部线程栈**追加到 `t_io/logs/gui_freeze.log`
@@ -15377,6 +15382,7 @@ def _start_gui_freeze_watchdog(threshold_s=12.0):
         """
         try:
             log_fp.parent.mkdir(parents=True, exist_ok=True)
+            _cap_log(log_fp)
             with open(log_fp, "a", encoding="utf-8") as f:
                 f.write(f"\n===== {head} {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                         f"{tail} 线程栈 =====\n")
@@ -15455,7 +15461,7 @@ def _start_ctrlc_abort_watchdog(grace_s=2.5, poll_s=0.4):
 
 
 def _acquire_gui_single_instance():
-    """单实例闸（2026-10-28）：同一时刻只允许一个 t_gui 在跑。
+    """单实例闸（2026-10-28）：同一时刻只允许一个 gui 在跑。
 
     为什么（GUI 卡死第六轮）：**今天同时跑了两个 GUI**（09:38 那个没关，14:34 又开了一个）。
     两个进程各跑一套 10s 轮询（live/quotes/pb/indices/beacon…），pywebview 的投递是每调用
@@ -15561,7 +15567,7 @@ if __name__ == "__main__":
     # 2026-10-21：进程内**线程级** CPU 归因（外部采样拿不到别的进程的线程名，见 core/thread_watch.py）。
     # 每 5s 读一次、每 60s 落一行到 t_io/logs/thread_cpu.jsonl；只读、纯本地 syscall。
     # ⚠️ 2026-10-21 修：这段原本写的是 `PARAMS.get(...)` 与 `log.info/warning` —— 那两个名字
-    # 在 t_gui.py 里**都不存在**（本文件没有模块级 `PARAMS`/`log`，配置在 `config.PARAMS`）。
+    # 在 gui.py 里**都不存在**（本文件没有模块级 `PARAMS`/`log`，配置在 `config.PARAMS`）。
     # 结果：`try` 里 NameError → 被 `except` 接住 → `log.warning` 再抛 NameError → **GUI 秒退**，
     # 而 main.py 拉起子进程时 stdout/stderr 都是 DEVNULL（见 main._launch_gui）⇒ 窗口不出现、
     # 也没有任何提示。此文件的日志口径是 `print(..., flush=True)`（同 Ctrl+C 看门狗）。
@@ -15576,7 +15582,7 @@ if __name__ == "__main__":
         print(f"⚠️ 线程级 CPU 归因启动失败（不阻断）: {str(_e)[:120]}", flush=True)
 
     # 2026-10-10: 后端「猎手定时自动运行」已停（owner 需求6，扫描一律按钮触发）。
-    _start_gui_freeze_watchdog()      # 卡死看门狗：心跳停 >12s → 落线程栈到 t_io/logs/gui_freeze.log
+    _stargui_freeze_watchdog()      # 卡死看门狗：心跳停 >12s → 落线程栈到 t_io/logs/gui_freeze.log
     _start_ctrlc_abort_watchdog()     # Ctrl+C 连带关掉 GUI（不依赖 UI 线程响应，见其 docstring）
     start_chart_prefetch_scheduler(api)   # 盘后 15:10 预下载 K线缓存（小池 payload+分钟、全池日线）
     start_ob_m30_refresher(api)           # 持仓体检 30min 快照：跨时段后台刷新（趋势/背离/顶部特征）

@@ -327,14 +327,14 @@ def send_report_summary(config: dict, data: dict, output_path: str, date_str: st
 
 
 # ==================== 建仓候选推送（2026-09-21 owner 需求） ====================
-# 口径：猎手视图「建仓」列的绿色 x·GO —— 即 t_gui._hunter_build_conformance 的
+# 口径：猎手视图「建仓」列的绿色 x·GO —— 即 gui._hunter_build_conformance 的
 # 时机门控 GO（市场有方向/多头结构/回撤到位/金叉加分）。命中即视为「符合建仓条件」。
 
 def build_build_candidates(sector_stocks: dict) -> list:
     """从猎手 sector_stocks 里挑出「建仓 GO」的股票，按板块分组。
 
     sector_stocks 形如 {板块: [{code,name,concepts,score,change_pct,build_go,build_met,...}, ...]}
-    （见 t_gui._load_hunter_impl）。
+    （见 gui._load_hunter_impl）。
 
     返回 [{"sector": 板块, "stocks": [{代码,名称,细分,总得分,涨跌幅,符合数,原因}...]}, ...]
     板块间按「候选数 desc → 组内最高符合数 desc」排序，组内按「符合数 desc → 得分 desc」。

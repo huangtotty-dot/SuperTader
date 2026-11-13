@@ -23,7 +23,7 @@ if _ROOT not in sys.path:
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 def _bars(n=200):
@@ -36,25 +36,25 @@ def _bars(n=200):
 
 class TestIncrementalDelivery(unittest.TestCase):
     def setUp(self):
-        self._one = dict(t_gui._TAGS_ONE_CACHE)
-        t_gui._TAGS_ONE_CACHE.clear()
+        self._one = dict(gui._TAGS_ONE_CACHE)
+        gui._TAGS_ONE_CACHE.clear()
 
     def tearDown(self):
-        t_gui._TAGS_ONE_CACHE.clear()
-        t_gui._TAGS_ONE_CACHE.update(self._one)
+        gui._TAGS_ONE_CACHE.clear()
+        gui._TAGS_ONE_CACHE.update(self._one)
 
     def test_已算好的逐只结果会先给出去(self):
         import time
         # 2026-10-29：逐只缓存的键多了「日线缓存指纹」一段（缓存变了旧标签必须作废），
         # 这里用真 helper 生成键，别再手写 3 元组。
-        t_gui._TAGS_ONE_CACHE[t_gui._tags_key("600000", True, "")] = (
+        gui._TAGS_ONE_CACHE[gui._tags_key("600000", True, "")] = (
             time.time(), {"trend": "flat", "tags": [{"label": "震荡", "color": "neutral"}]})
-        got = t_gui.Api._tags_partial(["600000", "600001"], True)
+        got = gui.Api._tags_partial(["600000", "600001"], True)
         self.assertIn("600000", got, "算好的那只必须能立刻拿到")
         self.assertNotIn("600001", got, "没算完的不能编造")
 
     def test_空入参(self):
-        self.assertEqual(t_gui.Api._tags_partial([], True), {})
+        self.assertEqual(gui.Api._tags_partial([], True), {})
 
 
 class TestPrefetch30min(unittest.TestCase):
@@ -73,7 +73,7 @@ class TestPrefetch30min(unittest.TestCase):
         self.ad._CACHE.update(self._cache)
 
     def test_预取后_get_trend30_不再取数(self):
-        # 用测试专属假代码（990xxx）：全套件运行时 t_gui 后台线程可能并发调用
+        # 用测试专属假代码（990xxx）：全套件运行时 gui 后台线程可能并发调用
         # 被 mock 的 _fetch_30min 取真实股票（600000 等），全局计数会被污染。
         calls = []
 
@@ -106,7 +106,7 @@ class TestPrefetch30min(unittest.TestCase):
 class TestStructWarmDefers(unittest.TestCase):
     def test_结构层预热让路给标签批(self):
         import inspect
-        src = inspect.getsource(t_gui.Api.load_stock_tags_batch)
+        src = inspect.getsource(gui.Api.load_stock_tags_batch)
         self.assertIn("if _struct_pending and not _TAGS_RUNNING", src,
                       "结构层预热必须在标签批运行时让路（共用 2 个 pandas 名额）")
         self.assertIn("_spawn_bg()\n        _maybe_kick_struct()", src,
@@ -114,7 +114,7 @@ class TestStructWarmDefers(unittest.TestCase):
 
     def test_标签批先并发预取30min(self):
         import inspect
-        src = inspect.getsource(t_gui.Api.load_stock_tags_batch)
+        src = inspect.getsource(gui.Api.load_stock_tags_batch)
         self.assertIn("prefetch_30min", src, "批量前要先 8 路并发取数，别让网络占着 pandas 名额")
 
 

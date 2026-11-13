@@ -675,8 +675,8 @@ TREND30_GATE_PARAMS = {
     "enabled": False,       # True=许可被拒时把 verdict 降级为 approaching；False=仅记录
 }
 
-# ==================== W33 A3: 仓位管理器共享计算（t_gui 与 position_builder 同源） ====================
-# 从 t_gui.load_position_manager 内联逻辑抽取，避免 GUI/建仓扫描两处实现漂移。
+# ==================== W33 A3: 仓位管理器共享计算（gui 与 position_builder 同源） ====================
+# 从 gui.load_position_manager 内联逻辑抽取，避免 GUI/建仓扫描两处实现漂移。
 
 def build_position_gap(total_capital: float, raw_list: list, default_pct: float = 0.30) -> dict:
     """由各持仓的基础市值/目标比例计算归一化目标市值与欠配缺口。
@@ -686,7 +686,7 @@ def build_position_gap(total_capital: float, raw_list: list, default_pct: float 
     default_pct: raw_pct 缺失时回落的全局默认比例（PARAMS stock_qty_base_pct）。
 
     返回 {ratio_sum, rows:[{code,name,target_pct,target_val,mkt_val,price,gap_pct,gap_qty,
-          add_batches,over,under}]} — 口径与 t_gui.load_position_manager 一致。
+          add_batches,over,under}]} — 口径与 gui.load_position_manager 一致。
     """
     ratio_sum = sum(r.get("raw_pct", default_pct) for r in raw_list) or 1.0
     rows = []

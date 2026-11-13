@@ -12,7 +12,7 @@
 
 铁律：全离线。补桩 `_load_json` 提供固定持仓，不读真实 holdings 文件、不打网络。
 
-运行：python tests/phase3/test_gui_ob_nonblocking.py
+运行：python tests/phase3/tesgui_ob_nonblocking.py
 """
 import os
 import sys
@@ -27,7 +27,7 @@ if _ROOT not in sys.path:
 
 import pandas  # noqa: E402,F401  预导入：真机由 load_day 早已载入，避免把首次 import 计进断言
 import numpy  # noqa: E402,F401
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 def _fake_chart(n=40, close=10.0):
@@ -52,31 +52,31 @@ def _empty_df():
 
 class TestObNonBlocking(unittest.TestCase):
     def setUp(self):
-        self.api = t_gui.Api()
-        self._orig_load_json = t_gui._load_json
+        self.api = gui.Api()
+        self._orig_load_json = gui._load_json
         # 2026-10-09：OB 现读 30min 磁盘缓存（`_m30_bars_cache_only` → `_fetch_min_bars_disk`）。
         # 测试桩成空 → 30min 列整体缺席、趋势回退日线；保证**全离线**且不依赖真实 cache。
-        self._orig_min_disk = t_gui._fetch_min_bars_disk
-        t_gui._fetch_min_bars_disk = lambda ts_code, freq: _empty_df()
+        self._orig_min_disk = gui._fetch_min_bars_disk
+        gui._fetch_min_bars_disk = lambda ts_code, freq: _empty_df()
         self._holdings = {
             "000001_A": {"name": "甲", "qty": 100},
             "600000_B": {"name": "乙", "qty": 200},
             "300000_C": {"name": "丙", "qty": 0},   # 已清仓：不计
         }
-        t_gui._load_json = lambda p, d=None: (
-            self._holdings if str(p) == str(t_gui.HOLDINGS_MANUAL)
+        gui._load_json = lambda p, d=None: (
+            self._holdings if str(p) == str(gui.HOLDINGS_MANUAL)
             else (d if d is not None else {}))
         self._saved_cache = dict(getattr(self.api, "_stock_chart_cache", {}))
         self.api._stock_chart_cache = {}
-        self._saved_m30 = dict(t_gui._M30_SNAP_CACHE)
-        t_gui._M30_SNAP_CACHE.clear()
+        self._saved_m30 = dict(gui._M30_SNAP_CACHE)
+        gui._M30_SNAP_CACHE.clear()
         self._today = datetime.now().strftime("%Y-%m-%d")
 
     def tearDown(self):
-        t_gui._load_json = self._orig_load_json
-        t_gui._fetch_min_bars_disk = self._orig_min_disk
-        t_gui._M30_SNAP_CACHE.clear()
-        t_gui._M30_SNAP_CACHE.update(self._saved_m30)
+        gui._load_json = self._orig_load_json
+        gui._fetch_min_bars_disk = self._orig_min_disk
+        gui._M30_SNAP_CACHE.clear()
+        gui._M30_SNAP_CACHE.update(self._saved_m30)
         self.api._stock_chart_cache = self._saved_cache
 
     def test_01_冷启动立即返回不阻塞(self):

@@ -7,7 +7,7 @@ config/auto_pool.py — 自动盘标的池（P3-2 池分管 → 2026-08-30 单�
 2026-10-04 双文件拆分后，真源为**自动侧** t_io/state/holdings_auto.json（手动/自动分文件）。
 
 消费方：
-  · superTrader：core/position_builder.py（manual 扫描过滤）、main.py（启动池校验）、t_gui.py（池筛选）
+  · superTrader：core/position_builder.py（manual 扫描过滤）、main.py（启动池校验）、gui.py（池筛选）
   · goldminer：main.py（STOCKS/STOCK_NAMES 构建 + init 池校验）——经 SUPERTRADER_ROOT 定位本文件、
     以绝对路径 importlib 加载（goldminer 自身也有 config 包，不能用 `from config.auto_pool` 直接导入）。
 

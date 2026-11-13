@@ -340,7 +340,7 @@ class SignalEngine:
         # ⇒ 本方法**恒不产生 T 信号**（BUY_LOW / SELL_HIGH 一律不再生成）。
         # 刻意保留的两项**共享副作用**（原第①项「飞书早盘预警」已于 2026-10-27 按 owner 要求删除）：
         #   ② `last_decision`（GUI / 留痕）
-        #   ③ `decision_trace_{date}.jsonl`（t_gui.py:3793 读取）
+        #   ③ `decision_trace_{date}.jsonl`（gui.py:3793 读取）
         decision_reason = "T引擎已删除（无 T 信号）"
         self.last_decision[code] = {
             "reason": decision_reason, "ts": _now(),

@@ -3,7 +3,7 @@
 
 覆盖四块：
 
-  T1 **行业粗分类**（`t_gui._stock_industry`）：核心回归闸是**概念段不得劫持行业匹配**——
+  T1 **行业粗分类**（`gui._stock_industry`）：核心回归闸是**概念段不得劫持行业匹配**——
      实测踩过：`汽车零部件/参股保险/…` 被 '保险' 抢成非银金融、`软件开发/互联网保险` 同理。
      另守顺序陷阱：`非金属矿物制品业`/`黑色金属冶炼` 都含 '金属'、`水上运输业` 含 '水'、
      `酒店` 含 '酒' —— 特定规则必须先命中。
@@ -43,10 +43,10 @@ class TestIndustryClassifier(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import t_gui
+        import gui
         # 注意：不要把模块级函数直接赋成类属性——那会让它变成绑定方法，调用时多出一个 self。
-        cls.tg = t_gui
-        cls.UNK = t_gui._INDUSTRY_UNKNOWN
+        cls.tg = gui
+        cls.UNK = gui._INDUSTRY_UNKNOWN
 
     def g(self, info):
         return self.tg._stock_industry(info)
@@ -129,8 +129,8 @@ class TestStockConcepts(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import t_gui
-        cls.tg = t_gui
+        import gui
+        cls.tg = gui
 
     def c(self, info):
         return self.tg._stock_concepts(info)
@@ -208,10 +208,10 @@ class TestHunterIntraday(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        with open(os.path.join(_ROOT, "t_gui.py"), encoding="utf-8") as fh:
+        with open(os.path.join(_ROOT, "gui.py"), encoding="utf-8") as fh:
             cls.src = fh.read()
-        import t_gui
-        cls.tg = t_gui
+        import gui
+        cls.tg = gui
 
     @staticmethod
     def _body(src, name):

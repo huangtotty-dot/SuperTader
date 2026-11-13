@@ -19,7 +19,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 from core.market_data import tencent_provider as TP   # noqa: E402
 
 _TODAY = datetime.now().strftime("%Y-%m-%d")
@@ -39,7 +39,7 @@ class _FakeTx:
 
 
 def _api():
-    a = t_gui.Api()
+    a = gui.Api()
     a._quotes_snaps = None          # 强制走"单只快照"回退分支
     return a
 

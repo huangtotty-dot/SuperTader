@@ -15,11 +15,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 def _api():
-    return object.__new__(t_gui.Api)
+    return object.__new__(gui.Api)
 
 
 def _day_rec(date_int, o, h, l, c, amt, vol):

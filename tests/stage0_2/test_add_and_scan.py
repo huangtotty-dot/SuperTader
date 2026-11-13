@@ -35,7 +35,7 @@ if os.path.join(_ROOT, "config") not in sys.path:
     sys.path.insert(0, os.path.join(_ROOT, "config"))
 
 import core.position_builder as pb_mod  # noqa: E402
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 DATE = datetime.now().strftime("%Y-%m-%d")
 
@@ -45,8 +45,8 @@ def _pick_auto_unheld():
     动态选取而非硬编码：池归属会随 holdings 变动（实测 600584 就被 owner 从 auto 池删过），
     硬编码会让测试因数据漂移而假红。"""
     import auto_pool
-    from src.holdings_repo import load_auto  # 2026-10-04 拆分：auto 池持仓在自动侧
-    h = load_auto()
+    from core.holdings_repo import load_union  # 用 union 判「持有」：both 股的 qty 在手动侧，只看 auto 侧会误判成未持有
+    h = load_union()
     for c in sorted(auto_pool.AUTO_POOL):
         if not (h.get(c) or {}).get("qty"):
             return c, (h.get(c) or {}).get("name") or c
@@ -55,7 +55,7 @@ def _pick_auto_unheld():
 
 class TestAddAndScan(unittest.TestCase):
     def setUp(self):
-        self.api = t_gui.Api()
+        self.api = gui.Api()
         self._orig_add = self.api.add_to_watchlist
         self._orig_scan = pb_mod.run_position_scan
         self.scan_called = []
@@ -186,31 +186,32 @@ class TestAddAndScan(unittest.TestCase):
             self.skipTest("当前无「auto 池且未持有」的标的可测")
 
         with tempfile.TemporaryDirectory() as td:
-            orig = t_gui.STATE_DIR
-            t_gui.STATE_DIR = Path(td)
+            orig = gui.STATE_DIR
+            gui.STATE_DIR = Path(td)
             try:
                 r = self.api.add_to_watchlist(code, name)
                 entry = json.loads(
                     (Path(td) / "watchlist_buy.json").read_text(encoding="utf-8"))["stocks"][code]
             finally:
-                t_gui.STATE_DIR = orig
+                gui.STATE_DIR = orig
 
         self.assertTrue(r["ok"], f"auto 池标的应可加入人工盘，实际 {r}")
-        # pool 必须仍写 auto：若写成 manual，引擎 validate_pool_split 会判定
-        # manual∩auto 冲突并**拒绝启动**（main.py / gm_main.py 双守卫）
-        self.assertEqual(entry.get("pool"), "auto",
-                         "auto 池标的的 pool 字段必须写 auto，否则引擎启动守卫会拒绝启动")
+        # pool 必须**不是 manual**：auto 池标的写 manual 会让 validate_pool_split 判定
+        # manual∩auto 冲突并**拒绝启动**（main.py / gm_main.py 双守卫）。
+        # 2026-09-21 fix 后照抄持仓池归属 ⇒ 未持有候选写 auto、both 股写 both，两者都合法。
+        self.assertIn(entry.get("pool"), ("auto", "both"),
+                      "auto 池标的的 pool 字段不得写 manual，否则引擎启动守卫会拒绝启动")
 
     # ── 10) 人工池标的照常可加 ──
     def test_manual_pool_stock_can_be_added(self):
         """600519 不在 AUTO_POOL（用临时 STATE_DIR，不动真实股池）。"""
         with tempfile.TemporaryDirectory() as td:
-            orig = t_gui.STATE_DIR
-            t_gui.STATE_DIR = Path(td)
+            orig = gui.STATE_DIR
+            gui.STATE_DIR = Path(td)
             try:
                 r = self.api.add_to_watchlist("600519", "贵州茅台")
             finally:
-                t_gui.STATE_DIR = orig
+                gui.STATE_DIR = orig
 
         self.assertTrue(r["ok"], f"人工池标的应可添加，实际 {r}")
 
@@ -239,13 +240,13 @@ class TestAddAndScan(unittest.TestCase):
                 json.dumps({"code": code, "name": name, "scan_type": "manual",
                             "scan_time": f"{DATE} 09:00:00", "verdict": "weak",
                             "composite_score": 5}) + "\n", encoding="utf-8")
-            o_tr, o_sd, o_hl = t_gui.TRACES, t_gui.STATE_DIR, t_gui.HOLDINGS_MANUAL
-            t_gui.TRACES, t_gui.STATE_DIR = td / "traces", td / "state"
-            t_gui.HOLDINGS_MANUAL = td / "state" / "holdings_manual.json"   # 不存在 → 无持仓
+            o_tr, o_sd, o_hl = gui.TRACES, gui.STATE_DIR, gui.HOLDINGS_MANUAL
+            gui.TRACES, gui.STATE_DIR = td / "traces", td / "state"
+            gui.HOLDINGS_MANUAL = td / "state" / "holdings_manual.json"   # 不存在 → 无持仓
             try:
                 agg = self.api._agg_position_builder(DATE)
             finally:
-                t_gui.TRACES, t_gui.STATE_DIR, t_gui.HOLDINGS_MANUAL = o_tr, o_sd, o_hl
+                gui.TRACES, gui.STATE_DIR, gui.HOLDINGS_MANUAL = o_tr, o_sd, o_hl
 
         codes = [r.get("code") for r in (agg.get("rows") or [])]
         self.assertIn(code, codes,

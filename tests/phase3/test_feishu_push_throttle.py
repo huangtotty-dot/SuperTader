@@ -26,10 +26,10 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import main  # noqa: E402
 import config  # noqa: E402
 from core import hunter_ma5_alert as ha  # noqa: E402
 from core import jiuyan_tags as core_label  # noqa: E402
+import core.price_alert_watch as paw  # noqa: E402  # 2026-11-13：突破预警 watcher 已抽离 main.py
 
 
 def setUpModule():
@@ -51,10 +51,10 @@ class TestPriceAlertThrottle(unittest.TestCase):
         self.fp = str(Path(self._td.name) / "push_rate.json")
         self.calls = []
         self._p = [
-            mock.patch.object(main, "_PUSH_RATE_FP", self.fp),
-            mock.patch.object(main, "_price_alert_feishu_enabled", lambda: True),
+            mock.patch.object(paw, "_PUSH_RATE_FP", self.fp),
+            mock.patch.object(paw, "_price_alert_feishu_enabled", lambda: True),
             mock.patch.object(core_label, "label_of", lambda c: {"board": "", "concepts": []}),
-            mock.patch.object(main, "send_feishu_payload",
+            mock.patch.object(paw, "send_feishu_payload",
                               side_effect=lambda *a, **k: (self.calls.append(a[0]), True)[1]),
         ]
         for p in self._p:
@@ -71,44 +71,44 @@ class TestPriceAlertThrottle(unittest.TestCase):
 
     def test_首条立即推_同票同向十分钟内不再推(self):
         t0 = datetime(2026, 11, 4, 10, 0).timestamp()
-        main._push_price_alert([_hit()], now_ts=t0)
+        paw._push_price_alert([_hit()], now_ts=t0)
         self.assertEqual(len(self.calls), 1)
-        main._push_price_alert([_hit()], now_ts=t0 + 120)     # 同票同向，冷却中
+        paw._push_price_alert([_hit()], now_ts=t0 + 120)     # 同票同向，冷却中
         self.assertEqual(len(self.calls), 1, "同票同向 10 分钟内不重复推")
 
     def test_全局间隔不足时合并到下一拍(self):
         t0 = datetime(2026, 11, 4, 10, 0).timestamp()
-        main._push_price_alert([_hit("600000")], now_ts=t0)
+        paw._push_price_alert([_hit("600000")], now_ts=t0)
         self.assertEqual(len(self.calls), 1)
-        main._push_price_alert([_hit("300001")], now_ts=t0 + 10)   # 距上条 <60s ⇒ 攒着
+        paw._push_price_alert([_hit("300001")], now_ts=t0 + 10)   # 距上条 <60s ⇒ 攒着
         self.assertEqual(len(self.calls), 1)
-        main._push_price_alert([_hit("002929")], now_ts=t0 + 20)   # 继续攒
+        paw._push_price_alert([_hit("002929")], now_ts=t0 + 20)   # 继续攒
         self.assertEqual(len(self.calls), 1)
-        main._push_price_alert([], now_ts=t0 + 121)                # 到 120s ⇒ 合并发一条
+        paw._push_price_alert([], now_ts=t0 + 121)                # 到 120s ⇒ 合并发一条
         self.assertEqual(len(self.calls), 2)
         self.assertIn("合并了 2 次穿越", str(self.calls[1]))
 
     def test_每小时封顶后先攒着(self):
         t0 = datetime(2026, 11, 4, 10, 0).timestamp()
-        with mock.patch.object(main, "_PRICE_ALERT_MIN_GAP_SEC", 1):
-            for i in range(main._PRICE_ALERT_HOURLY_MAX):
-                main._push_price_alert([_hit(f"60{i:04d}")], now_ts=t0 + i)
-            self.assertEqual(len(self.calls), main._PRICE_ALERT_HOURLY_MAX)
-            main._push_price_alert([_hit("300999")], now_ts=t0 + 40)   # 一小时内已满
-        self.assertEqual(len(self.calls), main._PRICE_ALERT_HOURLY_MAX, "超过 30 条/小时先攒着")
+        with mock.patch.object(paw, "_PRICE_ALERT_MIN_GAP_SEC", 1):
+            for i in range(paw._PRICE_ALERT_HOURLY_MAX):
+                paw._push_price_alert([_hit(f"60{i:04d}")], now_ts=t0 + i)
+            self.assertEqual(len(self.calls), paw._PRICE_ALERT_HOURLY_MAX)
+            paw._push_price_alert([_hit("300999")], now_ts=t0 + 40)   # 一小时内已满
+        self.assertEqual(len(self.calls), paw._PRICE_ALERT_HOURLY_MAX, "超过 30 条/小时先攒着")
         d = json.loads(Path(self.fp).read_text(encoding="utf-8"))
         self.assertTrue(d.get("pending"), "积压要落盘")
         self.assertEqual(len(d["pending"]), 1)
 
     def test_开关关掉就不推(self):
-        with mock.patch.object(main, "_price_alert_feishu_enabled", lambda: False):
-            main._push_price_alert([_hit()], now_ts=datetime(2026, 11, 4, 10, 0).timestamp())
+        with mock.patch.object(paw, "_price_alert_feishu_enabled", lambda: False):
+            paw._push_price_alert([_hit()], now_ts=datetime(2026, 11, 4, 10, 0).timestamp())
         self.assertEqual(self.calls, [])
 
     def test_发送失败保留积压(self):
         t0 = datetime(2026, 11, 4, 10, 0).timestamp()
-        with mock.patch.object(main, "send_feishu_payload", return_value=False):
-            main._push_price_alert([_hit()], now_ts=t0)
+        with mock.patch.object(paw, "send_feishu_payload", return_value=False):
+            paw._push_price_alert([_hit()], now_ts=t0)
         d = json.loads(Path(self.fp).read_text(encoding="utf-8"))
         self.assertEqual(len(d.get("pending") or []), 1, "失败要保留，下一拍重试")
 
@@ -179,13 +179,13 @@ class TestPoolDigest(unittest.TestCase):
 
 class TestSwitch(unittest.TestCase):
     def test_突破预警开关默认开(self):
-        with mock.patch.object(main, "load_runtime_config", lambda: {"feishu": {}}):
-            self.assertTrue(main._price_alert_feishu_enabled())
-        with mock.patch.object(main, "load_runtime_config",
+        with mock.patch.object(paw, "load_runtime_config", lambda: {"feishu": {}}):
+            self.assertTrue(paw._price_alert_feishu_enabled())
+        with mock.patch.object(paw, "load_runtime_config",
                                lambda: {"feishu": {"notify_on_price_alert": False}}):
-            self.assertFalse(main._price_alert_feishu_enabled())
-        with mock.patch.object(main, "load_runtime_config", lambda: {"feishu": {"enabled": False}}):
-            self.assertFalse(main._price_alert_feishu_enabled())
+            self.assertFalse(paw._price_alert_feishu_enabled())
+        with mock.patch.object(paw, "load_runtime_config", lambda: {"feishu": {"enabled": False}}):
+            self.assertFalse(paw._price_alert_feishu_enabled())
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 _JS = (Path(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
 
@@ -25,7 +25,7 @@ _JS = (Path(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
 class TestAutoStockPnl(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.d = t_gui.Api().load_auto_pnl()
+        cls.d = gui.Api().load_auto_pnl()
         cls.stocks = cls.d.get("stocks") or []
 
     def test_逐股字段齐全(self):

@@ -4,9 +4,9 @@
 ## 为什么要有它（审计实锤）
 
 腾讯快照曾有 **5 个独立轮询者**各自建 TencentProvider、各自打 qt.gtimg.cn：
-`t_gui._load_quotes_build`（10s）、`main.py` 交易主循环（15s + VWAP 60s 节流）、
+`gui._load_quotes_build`（10s）、`main.py` 交易主循环（15s + VWAP 60s 节流）、
 `hunter_ma5_alert` 实时 watcher（20s，~172 只）、`stock_hunter hunter_poll`（30min）、
-`t_gui.load_quotes_for`（按需 ≤400 只）。同一只持仓票一分钟被拉 6+ 次，
+`gui.load_quotes_for`（按需 ≤400 只）。同一只持仓票一分钟被拉 6+ 次，
 全仓库无令牌桶/熔断 —— "腾讯限流整日断供"有前科。
 
 GUI 与 main.py 是**不同进程** ⇒ 共享必须走文件层，不是进程内缓存。
@@ -176,7 +176,7 @@ def _read_store() -> dict:
 def peek_quotes(codes, max_age_sec: float = None) -> dict:
     """**只读共享档**的 `{code: quote}`；与 `get_quotes` 的唯一差别：**永不触发网络**。
 
-    给"顺手算个派生值"的展示层用（2026-11-13：`t_gui._ma5_streak` 拿实时价当当日那根）——
+    给"顺手算个派生值"的展示层用（2026-11-13：`gui._ma5_streak` 拿实时价当当日那根）——
     宁可这个码拿不到，也不许为了一列徽标去打腾讯。`max_age_sec=None` ⇒ 不限新鲜度。
     """
     try:

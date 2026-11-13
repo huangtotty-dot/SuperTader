@@ -5,7 +5,7 @@
 （GM 不可达时每次卡满 12s 硬超时）；磁盘日线缓存又只在腾讯兜底路径才被读，且其新鲜度硬闸
 是 `cached["date"] == 今天`（`tencent_provider.daily_cache`）⇒ **盘后落的缓存次日必然不命中**。
 
-本模块提供**交易日感知**的缓存读法与盘后预下载编排，供 `t_gui.load_stock_chart` 与
+本模块提供**交易日感知**的缓存读法与盘后预下载编排，供 `gui.load_stock_chart` 与
 调度任务共用。**只做加法**：不改 `facade.daily` 的 GM-first 语义、不碰交易扫描链路。
 
 层：
@@ -329,10 +329,10 @@ def save_payload(code, payload, daily_rows) -> bool:
             # 2026-10-17：payload 结构版本。
             #   1（隐式，无此键）= 10min 合成路径有 bug（带 date 列 ⇒ 永远空）
             #   2 = 含可用的 min10
-            # `t_gui._serve_payload_cache` 要求 want_minutes 时 schema≥2，旧档自动重建一次。
+            # `gui._serve_payload_cache` 要求 want_minutes 时 schema≥2，旧档自动重建一次。
             # 3 = 分钟档成交量已按科创板(688)归一（腾讯对 688 返"股"、其余"手"）；
             # schema<3 的旧档里 688 的分钟量能大 100 倍，必须重建一次。
-            # 4 = min5/min10 分钟档已加深到近 3 个月（约 3200/1600 根，见 t_gui.MIN_BARS_CHART）；
+            # 4 = min5/min10 分钟档已加深到近 3 个月（约 3200/1600 根，见 gui.MIN_BARS_CHART）；
             # schema<4 的旧档 5/10 分只有 320 根 ⇒ 切到这两个 Tab 时按需重建一次。
             "schema": 4,
             "version": payload.get("version"),
@@ -388,7 +388,7 @@ def fetch_minute_tencent(ts_code, freq, count: int = 640) -> "object":
     """腾讯 mkline 分钟线（**盘中唯一实时源，含未收盘根**）→ 规范分钟帧；失败/空 → 空表。
 
     2026-10-30（owner：「那两处口径改动 做」）：结构层原来只走 `fetch_minute_online`
-    （tushare `stk_mins`），而 tushare 盘中**只回到上一交易日**（2026-10-14 实测，t_gui 侧
+    （tushare `stk_mins`），而 tushare 盘中**只回到上一交易日**（2026-10-14 实测，gui 侧
     2026-10-17 才改腾讯，core 层一直没跟上）⇒ `_fresh_enough` 盘中永不满足 ⇒ 每个 30min 槽位
     对每只票重打一次注定无效的网络，且「仓位结构 / 30m MA5」整天在**昨天的分钟线**上算。
 
@@ -415,8 +415,8 @@ def fetch_minute_tencent(ts_code, freq, count: int = 640) -> "object":
 
 
 def fetch_minute_online(ts_code, freq, days) -> "object":
-    """tushare 原生 30/60min（镜像 t_gui._fetch_min_bars_online 的口径，但置于 core 层
-    供预下载复用；t_gui 的原函数保持不动）。异常/空 → 空 DataFrame。
+    """tushare 原生 30/60min（镜像 gui._fetch_min_bars_online 的口径，但置于 core 层
+    供预下载复用；gui 的原函数保持不动）。异常/空 → 空 DataFrame。
 
     ⚠️ **不要**把它改成腾讯优先：`prefetch_minute`（盘后批量预下载）靠它的宽时间窗
     （5min 95 天）铺「近3月」K 线底座，腾讯单次最多 640 根（≈13 天）会截短底座。
@@ -435,7 +435,7 @@ def fetch_minute_online(ts_code, freq, days) -> "object":
 
 
 def _norm_minutes(df):
-    """统一分时帧列名/类型/排序（与 t_gui._norm_min_bars 同契约）。"""
+    """统一分时帧列名/类型/排序（与 gui._norm_min_bars 同契约）。"""
     import pandas as pd
     if df is None or getattr(df, "empty", True):
         return pd.DataFrame()
@@ -540,8 +540,8 @@ def load_minute_asof(ts_code, freq, date_str=None, keep=None):
     """**零网络**：合并 plain（近月，新鲜）+ `_d540`（长历史）两档分钟缓存，按 time 去重后
     只留 `<= date_str`（当日 23:59:59）的根。date_str=None → 全量。空/缺 → 空 DataFrame。
 
-    对应 `t_gui._min_bars_asof` 的 core 版：GUI 侧版本供「历史日 30min 判定」列用，
-    本函数供结构层/回放复用，避免 core→t_gui 反向依赖。
+    对应 `gui._min_bars_asof` 的 core 版：GUI 侧版本供「历史日 30min 判定」列用，
+    本函数供结构层/回放复用，避免 core→gui 反向依赖。
 
     ⚠️ 2026-10-14：单档解析走 `_norm_frame_cached` 记忆化（见该函数上方注释——这是 GUI
     卡死的主因之一）。返回帧经 concat/sort 重建，**与缓存脱钩**，调用方可安全就地改。"""
@@ -644,7 +644,7 @@ def load_minute_history(ts_code, freq, now=None, max_gap_days=MAX_DISPLAY_GAP_DA
 
 
 # ---------------------------------------------------------------------------
-# 池子清单（stdlib 直读 JSON，不 import t_gui / src.data_fetcher）
+# 池子清单（stdlib 直读 JSON，不 import gui / core.data_fetcher）
 # ---------------------------------------------------------------------------
 def _codes_from_holdings(path) -> list:
     d = _read_json(_BASE / path, {}) or {}
@@ -670,7 +670,7 @@ def small_pool_codes() -> list:
 
 
 def full_pool_codes() -> list:
-    """全池 = watchlist_jiuyan 全部 6 位码（对齐 t_gui._breakout_pool_codes）。"""
+    """全池 = watchlist_jiuyan 全部 6 位码（对齐 gui._breakout_pool_codes）。"""
     jy = _read_json(_HUNTER_DIR / "watchlist_jiuyan.json", {}) or {}
     return _dedup_valid(list(jy.keys()))
 
@@ -852,12 +852,12 @@ def run_prefetch(small=True, full=True, minutes=True, days_full=800,
                  payload_builder=None, force=False, now=None) -> dict:
     """盘后预下载编排：小池日线 → 全池日线 → 小池分钟 → 小池 payload。
 
-    幂等：跨进程锁（防 main.py 子进程与 t_gui 守护线程同时跑）+ 当日状态标记。
+    幂等：跨进程锁（防 main.py 子进程与 gui 守护线程同时跑）+ 当日状态标记。
 
     ⚠️ 2026-10-30：`days_full` 200 → **800**。200 天只有 ~200 行，MA150/MA360、箱体、背离
     全都算不出（实测 5149 只缓存行数比通达信少 470+ 行；301079 只有 213 行）。每天真正要
     重下的只有"不新鲜"的那几百只，深度从 200 拉到 800 是**一次性**代价。
-    payload_builder: 小池 payload 构建回调（由 t_gui 注入，避免 core→t_gui 反向依赖）。
+    payload_builder: 小池 payload 构建回调（由 gui 注入，避免 core→gui 反向依赖）。
     全程不抛，返回各项统计。
     """
     now = now or datetime.now()
@@ -956,7 +956,7 @@ def daily_close_series(fp):
 def daily_close_series_meta(fp):
     """同 `daily_close_series`，多返回 `forming`（当天/过去某天是"盘中快照"的日期集合）。
 
-    2026-11-13：`t_gui._ma5_streak` 需要 forming 才能判"今日那根能不能当收盘"。
+    2026-11-13：`gui._ma5_streak` 需要 forming 才能判"今日那根能不能当收盘"。
     与本层共用同一份缓存（`_DAILY_KV_CACHE` 存三元组），避免 GUI 里再解析一遍
     —— 单档 80KB JSON 冷解析 ≈ 6.7ms，几百只 × 每轮就是秒级。
     """

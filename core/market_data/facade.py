@@ -422,7 +422,7 @@ class MarketDataFacade:
         """公开薄封装（2026-10-04，纯加法）：给日线 df 补当日 forming bar。
 
         图表 cache-first 路径读磁盘历史后需要补当日那根；直接暴露 `_maybe_append_forming`
-        的语义给 t_gui，避免调用私有方法。**不改变 `daily()` 的 GM-first 行为。**
+        的语义给 gui，避免调用私有方法。**不改变 `daily()` 的 GM-first 行为。**
         """
         try:
             return self._maybe_append_forming(df, code)

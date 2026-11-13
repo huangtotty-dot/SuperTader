@@ -6,7 +6,7 @@
   · z 抬高（压在蜡烛/其它均线之上）；
   · itemStyle 与 lineStyle 同色（图例颜色不漂移）。
 
-运行：python -m unittest tests.phase3.test_gui_chart_ma5_style -v
+运行：python -m unittest tests.phase3.tesgui_chart_ma5_style -v
 """
 import sys
 import unittest
@@ -21,7 +21,7 @@ class TestChartDailyFullRange(unittest.TestCase):
     """日线默认视窗：2026-10-20 上午曾改成「全部」，当晚 owner 改口要**近6个月**。
 
     教训：这条默认值一天内被改了两遍，所以把"为什么是 120"钉进测试 ——
-    120 == 后端黄金分割回看期（`t_gui._FIB_LOOKBACK["daily"]`），锚点必然在视窗内。
+    120 == 后端黄金分割回看期（`gui._FIB_LOOKBACK["daily"]`），锚点必然在视窗内。
     """
 
     def test_default_daily_is_six_months(self):

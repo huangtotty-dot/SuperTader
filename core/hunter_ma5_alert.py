@@ -3,7 +3,7 @@
 
 范围（owner 2026-10-09）：仅**猎手热门板块**内个股（默认前 5 个板块的成分股并集）。
   · 热门板块 = stock_hunter/history/daily_summary.json 最新日排名（按 平均分）前 N；
-  · 成分股   = watchlist_jiuyan.json 按 sector/韭研概念 匹配（与 t_gui.load_hunter_history 同款）。
+  · 成分股   = watchlist_jiuyan.json 按 sector/韭研概念 匹配（与 gui.load_hunter_history 同款）。
 判定：core/ma_reclaim.reclaim5（昨收<昨MA5 且 今价>今MA5）；取数走 daily_many 批量帧。
 去重：每只每日一次（t_io/state/hunter_ma5_pushed.json）。纯通知，不触发交易。
 """
@@ -86,7 +86,7 @@ def hot_boards(top_n: int = None, date: str = None) -> list:
 
 def hot_board_stocks(top_n: int = None, date: str = None) -> dict:
     """热门板块内个股并集 → {code: name}。板块空/无匹配返回 {}。
-    匹配口径与 t_gui.load_hunter_history 一致（sector 字段 + 韭研概念，双向子串）。"""
+    匹配口径与 gui.load_hunter_history 一致（sector 字段 + 韭研概念，双向子串）。"""
     tops = hot_boards(top_n, date)
     if not tops:
         return {}
@@ -350,7 +350,7 @@ def scan_live_once(ctx: dict, below_today: set, provider=None, today: str = None
     try:
         if provider is None:
             # P2-13(2026-10-23)：默认快照走进程级 **QuoteBus**（共享档+跨进程锁+stale 兜底，
-            # 新鲜 <10s 零网络）——与 main.py/t_gui 共用同一份腾讯快照，不再每 20s
+            # 新鲜 <10s 零网络）——与 main.py/gui 共用同一份腾讯快照，不再每 20s
             # 独自打 qt.gtimg.cn；也顺带绕开了 facade.snapshot 的 GM-first 60s 卡顿。
             from core.market_data.quote_bus import get_quotes as _bus_get_quotes
             snap = _bus_get_quotes(codes, max_age_sec=10.0) or {}

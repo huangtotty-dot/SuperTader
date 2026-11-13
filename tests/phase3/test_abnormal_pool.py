@@ -15,7 +15,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 _HTML = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
@@ -23,8 +23,8 @@ _HTML = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
 
 @pytest.fixture()
 def api(tmp_path, monkeypatch):
-    monkeypatch.setattr(t_gui.Api, "_ABN_FP", tmp_path / "abnormal_pool.json")
-    return t_gui.Api()
+    monkeypatch.setattr(gui.Api, "_ABN_FP", tmp_path / "abnormal_pool.json")
+    return gui.Api()
 
 
 class TestAddRemove:
@@ -88,12 +88,12 @@ class TestLoad:
         5 日线特征走 `timing_features.above_ma5`，前端据此着绿/红。
         """
         api.abnormal_pool_add("002929")
-        monkeypatch.setattr(t_gui.Api, "_hunter_build_conformance",
+        monkeypatch.setattr(gui.Api, "_hunter_build_conformance",
                             lambda self, codes, date=None: {
                                 "002929": {"verdict": "weak", "score": 40, "met": 1,
                                            "conds": {}, "reason": "空头趋势",
                                            "above_ma5": True, "above_ma20": False, "stage": 1}})
-        monkeypatch.setattr(t_gui.Api, "load_stock_tags_batch",
+        monkeypatch.setattr(gui.Api, "load_stock_tags_batch",
                             lambda self, codes, offline=False, date=None: {
                                 "tags": {"002929": {"tags": [{"label": "上行", "cls": "up"}]}}})
         r = api.load_abnormal_pool("2026-10-22")["rows"][0]
@@ -190,10 +190,10 @@ class TestConformanceBudget:
     """2026-11-03 owner 报 GUI 卡死：池子 100+ 只时一次冷算 conformance 几十秒 ⇒ 分期预算。"""
 
     def test_已算的复用_新算每拍限量(self, api, monkeypatch, tmp_path):
-        monkeypatch.setattr(t_gui, "_DAILY_KLINE_DIR", tmp_path)
+        monkeypatch.setattr(gui, "_DAILY_KLINE_DIR", tmp_path)
         for c in ("600000", "600002"):
             (tmp_path / f"{c}.json").write_text("{}", encoding="utf-8")
-        monkeypatch.setattr(t_gui, "_HUNTER_CONF_CACHE",
+        monkeypatch.setattr(gui, "_HUNTER_CONF_CACHE",
                             {("600001", "2026-11-03", "range", 1): {"score": 1}})
         codes, pending = api._pool_conformance_budgeted(
             ["600000", "600001", "600002"], "2026-11-03", budget=1)
@@ -202,18 +202,18 @@ class TestConformanceBudget:
         assert [c for c in codes if c != "600001"] in (["600000"], ["600002"])
 
     def test_没有日线缓存的不计pending(self, api, monkeypatch, tmp_path):
-        monkeypatch.setattr(t_gui, "_DAILY_KLINE_DIR", tmp_path)
+        monkeypatch.setattr(gui, "_DAILY_KLINE_DIR", tmp_path)
         codes, pending = api._pool_conformance_budgeted(["999999"], "2026-11-03", budget=1)
         assert pending == 0 and codes == ["999999"], "永远算不了的不该让前端一直短轮询"
 
     def test_pool_rows_带pending(self, api, monkeypatch, tmp_path):
-        monkeypatch.setattr(t_gui, "_DAILY_KLINE_DIR", tmp_path)
+        monkeypatch.setattr(gui, "_DAILY_KLINE_DIR", tmp_path)
         (tmp_path / "600000.json").write_text("{}", encoding="utf-8")
         (tmp_path / "600001.json").write_text("{}", encoding="utf-8")
-        monkeypatch.setattr(t_gui, "_HUNTER_CONF_CACHE", {})
-        monkeypatch.setattr(t_gui.Api, "_pool_conformance_budgeted",
+        monkeypatch.setattr(gui, "_HUNTER_CONF_CACHE", {})
+        monkeypatch.setattr(gui.Api, "_pool_conformance_budgeted",
                             lambda self, codes, date, budget=24: (codes[:1], len(codes) - 1))
-        monkeypatch.setattr(t_gui.Api, "_hunter_build_conformance",
+        monkeypatch.setattr(gui.Api, "_hunter_build_conformance",
                             lambda self, codes, date=None: {})
         api.abnormal_pool_add("600000")
         api.abnormal_pool_add("600001")

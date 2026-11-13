@@ -17,7 +17,7 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-import t_gui   # noqa: E402
+import gui   # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
@@ -33,7 +33,7 @@ def _df():
 
 class TestEnsureAmount:
     def test_derives_with_vwap(self):
-        out = t_gui._ensure_amount(_df())
+        out = gui._ensure_amount(_df())
         assert "amount" in out.columns
         vwap = (171.11 + 164.02 + 169.27) / 3.0
         assert float(out["amount"].iloc[-1]) == pytest.approx(vwap * 245973.13 * 100, rel=1e-9)
@@ -43,30 +43,30 @@ class TestEnsureAmount:
     def test_keeps_existing_amount(self):
         d = _df()
         d["amount"] = [1.0, 2.0]
-        out = t_gui._ensure_amount(d)
+        out = gui._ensure_amount(d)
         assert out["amount"].tolist() == [1.0, 2.0]
 
     def test_empty_and_none_are_safe(self):
-        assert t_gui._ensure_amount(None) is None
-        assert t_gui._ensure_amount(pd.DataFrame()).empty
+        assert gui._ensure_amount(None) is None
+        assert gui._ensure_amount(pd.DataFrame()).empty
 
 
 class TestSeriesCarriesAmount:
     def _ready(self, with_amount):
-        from t_gui import _calc_ma_and_indicators
+        from gui import _calc_ma_and_indicators
         d = _df()
         d["date"] = pd.to_datetime(d["date"])      # `_to_series` 用 strftime，需要 datetime
         if with_amount:
-            d = t_gui._ensure_amount(d)
+            d = gui._ensure_amount(d)
         return _calc_ma_and_indicators(d)
 
     def test_to_series_includes_amount(self):
-        from t_gui import _to_series
+        from gui import _to_series
         s = _to_series(self._ready(True))
         assert "amount" in s and len(s["amount"]) == len(s["dates"])
 
     def test_to_series_omits_amount_when_absent(self):
-        from t_gui import _to_series
+        from gui import _to_series
         s = _to_series(self._ready(False))          # 没有 amount 列
         assert "amount" not in s
 
@@ -162,7 +162,7 @@ class TestPayloadSchemaGate:
         原来这道闸只写在 `want_minutes` 里面，日 K 视图照样回放旧档，
         于是 688 的成交额还是 2000 亿。"""
         import inspect
-        src = inspect.getsource(t_gui.Api._serve_payload_cache)
+        src = inspect.getsource(gui.Api._serve_payload_cache)
         # 闸必须在 `if want_minutes:` 之前
         assert src.index('int(hit.get("schema") or 0) < 4') < src.index("if want_minutes:")
 
@@ -176,7 +176,7 @@ class TestPayloadSchemaGate:
         import time as _t
         from datetime import datetime as _dt
         today = _dt.now().strftime("%Y-%m-%d")
-        api = t_gui.Api()
+        api = gui.Api()
         api._quotes_snaps = (_t.time(), {"688008": {
             "price": 169.27, "open": 165.26, "high": 171.11, "low": 164.02,
             "vol_hand": 24597313.0, "ts_date": today}})
@@ -187,7 +187,7 @@ class TestPayloadSchemaGate:
         import time as _t
         from datetime import datetime as _dt
         today = _dt.now().strftime("%Y-%m-%d")
-        api = t_gui.Api()
+        api = gui.Api()
         api._quotes_snaps = (_t.time(), {"600000": {
             "price": 9.76, "open": 9.79, "high": 9.86, "low": 9.68,
             "vol_hand": 605133.0, "ts_date": today}})
@@ -206,7 +206,7 @@ class TestDeepBaseVolumeUnit:
     def test_base_volume_is_divided_by_100(self, monkeypatch):
         import pandas as pd
         import core.chart_cache as cc
-        import t_gui as G
+        import gui as G
 
         fake = pd.DataFrame([
             {"time": "2026-10-20 14:55:00", "open": 9.9, "high": 9.95, "low": 9.85,
@@ -222,7 +222,7 @@ class TestDeepBaseVolumeUnit:
         """归一必须**复制**再算 —— 缓存本体被就地改掉会污染其它消费端。"""
         import pandas as pd
         import core.chart_cache as cc
-        import t_gui as G
+        import gui as G
 
         fake = pd.DataFrame([{"time": "2026-10-20 14:55:00", "open": 9.9, "high": 9.95,
                               "low": 9.85, "close": 9.92, "volume": 1000.0}])
@@ -241,7 +241,7 @@ class TestIndexHasNoAmount:
     """
 
     def test_index_code_detection(self):
-        from t_gui import _index_code
+        from gui import _index_code
         assert _index_code("sh000001") and _index_code("sz399001") and _index_code("sh000300")
         assert _index_code("bj899050")
         # ⚠️ 裸 000001 是平安银行，不是上证指数
@@ -249,16 +249,16 @@ class TestIndexHasNoAmount:
         assert not _index_code("600000")
 
     def test_no_amount_for_index(self):
-        out = t_gui._ensure_amount(_df(), "sh000001")
+        out = gui._ensure_amount(_df(), "sh000001")
         assert "amount" not in out.columns
 
     def test_amount_still_for_stock(self):
-        out = t_gui._ensure_amount(_df(), "600000")
+        out = gui._ensure_amount(_df(), "600000")
         assert "amount" in out.columns
 
     def test_resample_agg_tolerates_missing_amount(self):
         """指数没有 amount 列 ⇒ 周/月聚合字典不能写死 "amount": "sum"（否则 pandas 报 Label 不存在）。"""
         import inspect
-        src = inspect.getsource(t_gui.Api._build_chart_from_df)
+        src = inspect.getsource(gui.Api._build_chart_from_df)
         assert 'if "amount" in df.columns:' in src
         assert '"volume": "sum", "amount": "sum"' not in src

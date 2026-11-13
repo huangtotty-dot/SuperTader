@@ -5,7 +5,7 @@
 （原「右键点一个价位」的写法已废弃，改成画框 —— 一个框同时管上下两个方向。）
 
 分工（三个进程共用这一个文件，所以读写都必须是原子的）：
-  · GUI（t_gui.py）：画框/删除（`add_box`/`remove`）、读事件响铃（`load`）；
+  · GUI（gui.py）：画框/删除（`add_box`/`remove`）、读事件响铃（`load`）；
   · main.py 的 10s watcher：读 armed 框 → 拉快照 → 命中就 `mark_triggered` + 推飞书；
   · 两边都**只**通过本模块落盘（tmp + os.replace），绝不留半截 JSON。
 

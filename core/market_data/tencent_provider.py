@@ -401,7 +401,7 @@ _SNAPSHOT_CHUNK = 200
 # **为什么必须做**：本模块原先每个请求都走 `urllib.request.urlopen`，它**每次都新建**
 # DNS + TCP + TLS。本机实测**建连本身 ≈290ms**（同一 URL 连打 12 次：裸 urlopen 中位
 # 350.9ms，复用同一连接中位 61.4ms ⇒ **5.7×**）。而 `snapshot()` 是**逐只**调的
-# （`t_gui._live_quote_forming` → `snapshot([code])`）⇒ 一屏 50 只票 = **50 次握手 ≈14.5s**，
+# （`gui._live_quote_forming` → `snapshot([code])`）⇒ 一屏 50 只票 = **50 次握手 ≈14.5s**，
 # 全部落在后台线程上。2026-10-16 的卡死线程栈里**实测 5 个线程同时卡在
 # `socket.create_connection`**（另有 1 个在读 TLS），这就是"打开 GUI 卡顿"的直接来源。
 #

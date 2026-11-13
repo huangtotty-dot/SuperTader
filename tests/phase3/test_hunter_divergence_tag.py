@@ -29,7 +29,7 @@ sys.path.insert(0, str(_ROOT))
 
 def _api():
     import importlib.util
-    spec = importlib.util.spec_from_file_location("_tg_div_test", _ROOT / "t_gui.py")
+    spec = importlib.util.spec_from_file_location("_tg_div_test", _ROOT / "gui.py")
     mod = importlib.util.module_from_spec(spec)
     try:
         spec.loader.exec_module(mod)

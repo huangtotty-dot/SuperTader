@@ -22,7 +22,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
@@ -31,7 +31,7 @@ class TestBackendMemory(unittest.TestCase):
     def setUp(self):
         import tempfile
         self._td = tempfile.TemporaryDirectory()
-        self.api = t_gui.Api()
+        self.api = gui.Api()
         self.api._MW_STATE_FP = Path(self._td.name) / "multi_watch.json"
 
     def tearDown(self):

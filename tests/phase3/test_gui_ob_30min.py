@@ -13,7 +13,7 @@
   T3 趋势列与行内趋势标签**同源一致**。
 
 铁律：全离线。补桩 `_load_json`/磁盘分钟层；`analysis.trend30.adapter._fetch_30min` 打成抛异常。
-运行：python -m unittest tests.phase3.test_gui_ob_30min
+运行：python -m unittest tests.phase3.tesgui_ob_30min
 """
 import os
 import sys
@@ -31,7 +31,7 @@ if _ROOT not in sys.path:
 import numpy as np  # noqa: E402,F401
 import pandas  # noqa: E402,F401
 import analysis.indicators  # noqa: E402,F401  预热 `_stock_tags_from_df` 内的懒加载(~1.4s 一次性)
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 from analysis.trend30 import adapter as _adapter  # noqa: E402
 
 _CODE = "000001"
@@ -73,42 +73,42 @@ def _fake_chart(n=400, close=10.0):
 
 class TestObM30(unittest.TestCase):
     def setUp(self):
-        self.api = t_gui.Api()
-        self._orig_load_json = t_gui._load_json
-        self._orig_min_disk = t_gui._fetch_min_bars_disk
+        self.api = gui.Api()
+        self._orig_load_json = gui._load_json
+        self._orig_min_disk = gui._fetch_min_bars_disk
         self._orig_fetch30 = _adapter._fetch_30min
-        self._orig_mins_cache = dict(t_gui._MIN_BARS_CACHE)
-        self._saved_m30 = dict(t_gui._M30_SNAP_CACHE)
+        self._orig_mins_cache = dict(gui._MIN_BARS_CACHE)
+        self._saved_m30 = dict(gui._M30_SNAP_CACHE)
         self._saved_chart = dict(getattr(self.api, "_stock_chart_cache", {}))
 
-        t_gui._load_json = lambda p, d=None: (
-            {"000001_A": {"name": "甲", "qty": 100}} if str(p) == str(t_gui.HOLDINGS_MANUAL)
+        gui._load_json = lambda p, d=None: (
+            {"000001_A": {"name": "甲", "qty": 100}} if str(p) == str(gui.HOLDINGS_MANUAL)
             else (d if d is not None else {}))
 
         def _boom(*a, **k):           # 网络层：一旦被调用即失败（证明 OB 热路径零网络）
             raise AssertionError("OB 热路径不应调用网络 _fetch_30min")
         _adapter._fetch_30min = _boom
-        t_gui._MIN_BARS_CACHE.clear()
-        t_gui._M30_SNAP_CACHE.clear()
+        gui._MIN_BARS_CACHE.clear()
+        gui._M30_SNAP_CACHE.clear()
 
         self._today = datetime.now().strftime("%Y-%m-%d")
         self.api._stock_chart_cache = {f"{self._today}_{_CODE}": (datetime.now(), _fake_chart())}
 
     def tearDown(self):
-        t_gui._load_json = self._orig_load_json
-        t_gui._fetch_min_bars_disk = self._orig_min_disk
+        gui._load_json = self._orig_load_json
+        gui._fetch_min_bars_disk = self._orig_min_disk
         _adapter._fetch_30min = self._orig_fetch30
-        t_gui._MIN_BARS_CACHE.clear(); t_gui._MIN_BARS_CACHE.update(self._orig_mins_cache)
-        t_gui._M30_SNAP_CACHE.clear(); t_gui._M30_SNAP_CACHE.update(self._saved_m30)
+        gui._MIN_BARS_CACHE.clear(); gui._MIN_BARS_CACHE.update(self._orig_mins_cache)
+        gui._M30_SNAP_CACHE.clear(); gui._M30_SNAP_CACHE.update(self._saved_m30)
         self.api._stock_chart_cache = self._saved_chart
 
     def _warm(self, df=None):
         """模拟后台磁盘预热：把持仓的 30min 快照填进 `_M30_SNAP_CACHE`（df 缺省=上行帧）。"""
-        t_gui._M30_SNAP_CACHE[f"{_CODE}_{t_gui._min_bars_slot()}"] = \
-            t_gui._build_m30_snapshot(_m30_uptrend() if df is None else df)
+        gui._M30_SNAP_CACHE[f"{_CODE}_{gui._min_bars_slot()}"] = \
+            gui._build_m30_snapshot(_m30_uptrend() if df is None else df)
 
     def test_01_cold_is_fast_and_pending(self):
-        t_gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
+        gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
         t0 = _time.perf_counter()
         r = self.api.load_ob_analysis()
         dt = _time.perf_counter() - t0
@@ -117,7 +117,7 @@ class TestObM30(unittest.TestCase):
         self.assertEqual(r["stocks"][0]["verdict"]["level"], "pending")
 
     def test_01b_warm_computes_verdict(self):
-        t_gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
+        gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
         self._warm()
         r = self.api.load_ob_analysis()
         s = r["stocks"][0]
@@ -128,7 +128,7 @@ class TestObM30(unittest.TestCase):
         self.assertTrue(s["verdict"].get("label") and s["verdict"].get("reason"))
 
     def test_02_30min_absent_falls_back_daily(self):
-        t_gui._fetch_min_bars_disk = lambda ts_code, freq: _empty_df()
+        gui._fetch_min_bars_disk = lambda ts_code, freq: _empty_df()
         self._warm(_empty_df())                       # 无数据 → 快照为 {}（已热但空）
         r = self.api.load_ob_analysis()
         s = r["stocks"][0]
@@ -136,7 +136,7 @@ class TestObM30(unittest.TestCase):
         self.assertFalse(s.get("top_features", {}).get("ok"), "无 30min → 顶部特征不可用")
 
     def test_03_trend_agrees_with_tags(self):
-        t_gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
+        gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
         self._warm()
         s = self.api.load_ob_analysis()["stocks"][0]
         label = s["tags"][0]["label"] if s.get("tags") else None      # 首个标签 = 上行/下行/震荡
@@ -147,33 +147,33 @@ class TestObM30(unittest.TestCase):
 
     def test_04_午休等时段允许出网(self):
         d = datetime.strptime
-        self.assertTrue(t_gui._m30_online_allowed(d("2026-10-30 12:35", "%Y-%m-%d %H:%M")),
+        self.assertTrue(gui._m30_online_allowed(d("2026-10-30 12:35", "%Y-%m-%d %H:%M")),
                         "午休必须允许在线补：磁盘 30min 停在上一交易日")
-        self.assertTrue(t_gui._m30_online_allowed(d("2026-10-30 10:15", "%Y-%m-%d %H:%M")))
-        self.assertTrue(t_gui._m30_online_allowed(d("2026-10-30 15:45", "%Y-%m-%d %H:%M")),
+        self.assertTrue(gui._m30_online_allowed(d("2026-10-30 10:15", "%Y-%m-%d %H:%M")))
+        self.assertTrue(gui._m30_online_allowed(d("2026-10-30 15:45", "%Y-%m-%d %H:%M")),
                         "盘后补刷窗 15:30–16:30 仍在")
-        self.assertFalse(t_gui._m30_online_allowed(d("2026-10-30 16:45", "%Y-%m-%d %H:%M")))
-        self.assertFalse(t_gui._m30_online_allowed(d("2026-10-31 12:00", "%Y-%m-%d %H:%M")),
+        self.assertFalse(gui._m30_online_allowed(d("2026-10-30 16:45", "%Y-%m-%d %H:%M")))
+        self.assertFalse(gui._m30_online_allowed(d("2026-10-31 12:00", "%Y-%m-%d %H:%M")),
                          "周末不出网（2026-10-18 卡死约束）")
 
     def test_05_磁盘快照不许盖掉更新的(self):
         key = "000001_test_slot"
-        t_gui._m30_snap_put(key, {"bar_time": "2026-10-30 11:30:00"})
-        t_gui._m30_snap_put(key, {"bar_time": "2026-10-29 15:00:00"})   # 磁盘（落后）
-        self.assertEqual(t_gui._M30_SNAP_CACHE[key]["bar_time"], "2026-10-30 11:30:00",
+        gui._m30_snap_put(key, {"bar_time": "2026-10-30 11:30:00"})
+        gui._m30_snap_put(key, {"bar_time": "2026-10-29 15:00:00"})   # 磁盘（落后）
+        self.assertEqual(gui._M30_SNAP_CACHE[key]["bar_time"], "2026-10-30 11:30:00",
                          "磁盘预热不得把在线快照降级成昨天")
-        t_gui._m30_snap_put(key, {"bar_time": "2026-10-30 14:00:00"})   # 更新 → 允许覆盖
-        self.assertEqual(t_gui._M30_SNAP_CACHE[key]["bar_time"], "2026-10-30 14:00:00")
+        gui._m30_snap_put(key, {"bar_time": "2026-10-30 14:00:00"})   # 更新 → 允许覆盖
+        self.assertEqual(gui._M30_SNAP_CACHE[key]["bar_time"], "2026-10-30 14:00:00")
 
     def test_06_冷启动优先在线(self):
         called = {}
         self.api._kick_ob_m30_online = lambda codes: called.setdefault("online", list(codes))
         self.api._kick_ob_m30_disk = lambda codes: called.setdefault("disk", list(codes))
-        with mock.patch.object(t_gui, "_m30_online_allowed", return_value=True):
+        with mock.patch.object(gui, "_m30_online_allowed", return_value=True):
             self.api._kick_ob_m30_fill(["000001"])
         self.assertEqual(called.get("online"), ["000001"], "允许出网时冷启动应走在线，而不是磁盘")
         called.clear()
-        with mock.patch.object(t_gui, "_m30_online_allowed", return_value=False):
+        with mock.patch.object(gui, "_m30_online_allowed", return_value=False):
             self.api._kick_ob_m30_fill(["000001"])
         self.assertEqual(called.get("disk"), ["000001"], "周末/盘后仍走磁盘（不出网）")
 

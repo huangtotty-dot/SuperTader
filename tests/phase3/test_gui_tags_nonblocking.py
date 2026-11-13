@@ -13,7 +13,7 @@
 
 铁律：全离线。桩掉网络路径，不读 t_io/、不打网络。
 
-运行：python tests/phase3/test_gui_tags_nonblocking.py
+运行：python tests/phase3/tesgui_tags_nonblocking.py
 """
 import hashlib
 import os
@@ -28,36 +28,36 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 SLOW = 0.6  # 桩的“慢计算”耗时；冷调若走同步路径必 > 此值
 
 
 class TestTagsColdNonBlocking(unittest.TestCase):
     def setUp(self):
-        self.api = t_gui.Api()
+        self.api = gui.Api()
         self.codes = ["600000", "600001", "600002"]
-        self._orig_one = t_gui.Api._stock_tags_one
-        self._saved_cache = dict(t_gui._TAGS_CACHE)
-        self._saved_running = t_gui._TAGS_RUNNING
-        t_gui._TAGS_CACHE.clear()
-        t_gui._TAGS_RUNNING = set()      # 2026-10-28 起是「正在算的批次键集合」，不再是 bool
+        self._orig_one = gui.Api._stock_tags_one
+        self._saved_cache = dict(gui._TAGS_CACHE)
+        self._saved_running = gui._TAGS_RUNNING
+        gui._TAGS_CACHE.clear()
+        gui._TAGS_RUNNING = set()      # 2026-10-28 起是「正在算的批次键集合」，不再是 bool
 
         def _fake_one(_self, code):
             time.sleep(SLOW)  # 模拟慢计算；同步调用会明显拖慢
             return {"trend": "up", "box_pos": 0.5, "tags": [{"label": f"t-{code}", "color": "g"}]}
-        t_gui.Api._stock_tags_one = _fake_one
+        gui.Api._stock_tags_one = _fake_one
 
     def tearDown(self):
-        t_gui.Api._stock_tags_one = self._orig_one
+        gui.Api._stock_tags_one = self._orig_one
         # 等后台算完，避免污染后续用例 / 其它测试的全局状态
         t0 = time.time()
-        while t_gui._TAGS_RUNNING and time.time() - t0 < 10:
+        while gui._TAGS_RUNNING and time.time() - t0 < 10:
             time.sleep(0.05)
-        with t_gui._TAGS_LOCK:
-            t_gui._TAGS_CACHE.clear()
-            t_gui._TAGS_CACHE.update(self._saved_cache)
-        t_gui._TAGS_RUNNING = self._saved_running
+        with gui._TAGS_LOCK:
+            gui._TAGS_CACHE.clear()
+            gui._TAGS_CACHE.update(self._saved_cache)
+        gui._TAGS_RUNNING = self._saved_running
 
     def _key(self):
         """与 `load_stock_tags_batch` 的 `_cache_key` 同形：`{today}:{_dkey}:{codes_fp}`。
@@ -78,16 +78,16 @@ class TestTagsColdNonBlocking(unittest.TestCase):
 
     def test_02_冷启动起了后台线程(self):
         self.api.load_stock_tags_batch(self.codes)
-        self.assertTrue(t_gui._TAGS_RUNNING, "冷启动未起后台线算（_TAGS_RUNNING 未置位）")
+        self.assertTrue(gui._TAGS_RUNNING, "冷启动未起后台线算（_TAGS_RUNNING 未置位）")
 
     def test_03_后台算完填充缓存并复位(self):
         self.api.load_stock_tags_batch(self.codes)
         t0 = time.time()
-        while t_gui._TAGS_RUNNING and time.time() - t0 < 10:
+        while gui._TAGS_RUNNING and time.time() - t0 < 10:
             time.sleep(0.05)
-        self.assertFalse(t_gui._TAGS_RUNNING, "后台算完但标志未复位")
-        with t_gui._TAGS_LOCK:
-            c = t_gui._TAGS_CACHE.get(self._key())
+        self.assertFalse(gui._TAGS_RUNNING, "后台算完但标志未复位")
+        with gui._TAGS_LOCK:
+            c = gui._TAGS_CACHE.get(self._key())
         self.assertIsNotNone(c, "后台算完未写入缓存")
         self.assertEqual(len(c["tags"]), len(self.codes))
         # 再次调用：命中缓存，拿到真值且秒回
@@ -98,9 +98,9 @@ class TestTagsColdNonBlocking(unittest.TestCase):
 
     def test_04_过期缓存先返回旧值不阻塞(self):
         # 预置一份“过期”缓存
-        with t_gui._TAGS_LOCK:
-            t_gui._TAGS_CACHE[self._key()] = {
-                "ts": time.time() - (t_gui._TAGS_TTL + 5),
+        with gui._TAGS_LOCK:
+            gui._TAGS_CACHE[self._key()] = {
+                "ts": time.time() - (gui._TAGS_TTL + 5),
                 "tags": {"600000": {"trend": "flat", "tags": []}},
             }
         t = time.perf_counter()
@@ -122,35 +122,35 @@ class TestTagsInvalidateOnDailyCacheChange(unittest.TestCase):
     """
 
     def setUp(self):
-        self._orig = t_gui._tags_daily_sig
-        self._saved = dict(t_gui._TAGS_ONE_CACHE)
-        with t_gui._TAGS_LOCK:
-            t_gui._TAGS_ONE_CACHE.clear()
+        self._orig = gui._tags_daily_sig
+        self._saved = dict(gui._TAGS_ONE_CACHE)
+        with gui._TAGS_LOCK:
+            gui._TAGS_ONE_CACHE.clear()
 
     def tearDown(self):
-        t_gui._tags_daily_sig = self._orig
-        with t_gui._TAGS_LOCK:
-            t_gui._TAGS_ONE_CACHE.clear()
-            t_gui._TAGS_ONE_CACHE.update(self._saved)
+        gui._tags_daily_sig = self._orig
+        with gui._TAGS_LOCK:
+            gui._TAGS_ONE_CACHE.clear()
+            gui._TAGS_ONE_CACHE.update(self._saved)
 
     def test_指纹变了key就变(self):
-        t_gui._tags_daily_sig = lambda code: (111, 222)
-        k1 = t_gui._tags_key("688102", False, None)
-        t_gui._tags_daily_sig = lambda code: (333, 444)
-        k2 = t_gui._tags_key("688102", False, None)
+        gui._tags_daily_sig = lambda code: (111, 222)
+        k1 = gui._tags_key("688102", False, None)
+        gui._tags_daily_sig = lambda code: (333, 444)
+        k2 = gui._tags_key("688102", False, None)
         self.assertNotEqual(k1, k2, "日线缓存变了，标签键必须跟着变")
 
     def test_缓存更新后不再命中旧标签(self):
-        t_gui._tags_daily_sig = lambda code: (111, 222)
-        with t_gui._TAGS_LOCK:
-            t_gui._TAGS_ONE_CACHE[t_gui._tags_key("688102", False, None)] = (
+        gui._tags_daily_sig = lambda code: (111, 222)
+        with gui._TAGS_LOCK:
+            gui._TAGS_ONE_CACHE[gui._tags_key("688102", False, None)] = (
                 time.time(), {"tags": [{"label": "破5日线"}], "bias5": -5.02})
-        self.assertEqual(len(t_gui.Api._tags_partial(["688102"], False)), 1)
+        self.assertEqual(len(gui.Api._tags_partial(["688102"], False)), 1)
         # 日线缓存补进了新 bar（mtime/size 变化）⇒ 旧标签必须**不再被交付**
-        t_gui._tags_daily_sig = lambda code: (999, 999)
-        self.assertEqual(t_gui.Api._tags_partial(["688102"], False), {},
+        gui._tags_daily_sig = lambda code: (999, 999)
+        self.assertEqual(gui.Api._tags_partial(["688102"], False), {},
                          "缓存更新后还返回旧标签 ⇒ 就是 688102 那类'整晚显示破位'")
 
     def test_指纹取不到时不影响可用性(self):
-        t_gui._tags_daily_sig = lambda code: None       # 文件不存在/权限问题
-        self.assertIsNotNone(t_gui._tags_key("999999", False, None))
+        gui._tags_daily_sig = lambda code: None       # 文件不存在/权限问题
+        self.assertIsNotNone(gui._tags_key("999999", False, None))

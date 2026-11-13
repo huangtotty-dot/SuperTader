@@ -21,11 +21,11 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 _HTML = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-_PY = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+_PY = (_ROOT / "gui.py").read_text(encoding="utf-8")
 
 
 def _rec():
@@ -39,7 +39,7 @@ def _rec():
 
 class TestPayload(unittest.TestCase):
     def test_window_and_end_date(self):
-        p = t_gui.Api._sector_ma_payload(_rec(), 10, "20261016")
+        p = gui.Api._sector_ma_payload(_rec(), 10, "20261016")
         self.assertTrue(p["available"])
         for s in p["sectors"]:
             self.assertEqual(len(s["points"]), 10)
@@ -47,7 +47,7 @@ class TestPayload(unittest.TestCase):
         self.assertEqual(p["sectors"][0]["last5"], 56.0)     # 40+16
 
     def test_sorted_by_daily_summary_rank(self):
-        p = t_gui.Api._sector_ma_payload(_rec(), 10, "")
+        p = gui.Api._sector_ma_payload(_rec(), 10, "")
         names = [s["name"] for s in p["sectors"]]
         self.assertEqual(len(names), 2)
         # 排序真源是 daily_summary 当日排名；读不到时按名字兜底（稳定顺序）
@@ -66,7 +66,7 @@ class TestPayload(unittest.TestCase):
             self.assertEqual(names, sorted(names))
 
     def test_payload_percentages_in_range(self):
-        p = t_gui.Api._sector_ma_payload(_rec(), 10, "")
+        p = gui.Api._sector_ma_payload(_rec(), 10, "")
         for s in p["sectors"]:
             for q in s["points"]:
                 self.assertGreaterEqual(q["pct5"], 0)
@@ -88,7 +88,7 @@ class TestMapping(unittest.TestCase):
         # 当前主板块映射里没有它们属正常；但当日板块必须有成分股，否则那一格恒空。
         k = sorted(d)[-1]
         sectors = {str(r.get("板块") or "").strip() for r in (d[k] or []) if isinstance(r, dict)}
-        board = t_gui._jiuyan_board()
+        board = gui._jiuyan_board()
         have = {v for v in board.values() if v}
         missing = sorted(s for s in sectors if s and s not in have)
         self.assertFalse(missing, f"这些板块在 _jiuyan_board 里没有成分股：{missing}")
@@ -148,7 +148,7 @@ class TestConvergenceSeries(unittest.TestCase):
 
     def test_后端给出粘合占比与独立分母(self):
         import inspect
-        src = inspect.getsource(t_gui._compute_sector_ma_breadth)
+        src = inspect.getsource(gui._compute_sector_ma_breadth)
         self.assertIn("pct_conv", src)
         self.assertIn("n60", src, "粘合需要 ≥60 根历史，分母必须单独算")
         self.assertIn("CONV_THR as _CONV_THR", src)
@@ -185,7 +185,7 @@ class TestBullShare(unittest.TestCase):
 
     def test_后端输出多头占比且分母独立(self):
         import inspect
-        src = inspect.getsource(t_gui._compute_sector_ma_breadth)
+        src = inspect.getsource(gui._compute_sector_ma_breadth)
         self.assertIn('"pct_bull"', src)
         self.assertIn('"n_bull"', src)
         self.assertIn("MA60_FLAT_PCT", src, "阈值必须与日线三态同源，不能各写一份")

@@ -16,15 +16,15 @@ from datetime import datetime
 
 sys.path.insert(0, BASE)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 TODAY = datetime.now().strftime("%Y-%m-%d")
 
 # 取一批真实标的（用持仓+watchlist 规模的量级）
-api = t_gui.Api()
+api = gui.Api()
 codes = []
 try:
-    cur = t_gui._load_json(t_gui.HOLDINGS_MANUAL, {}) or {}
+    cur = gui._load_json(gui.HOLDINGS_MANUAL, {}) or {}
     codes += [c for c in cur if isinstance(cur[c], dict)]
 except Exception:
     pass
@@ -47,8 +47,8 @@ def watch():
 threading.Thread(target=watch, daemon=True).start()
 base = threading.active_count()
 
-t_gui._TAGS_CACHE.clear()
-t_gui._TAGS_RUNNING = False
+gui._TAGS_CACHE.clear()
+gui._TAGS_RUNNING = False
 t0 = time.perf_counter()
 api.load_stock_tags_batch(codes)          # 冷缓存 → 后台起批算
 kick = (time.perf_counter() - t0) * 1000

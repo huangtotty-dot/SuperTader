@@ -78,8 +78,8 @@ class TestDev365(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import t_gui
-        cls.api = t_gui.Api()
+        import gui
+        cls.api = gui.Api()
 
     def test_有满365根时给出百分比(self):
         closes = [10.0] * 400
@@ -115,8 +115,8 @@ class TestBias5(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        import t_gui
-        cls.api = t_gui.Api()
+        import gui
+        cls.api = gui.Api()
 
     def test_有5根时给出百分比(self):
         closes = [10.0] * 9 + [11.0]
@@ -180,7 +180,7 @@ class TestBias5(unittest.TestCase):
 
     def test_后端三个端点都下发bias5(self):
         from pathlib import Path as _P
-        src = (_P(_ROOT) / "t_gui.py").read_text(encoding="utf-8")
+        src = (_P(_ROOT) / "gui.py").read_text(encoding="utf-8")
         self.assertIn('"bias5": _tagres.get("bias5")', src, "持仓30min体检")
         self.assertIn('"bias5": (_tags_map.get(c) or {}).get("bias5")', src, "异常监控池")
         self.assertEqual(src.count('r["bias5"] = info.get("bias5")'), 2,
@@ -227,8 +227,8 @@ class TestDev365Markers(unittest.TestCase):
 class TestTagWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        import t_gui
-        cls.api = t_gui.Api()
+        import gui
+        cls.api = gui.Api()
 
     def _labels(self, closes):
         r = self.api._stock_tags_from_df(_df(closes), "000001", t30=False)

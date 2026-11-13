@@ -22,7 +22,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 
 def _rec(i, zt, dt, zb=0.2):
@@ -34,18 +34,18 @@ class TestMarketSentiment(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.mkdtemp()
         self.fp = os.path.join(self.td, "e5_ths_cache.json")
-        self._old = t_gui._E5_THS_FP
-        self._old_loc = t_gui._SENT_LOCAL_FP
-        t_gui._E5_THS_FP = type(self._old)(self.fp)
+        self._old = gui._E5_THS_FP
+        self._old_loc = gui._SENT_LOCAL_FP
+        gui._E5_THS_FP = type(self._old)(self.fp)
         # 本地历史档也要隔离：生产那份有 800 天，会把"最近 N 日"的断言全部打乱
-        t_gui._SENT_LOCAL_FP = type(self._old_loc)(os.path.join(self.td, "sentiment_local.json"))
-        t_gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
-        self.api = t_gui.Api()
+        gui._SENT_LOCAL_FP = type(self._old_loc)(os.path.join(self.td, "sentiment_local.json"))
+        gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
+        self.api = gui.Api()
 
     def tearDown(self):
-        t_gui._E5_THS_FP = self._old
-        t_gui._SENT_LOCAL_FP = self._old_loc
-        t_gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
+        gui._E5_THS_FP = self._old
+        gui._SENT_LOCAL_FP = self._old_loc
+        gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
 
     def _write(self, data):
         with open(self.fp, "w", encoding="utf-8") as f:
@@ -154,7 +154,7 @@ class TestMarketSentiment(unittest.TestCase):
         # 把最后一个值改成最小
         data[(d0 + timedelta(days=59)).strftime("%Y%m%d")] = _rec(0, 1, 0, zb=0.0)
         self._write(data)
-        t_gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
+        gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
         r2 = self.api.load_market_sentiment(600)
         self.assertAlmostEqual(r2["stats"]["zt_p60"], round(1 / 60, 3))
         self.assertEqual(r2["stats"]["zt_ma5"], round(sum(10 + i for i in range(55, 59)) / 5 + 1 / 5, 1))
@@ -165,13 +165,13 @@ class TestMarketSentiment(unittest.TestCase):
             "20260105": _rec(1, 50, 3),
             "20260106": _rec(2, 60, 2),
         })
-        with open(t_gui._SENT_LOCAL_FP, "w", encoding="utf-8") as f:
+        with open(gui._SENT_LOCAL_FP, "w", encoding="utf-8") as f:
             json.dump({"series": {
                 "20260102": {"zt": 40, "dt": 5, "touch": 60, "zb": 20, "n": 4800, "zb_rate": 0.33},
                 "20260105": {"zt": 99, "dt": 9, "touch": 120, "zb": 21, "n": 4800, "zb_rate": 0.17},
                 "20260101": {"zt": 1, "dt": 0, "touch": 1, "zb": 0, "n": 100, "zb_rate": 0.0},
             }}, f)
-        t_gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
+        gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
         r = self.api.load_market_sentiment(600)
         rows = {x["date"]: x for x in r["series"]}
         self.assertIn("2026-01-02", rows)              # 本地独有 → 保留
@@ -210,9 +210,9 @@ class TestMarketSentiment(unittest.TestCase):
         r1 = self.api.load_market_sentiment(120)
         self.assertEqual(r1["last"]["zt"], 39)
         # 不重写文件（mtime 不变）⇒ 命中记忆
-        memo = t_gui.Api._SENT_MEM
+        memo = gui.Api._SENT_MEM
         r2 = self.api.load_market_sentiment(120)
-        self.assertIs(t_gui.Api._SENT_MEM, memo)
+        self.assertIs(gui.Api._SENT_MEM, memo)
         self.assertEqual(r2["last"]["zt"], 39)
         # 改档 ⇒ mtime 变 ⇒ 重新解析
         data[(d0 + timedelta(days=29)).strftime("%Y%m%d")] = _rec(29, 999, 1)

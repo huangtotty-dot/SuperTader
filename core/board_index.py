@@ -61,14 +61,14 @@ def index_gm_symbol(index_code: str) -> str:
 # ---------------------------------------------------------------------------
 # GUI 指数实时状态板（2026-09-28）
 # ---------------------------------------------------------------------------
-# 盘中实时面板顶部展示的 7 个指数。**单一真源**——t_gui.load_indices 与
+# 盘中实时面板顶部展示的 7 个指数。**单一真源**——gui.load_indices 与
 # analysis.index_divergence 共用本表，禁止第二份列表。
 #
 # source 语义：
 #   "gm" —— 真交易所指数，实时报价走掘金 gm.api.current(index_snapshot)，
 #           日线/分钟走 get_provider().index_daily / index_minute
 #   "em" —— 东财合成条目（平均股价非交易所指数，掘金无此标的），
-#           走东财 secid 47.800005（t_gui 既有分支）
+#           走东财 secid 47.800005（gui 既有分支）
 GUI_INDEX_BOARD = [
     {"name": "上证指数", "symbol": "sh000001",     "gm": "SHSE.000001", "ts_code": "000001.SH", "source": "gm"},
     {"name": "深证成指", "symbol": "sz399001",     "gm": "SZSE.399001", "ts_code": "399001.SZ", "source": "gm"},
@@ -89,7 +89,7 @@ def tdx_code_for(symbol: str):
 
     2026-10-26：平均股价在通达信里是 **880003**，在通达信客户端本地就有；
     东财 push2delay/push2his 常年风控，卡片和 K 线都取不到。映射只写在这里，
-    t_gui 那边通过本函数取，避免符号表散落两处。
+    gui 那边通过本函数取，避免符号表散落两处。
     """
     s = str(symbol or "")
     for it in GUI_INDEX_BOARD:

@@ -17,7 +17,7 @@ import os
 import pandas as pd
 
 from config import T_IO_DIR, log
-from src.data_fetcher import fetch_minute_bar, get_daily_context, load_holdings
+from core.data_fetcher import fetch_minute_bar, get_daily_context, load_holdings
 
 _now = datetime.now
 

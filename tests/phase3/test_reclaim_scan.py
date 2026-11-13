@@ -28,8 +28,8 @@ def _frame(closes):
 
 class TestReclaimProbe(unittest.TestCase):
     def setUp(self):
-        import t_gui
-        self.api = t_gui.Api()
+        import gui
+        self.api = gui.Api()
 
     def test_昨收破线今价站上命中(self):
         # basis=[11,10.5,10,9.5,9]：prev_close=9<prev_MA5=10；今价 11>cur_MA5=10 → 命中
@@ -72,9 +72,9 @@ class TestReclaimScan(unittest.TestCase):
             def daily_many(self, codes, days=0):
                 return {c: frames[c].copy() for c in codes if c in frames}
         self._patch(_Fake())
-        import t_gui
+        import gui
         st = {}
-        hits = t_gui.Api()._scan_reclaim(["600000", "000001"], st, _TODAY)
+        hits = gui.Api()._scan_reclaim(["600000", "000001"], st, _TODAY)
         self.assertEqual(len(hits), 2)
         self.assertEqual(st.get("ok"), 2)
         self.assertEqual(st.get("fetch_failed"), False)
@@ -85,8 +85,8 @@ class TestReclaimScan(unittest.TestCase):
             def daily_many(self, codes, days=0):
                 return {}
         self._patch(_Fake())
-        import t_gui
-        api = t_gui.Api(); api._GM_BATCH_RETRY_WAIT = 0
+        import gui
+        api = gui.Api(); api._GM_BATCH_RETRY_WAIT = 0
         st = {}
         hits = api._scan_reclaim(["600000", "000001"], st, _TODAY)
         self.assertEqual(hits, [])
@@ -100,9 +100,9 @@ class TestReclaimScan(unittest.TestCase):
             def daily_many(self, codes, days=0):
                 return {c: frames[c].copy() for c in codes if c in frames}
         self._patch(_Fake())
-        import t_gui
+        import gui
         st = {}
-        t_gui.Api()._scan_reclaim(["600000", "430047"], st, _TODAY)
+        gui.Api()._scan_reclaim(["600000", "430047"], st, _TODAY)
         self.assertEqual(st.get("bj_no_data"), 1)
         self.assertEqual(st.get("rest_no_data"), 0)
         self.assertFalse(st.get("fetch_failed"))
@@ -113,8 +113,8 @@ class TestReclaimSourceGuards(unittest.TestCase):
     import inspect as _ins
 
     def _src(self, name):
-        import t_gui
-        return self._ins.getsource(getattr(t_gui.Api, name))
+        import gui
+        return self._ins.getsource(getattr(gui.Api, name))
 
     def test_扫描走批量取数(self):
         s = self._src("_scan_reclaim")

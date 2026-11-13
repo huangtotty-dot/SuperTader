@@ -21,7 +21,7 @@ import sys
 
 import numpy as np
 
-# Windows 终端默认 GBK：输出里的 ⇒ / ★ 会 UnicodeEncodeError（与 t_gui.py 同一处理）
+# Windows 终端默认 GBK：输出里的 ⇒ / ★ 会 UnicodeEncodeError（与 gui.py 同一处理）
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

@@ -15,13 +15,13 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-import t_gui  # noqa: E402
+import gui  # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 
 def test_龙江交通的冰雪经济理由已写入资料() -> None:
-    api = t_gui.Api.__new__(t_gui.Api)
+    api = gui.Api.__new__(gui.Api)
     d = api.load_stock_profile("601188", live=False)
     assert d["ok"] and d["name"] == "龙江交通"
     reasons = d.get("concept_reasons") or {}
