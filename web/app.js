@@ -7685,6 +7685,7 @@ function _paToast(msg, kind) {
 async function loadPriceAlerts(code) {
   const c = String(code || "").split("_")[0];
   if (!c) { priceAlerts = []; priceAlertsCode = null; return; }
+  if (priceAlertsCode !== c) _paHiddenBoxes.clear();   // 换票：隐藏态跟着清
   try {
     const r = await apiCall("load_price_alerts", c);
     priceAlerts = ((r && r.items && r.items[c]) || []).slice();
@@ -7746,6 +7747,8 @@ function _finiteAreaPair(a) {
 }
 
 let _paBoxRects = [];
+// 对象树里点「👁」隐藏的画框 id（只在本页内存，不落盘；换票时清空）
+const _paHiddenBoxes = new Set();
 
 /* 画框外观（2026-10-28 owner：「实线太丑」）——改成**细虚线 + 自上而下渐隐的淡填充 + 圆角标签**：
    · 与缺口仍一眼可分：缺口是**红/绿实心块**，画框是**蓝色细虚线 + 淡渐变**；
@@ -7799,6 +7802,7 @@ function _paBoxAreas() {
     if (!n) return [];
     const out = [];
     priceAlerts.filter(a => a && a.kind === "box").forEach(a => {
+      if (_paHiddenBoxes.has(String(a.id))) return;   // 对象树里被「👁 隐藏」——不画
       const up = Number(a.upper), dn = Number(a.lower);
       if (!isFinite(up) || !isFinite(dn) || up <= 0 || dn <= 0) return;   // 坏数据直接跳过
       const iA = _paDateIdx(dates, a.x0, false);
@@ -7829,6 +7833,106 @@ function _paBoxAreas() {
   } catch (e) {
     return [];            // 画框出错绝不能拖垮整张 K 线
   }
+}
+
+/* ---- 对象树（2026-11-14 owner：TradingView「对象树」落地）----
+   把当前票的用户画对象（画框提醒）拍平成清单，供「🗂 对象」面板逐条管理：
+   👁 隐藏 / 🗑 删除 / 点标签改上下沿。纯函数，不含 DOM，node 单测直接跑。
+   口径：只收 kind==="box"；坏价跳过；triggered = 上破或下破任一边次数>0；未触发排前。 */
+function buildBoxTree(priceAlerts) {
+  const boxes = [];
+  (Array.isArray(priceAlerts) ? priceAlerts : []).forEach((a, i) => {
+    if (!a || a.kind !== "box") return;
+    const up = Number(a.upper), dn = Number(a.lower);
+    if (!isFinite(up) || !isFinite(dn) || up <= 0 || dn <= 0) return;
+    const upN = Math.max(0, Number(a.up_n) || 0);
+    const dnN = Math.max(0, Number(a.down_n) || 0);
+    boxes.push({
+      id: a.id != null ? String(a.id) : `_auto_${i}`,
+      upper: +up.toFixed(3), lower: +dn.toFixed(3),
+      upN, dnN,
+      triggered: upN > 0 || dnN > 0,
+      tag: (upN > 0 ? `上破×${upN} ` : "") + (dnN > 0 ? `下破×${dnN} ` : ""),
+    });
+  });
+  boxes.sort((x, y) => (x.triggered === y.triggered ? x.lower - y.lower : (x.triggered ? 1 : -1)));
+  return boxes;
+}
+
+/* 「🗂 对象」面板：开/关切换。 */
+function toggleObjTree() {
+  const p = document.getElementById("paObjTree");
+  if (p) { p.remove(); return; }
+  _renderObjTree();
+}
+function _renderObjTree() {
+  const old = document.getElementById("paObjTree");
+  if (old) old.remove();
+  const boxes = buildBoxTree(priceAlerts);
+  const hiddenN = _paHiddenBoxes.size;
+  const p = document.createElement("div");
+  p.id = "paObjTree";
+  p.style.cssText = "position:fixed;right:10px;top:96px;z-index:2147483000;width:288px;"
+    + "background:#161b22;border:1px solid #30363d;border-radius:8px;padding:8px;"
+    + "box-shadow:0 8px 24px rgba(0,0,0,.6);color:#c9d1d9;font-size:12px;"
+    + "max-height:70vh;overflow:auto;user-select:none";
+  const hd = document.createElement("div");
+  hd.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:6px";
+  const ttl = document.createElement("b");
+  ttl.textContent = `对象树 · 画框 ${boxes.length}${hiddenN ? `（隐藏 ${hiddenN}）` : ""}`;
+  const cls = document.createElement("button");
+  cls.textContent = "✕";
+  cls.title = "关闭";
+  cls.style.cssText = "background:none;border:none;color:#8b949e;cursor:pointer;font-size:13px";
+  cls.onclick = () => p.remove();
+  hd.appendChild(ttl); hd.appendChild(cls);
+  p.appendChild(hd);
+  if (!boxes.length) {
+    const em = document.createElement("div");
+    em.setAttribute("class", "cell-dim");
+    em.textContent = "本票没有画框。点工具栏「⌨ 设框」画一个。";
+    p.appendChild(em);
+  } else {
+    boxes.forEach(b => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:6px;padding:4px 2px;"
+        + "border-bottom:1px solid rgba(48,54,61,.6)";
+      const hid = _paHiddenBoxes.has(b.id);
+      const eye = document.createElement("button");
+      eye.textContent = hid ? "🙈" : "👁";
+      eye.title = hid ? "显示这个框" : "隐藏这个框（只隐藏不删除，可再点回来）";
+      eye.style.cssText = "background:none;border:none;cursor:pointer;font-size:13px;flex:0 0 auto;padding:0";
+      eye.onclick = () => _paToggleBoxHide(b.id);
+      const lbl = document.createElement("div");
+      lbl.style.cssText = `flex:1 1 auto;cursor:pointer;min-width:0;${hid ? "opacity:.45" : ""}`;
+      lbl.innerHTML = `<span style="font-family:var(--mono,monospace)">📌 ${b.tag}${fmt(b.lower, 2)} ~ ${fmt(b.upper, 2)}</span>`;
+      lbl.title = "点击修改上下沿";
+      lbl.onclick = () => { p.remove(); openPaBoxDialog(b.id); };
+      const del = document.createElement("button");
+      del.textContent = "🗑";
+      del.title = "删除这个框";
+      del.style.cssText = "background:none;border:none;cursor:pointer;font-size:13px;flex:0 0 auto;padding:0";
+      del.onclick = async () => {
+        try {
+          await apiCall("delete_price_alert", stockChartCode, b.id);
+          _paHiddenBoxes.delete(b.id);
+          await loadPriceAlerts(stockChartCode);
+          if (stockChartInst) renderStockChart(false);
+          _renderObjTree();
+        } catch (e) { _paToast("删除失败：" + (e && e.message ? e.message : e), "err"); }
+      };
+      row.appendChild(eye); row.appendChild(lbl); row.appendChild(del);
+      p.appendChild(row);
+    });
+  }
+  document.body.appendChild(p);
+}
+function _paToggleBoxHide(id) {
+  const k = String(id);
+  if (_paHiddenBoxes.has(k)) _paHiddenBoxes.delete(k);
+  else _paHiddenBoxes.add(k);
+  if (stockChartInst) renderStockChart(false);
+  _renderObjTree();
 }
 
 /* ---- 画框模式（2026-10-28 owner）：点工具栏「▭ 画框」→ 在图上按住拖一个矩形 ----
@@ -8152,6 +8256,7 @@ async function _paFinalize(p0, p1) {
 function clearPriceBoxes() {
   if (!stockChartCode) return;
   apiCall("delete_price_alert", stockChartCode, null).then(async () => {
+    _paHiddenBoxes.clear();
     await loadPriceAlerts(stockChartCode);
     if (stockChartInst) renderStockChart(false);
     _mwSyncBoxesNow();                 // 清空也要同步过去
@@ -12516,7 +12621,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114a", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114b", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
