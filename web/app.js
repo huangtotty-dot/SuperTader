@@ -12943,6 +12943,34 @@ function switchTab(tab) {
   }
 }
 
+/* ===== 侧栏盈亏汇总折叠（2026-11-14 owner）=====
+   手动盘 + 自动盘的盈利汇总**默认收起**（只留「盈亏汇总」标题），点标题展开/收起，
+   状态存 localStorage（键 superTrader.sumCollapsed）。 */
+const SUM_LS_KEY = "superTrader.sumCollapsed";
+
+function sumDefaultCollapsed(stored) {
+  // 没存过 ⇒ 默认收起（true）；存过 "0" ⇒ 用户已展开（false）
+  return stored !== "0";
+}
+function _sumApply(collapsed) {
+  const rows = document.getElementById("sumRows");
+  const arrow = document.getElementById("sumToggleArrow");
+  if (rows) rows.style.display = collapsed ? "none" : "";
+  if (arrow) arrow.textContent = collapsed ? "▸" : "▾";
+}
+function initSidebarSummary() {
+  let stored = null;
+  try { stored = localStorage.getItem(SUM_LS_KEY); } catch (e) { /* 隐私模式 */ }
+  _sumApply(sumDefaultCollapsed(stored));
+}
+function toggleSidebarSummary() {
+  const rows = document.getElementById("sumRows");
+  if (!rows) return;
+  const collapsed = rows.style.display === "none";
+  _sumApply(!collapsed);   // 当前收起 ⇒ 展开；当前展开 ⇒ 收起
+  try { localStorage.setItem(SUM_LS_KEY, collapsed ? "0" : "1"); } catch (e) { /* 忽略 */ }
+}
+
 /* ================= 侧栏汇总 ================= */
 let portfolioCfg = { accounts: {}, realized_loss: {} };  // 独立配置文件
 
@@ -13148,7 +13176,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114h", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114i", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -13389,6 +13417,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 8000);
   refreshScreenerPresets();   // 启动时回填「筛选预设」下拉
+  initSidebarSummary();       // 侧栏盈亏汇总默认收起
 });
 
 /* ══════════════════════════════════════════════════════════════════════

@@ -74,20 +74,27 @@
     </div>
   </div>
   <div class="sidebar-summary" id="sidebarSummary">
-    <div class="sum-group-title">手动盘</div>
-    <div class="sum-row"><span class="sum-label">总市值</span><span class="sum-val" id="sumValue">—</span></div>
-    <div class="sum-row"><span class="sum-label" title="历史投入本金（accounts_config 的 principal / deposits 之和，不随盈亏漂移）">总资金</span><span class="sum-val" id="sumCapital">—</span></div>
-    <div class="sum-row"><span class="sum-label" title="现有总资金 = 持仓市值 + 各账户可用资金（随行情实时）">现有总资金</span><span class="sum-val" id="sumAssets">—</span></div>
-    <div class="sum-row"><span class="sum-label">当日盈亏</span><span class="sum-val" id="sumDayPnl">—</span></div>
-    <div class="sum-row"><span class="sum-label">仓位占比</span><span class="sum-val" id="sumPos">—</span></div>
-    <div class="sum-row"><span class="sum-label">总浮亏</span><span class="sum-val" id="sumUnreal">—</span></div>
-    <div class="sum-row"><span class="sum-label">已实现</span><span class="sum-val" id="sumRealLoss">—</span></div>
-    <div class="sum-group-title">自动盘</div>
-    <div class="sum-row"><span class="sum-label">总资产</span><span class="sum-val" id="sumAutoTotal">—</span></div>
-    <div class="sum-row"><span class="sum-label">持仓市值</span><span class="sum-val" id="sumAutoMv">—</span></div>
-    <div class="sum-row"><span class="sum-label">当日盈亏</span><span class="sum-val" id="sumAutoDayPnl">—</span></div>
-    <div class="sum-row"><span class="sum-label">浮动盈亏</span><span class="sum-val" id="sumAutoUnreal">—</span></div>
-    <div class="sum-row"><span class="sum-label">已实现</span><span class="sum-val" id="sumAutoReal">—</span></div>
+    <div class="sum-group-title" id="sumToggle" onclick="toggleSidebarSummary()"
+         style="cursor:pointer;user-select:none"
+         title="盈亏汇总（手动盘 + 自动盘）—— 默认收起，点此展开 / 收起">
+      盈亏汇总 <span id="sumToggleArrow" style="float:right">▸</span>
+    </div>
+    <div id="sumRows" style="display:none">
+      <div class="sum-group-title">手动盘</div>
+      <div class="sum-row"><span class="sum-label">总市值</span><span class="sum-val" id="sumValue">—</span></div>
+      <div class="sum-row"><span class="sum-label" title="历史投入本金（accounts_config 的 principal / deposits 之和，不随盈亏漂移）">总资金</span><span class="sum-val" id="sumCapital">—</span></div>
+      <div class="sum-row"><span class="sum-label" title="现有总资金 = 持仓市值 + 各账户可用资金（随行情实时）">现有总资金</span><span class="sum-val" id="sumAssets">—</span></div>
+      <div class="sum-row"><span class="sum-label">当日盈亏</span><span class="sum-val" id="sumDayPnl">—</span></div>
+      <div class="sum-row"><span class="sum-label">仓位占比</span><span class="sum-val" id="sumPos">—</span></div>
+      <div class="sum-row"><span class="sum-label">总浮亏</span><span class="sum-val" id="sumUnreal">—</span></div>
+      <div class="sum-row"><span class="sum-label">已实现</span><span class="sum-val" id="sumRealLoss">—</span></div>
+      <div class="sum-group-title">自动盘</div>
+      <div class="sum-row"><span class="sum-label">总资产</span><span class="sum-val" id="sumAutoTotal">—</span></div>
+      <div class="sum-row"><span class="sum-label">持仓市值</span><span class="sum-val" id="sumAutoMv">—</span></div>
+      <div class="sum-row"><span class="sum-label">当日盈亏</span><span class="sum-val" id="sumAutoDayPnl">—</span></div>
+      <div class="sum-row"><span class="sum-label">浮动盈亏</span><span class="sum-val" id="sumAutoUnreal">—</span></div>
+      <div class="sum-row"><span class="sum-label">已实现</span><span class="sum-val" id="sumAutoReal">—</span></div>
+    </div>
   </div>
   <div class="sidebar-controls">
     <label class="sidebar-ctl">
@@ -830,6 +837,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261114h"></script>
+<script src="app.js?v=20261114i"></script>
 </body>
 </html>
