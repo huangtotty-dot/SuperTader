@@ -6541,7 +6541,7 @@ async function openDayIntraday(code, name, date) {
       { scale: true, gridIndex: 2, axisLabel: { show: false }, splitLine: { show: false } },
     ],
     series: [
-      { name: "K线", type: "candlestick", data: d.ohlc, barMaxWidth: 10,
+      { name: "K线", type: "candlestick", data: d.ohlc, barMaxWidth: 14, barCategoryGap: "8%",
         itemStyle: { color: "#ef3b3a", color0: "#168d4f",
                      borderColor: "#ff6b62", borderColor0: "#3fbf72", borderWidth: 1 },
         // 缺口色块（zn 放在 K 线之下，别盖住蜡烛）
@@ -9915,7 +9915,7 @@ function renderStockChart(applyZoom = true) {
     ] } : {}),
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
-        barMaxWidth: 12,   // 根数很少时别把蜡烛拉成巨型方块；根数多时仍自动变细
+        barMaxWidth: 18, barCategoryGap: "8%",   // 2026-11-14 owner：更粗；根数很少时别拉成巨型方块，根数多时仍自动变细
         // 2026-11-14 owner：对齐参考图 —— 深蓝黑底上高饱和红涨 #ef3b3a / 深绿跌 #168d4f（仍是 A 股惯例）
         itemStyle: { color: "#ef3b3a", color0: "#168d4f",
                      borderColor: "#ff6b62", borderColor0: "#3fbf72", borderWidth: 1 },
@@ -13176,7 +13176,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114j", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114k", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -14382,7 +14382,7 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         splitLine: { show: false } },
     ],
     series: [
-      { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 10,
+      { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 12, barCategoryGap: "10%",
         // 缺口色块 + 日线均线（与单图同一套口径/颜色）
         markArea: (gaps.length || _mwBoxes2.length)
           ? { silent: true, data: gaps.concat(_mwBoxes2) } : undefined,

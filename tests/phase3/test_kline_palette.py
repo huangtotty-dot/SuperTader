@@ -35,6 +35,12 @@ class TestKlinePalette(unittest.TestCase):
     def test_涨红跌绿_边框仍在(self):
         self.assertIn('borderColor: "#ff6b62", borderColor0: "#3fbf72"', _JS)
 
+    def test_蜡烛加粗(self):
+        # 主图 / dayModal 分钟图 / 九宫格 三处蜡烛更粗 + 缩小类目间隙
+        self.assertIn('barMaxWidth: 18, barCategoryGap: "8%"', _JS)   # 主图
+        self.assertIn('barMaxWidth: 14, barCategoryGap: "8%"', _JS)   # dayModal
+        self.assertIn('barMaxWidth: 12, barCategoryGap: "10%"', _JS)  # 九宫格
+
     def test_版本串一致(self):
         m = re.search(r'app\.js\?v=(\d{8}[a-z])', _HTML)
         self.assertTrue(m, "index.html 缺 app.js?v= 版本串")
