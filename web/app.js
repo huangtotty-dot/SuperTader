@@ -894,6 +894,59 @@ function beaconRowHtml(s, labels) {
 }
 
 let _beaconEl = null, _beaconSig = null;
+let _beaconLastOrd = null, _beaconLastOrdDate = null;   // 变化感知：上一轮的板块序（toast/头部「变化」用）
+
+/* ===== 风向标变化感知（2026-11-14 owner：「发生了变化如何能让我感知到」）=====
+   只在高信号变化时提醒：前3名易主 / 前10进出 / 龙头易主 / 头部均分明显漂移(≥0.5)。
+   60s 轮询下 0.1 级均分漂移天天有，做细粒度告警会刷屏。 */
+function beaconOrd(d) {
+  if (!d || !Array.isArray(d.sectors)) return [];
+  return d.sectors.map(s => ({
+    name: (s && s.name) || "",
+    avg: (s && s.avg != null) ? s.avg : null,
+    limitup: (s && s.limitup != null) ? s.limitup : null,
+    leads: ((s && s.rows) || []).filter(r => r && r.tier === "龙头").map(r => r.name),
+  }));
+}
+
+function beaconChangeSummary(prev, next) {
+  if (!prev || !next) return null;
+  const p = Array.isArray(prev) ? prev : [];
+  const n = Array.isArray(next) ? next : [];
+  if (!p.length || !n.length) return null;
+  const lines = [];
+  // 前3名易主（名字顺序对不上才算；均分漂移不算易主）
+  for (let i = 0; i < 3; i++) {
+    if (p[i] && n[i] && p[i].name !== n[i].name) lines.push(`第${i + 1}名：${p[i].name} → ${n[i].name}`);
+  }
+  // 前10进出
+  const pTop = new Set(p.slice(0, 10).map(s => s.name));
+  const nTop = new Set(n.slice(0, 10).map(s => s.name));
+  const entered = [...nTop].filter(x => !pTop.has(x));
+  const exited = [...pTop].filter(x => !nTop.has(x));
+  if (entered.length) lines.push(`进前10：${entered.join("、")}`);
+  if (exited.length) lines.push(`出前10：${exited.join("、")}`);
+  // 龙头易主（同板块名对得上、龙头名单变了才报）
+  const pByName = new Map(p.map(s => [s.name, s]));
+  for (const s of n) {
+    const q = pByName.get(s.name);
+    if (!q) continue;
+    const a = (q.leads || []).join("/");
+    const b = (s.leads || []).join("/");
+    if (a !== b && (a || b)) lines.push(`「${s.name}」龙头：${a || "无"} → ${b || "无"}`);
+  }
+  // 头部均分明显漂移（≥0.5，只报前10，且板块名顺序没变才算）
+  for (let i = 0; i < Math.min(10, n.length); i++) {
+    const q = p[i];
+    if (q && q.name === n[i].name && q.avg != null && n[i].avg != null
+        && Math.abs(n[i].avg - q.avg) >= 0.5) {
+      lines.push(`「${n[i].name}」均分 ${(+q.avg).toFixed(1)} → ${(+n[i].avg).toFixed(1)}`);
+    }
+  }
+  if (!lines.length) return null;
+  return lines.slice(0, 3).join("；");
+}
+
 function renderMarketBeacon(d) {
   const el = document.getElementById("beaconBody");
   if (!el) return;
@@ -907,6 +960,14 @@ function renderMarketBeacon(d) {
                ((d && d.sectors) || []).length, JSON.stringify(d || {}).length, _ord].join("|");
   if (el === _beaconEl && sig === _beaconSig) return;
   _beaconEl = el; _beaconSig = sig;
+  // ── 变化感知：能走到这里 = sig 变了（真来了新数据）。算板块序差，有实质变化就 toast + 记头部 ──
+  const _nextOrd = beaconOrd(d);
+  const _dd = (d && d.date) || null;
+  if (_beaconLastOrdDate !== _dd) { _beaconLastOrdDate = _dd; _beaconLastOrd = null; }   // 切日不报
+  const _change = beaconChangeSummary(_beaconLastOrd, _nextOrd);
+  _beaconLastOrd = _nextOrd;
+  const _nowTxt = nowTime();
+  if (_change && ((d && d.sectors) || []).length) toast("🧭 风向标：" + _change, "beacon-change");
   if (!d || d.available === false) {
     el.innerHTML = `<div class="empty">${esc((d && d.error) || "无数据")}</div>`;
     return;
@@ -935,6 +996,8 @@ function renderMarketBeacon(d) {
       <button class="mini-btn" onclick="beaconToggleAll(true)">全部展开</button>
       <button class="mini-btn" onclick="beaconToggleAll(false)">全部收起</button>
       <span class="cell-dim">数据日 <b>${esc(_dayTxt)}</b>（与选股猎手同口径）</span>
+      <span class="cell-dim">刷新 <b>${esc(_nowTxt)}</b></span>
+      ${_change ? `<span class="cell-dim" style="color:#f0b90b" title="最近一次有实质变化（前3名/前10/龙头/均分）">变化：${esc(_change)}</span>` : ""}
       <span class="cell-dim">共 <b>${secs.length}</b> 个板块 · <b>${total}</b> 只代表股（默认收起，点方格展开）</span>
       <span class="cell-dim" style="font-size:11px">
         <span style="color:#f85149">■</span> 前 10 名
@@ -13176,7 +13239,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114k", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114l", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
