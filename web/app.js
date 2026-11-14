@@ -6364,7 +6364,7 @@ function _ensureDayModal() {
       <div class="modal-title"><span id="dayModalTitle">日内 5 分钟</span>
         <div style="display:flex;gap:6px"><button class="mini-btn" onclick="closeDayIntraday()">×</button></div></div>
       <div id="dayModalInfo" class="cell-dim" style="font-size:11px;padding:2px 10px;line-height:1.6"></div>
-      <div id="dayModalChart" style="flex:1;min-height:0;background:#0d1117"></div>
+      <div id="dayModalChart" style="flex:1;min-height:0;background:#000020"></div>
     </div>`;
   document.body.appendChild(m);
   return m;
@@ -6515,7 +6515,7 @@ async function openDayIntraday(code, name, date) {
 
   dayInst = echarts.init(box);
   dayInst.setOption({
-    backgroundColor: "#0d1117", animation: false,
+    backgroundColor: "#000020", animation: false,
     legend: { top: 4, left: 8, textStyle: { color: "#8b949e", fontSize: 10 } },
     tooltip: { trigger: "axis", axisPointer: { type: "cross" },
       backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
@@ -6542,8 +6542,8 @@ async function openDayIntraday(code, name, date) {
     ],
     series: [
       { name: "K线", type: "candlestick", data: d.ohlc, barMaxWidth: 10,
-        itemStyle: { color: "#f85149", color0: "#3fb950",
-                     borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
+        itemStyle: { color: "#ef3b3a", color0: "#168d4f",
+                     borderColor: "#ff6b62", borderColor0: "#3fbf72", borderWidth: 1 },
         // 缺口色块（zn 放在 K 线之下，别盖住蜡烛）
         markArea: _gapArea ? { silent: true, z: -1, data: _gapArea } : undefined,
         markLine: { symbol: "none", silent: true,
@@ -9652,7 +9652,7 @@ function renderStockChart(applyZoom = true) {
   }));
   const _opt = {
     // 2026-10-17 owner：K线图用**深色画布**（独立的深色主题，不是把浅色反相）。
-    backgroundColor: "#0d1117",
+    backgroundColor: "#000020",
     // 2026-10-17：首帧播一次入场动画（只有初次 init 时），后续 10s 重绘保持静态，避免闪。
     animation: _firstInit, animationDuration: 340, animationEasing: "cubicOut",
     // 2026-10-16 owner：「打开K线图只默认开启 5日/10日/20日均线」。
@@ -9916,9 +9916,9 @@ function renderStockChart(applyZoom = true) {
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
         barMaxWidth: 12,   // 根数很少时别把蜡烛拉成巨型方块；根数多时仍自动变细
-        // 浅底上 #f85149/#3fb950 偏浅 ⇒ 换成对比更够的一组（涨红跌绿仍是 A 股惯例）
-        itemStyle: { color: "#f85149", color0: "#3fb950",
-                     borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
+        // 2026-11-14 owner：对齐参考图 —— 深蓝黑底上高饱和红涨 #ef3b3a / 深绿跌 #168d4f（仍是 A 股惯例）
+        itemStyle: { color: "#ef3b3a", color0: "#168d4f",
+                     borderColor: "#ff6b62", borderColor0: "#3fbf72", borderWidth: 1 },
         // 箱体 + 缺口共用一个 markArea（ECharts 每个 series 只认一个）
         // ⚠️ 即使为空也要给 `{data: []}`，不能给 undefined：series 集合没变时走的是
         // **普通 merge**（见下面 setOption 注释），merge 不会因为 `markArea: undefined`
@@ -13176,7 +13176,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114i", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261114j", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -13929,7 +13929,7 @@ function _mwBuildCells() {
     if (el && window.echarts) {
       try {
         mwInsts[i] = echarts.init(el);
-        mwInsts[i].setOption({ backgroundColor: "#0d1117", animation: false });
+        mwInsts[i].setOption({ backgroundColor: "#000020", animation: false });
         _mwBindZoom(i, mwInsts[i]);
       } catch (e) { mwInsts[i] = null; }
     }
@@ -13952,7 +13952,7 @@ function mwPick(i, raw) {
   // 换票先清掉旧图，别让上一只票的线留在格子里
   const inst = mwInsts[i];
   if (inst) {
-    try { inst.clear(); inst.setOption({ backgroundColor: "#0d1117", animation: false }); }
+    try { inst.clear(); inst.setOption({ backgroundColor: "#000020", animation: false }); }
     catch (e) { /* 忽略 */ }
   }
   const px = document.getElementById("mwPx" + i);
@@ -14284,7 +14284,7 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       : { color: Number(v) >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)" },
   }));
   return {
-    animation: false, backgroundColor: "#0d1117",
+    animation: false, backgroundColor: "#000020",
     // 成交额窗左上角的「最新一根」读数（2026-11-02）：
     // 九宫格里刻度字小、柱子矮，不悬停也要能读出当下量能有多大。
     // 文字描边（textBorder）保证压在柱子上也看得清；z 提到 series 之上。
@@ -14391,8 +14391,8 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
           ? { silent: true, symbol: "none",
               data: _lines.concat(_vpLine ? [_vpLine] : [], _ma5Line ? [_ma5Line] : []) }
           : undefined,
-        itemStyle: { color: "#f85149", color0: "#3fb950",
-                     borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
+        itemStyle: { color: "#ef3b3a", color0: "#168d4f",
+                     borderColor: "#ff6b62", borderColor0: "#3fbf72", borderWidth: 1 } },
       // 密集成交区：右侧横向直方图（画在网格外留白里，不压 K 线/缺口/画框）
       ...(_vpSeries ? [_vpSeries] : []),
       line(s.ma5, "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
