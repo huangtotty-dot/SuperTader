@@ -45,6 +45,9 @@ _DEDUP_FP = os.path.join(_BASE, "t_io", "state", "hunter_poll_alerts.json")
 # 0.95 留 5pp 余量：只有"池内 >5% 拿不到行情"才报，正常波动够不着。
 _MIN_COVERAGE = 0.95
 _DEDUP_KEEP = 10             # 去重文件保留最近 N 天
+# poll_once 与 regenerate_summary 串行：一次只跑一个全池管线，避免 :00/:30 与 15 分钟
+# 排名重跑撞车把 4 物理核打满（见 main.py run_watch 的线程级 CPU 归因）。
+_PIPELINE_LOCK = threading.Lock()
 
 # 2026-11-04 owner：「选股猎手轮询只轮询股票在多头，同时均线粘合的股票」。
 # 口径：日线三态=多头（MA60 20日变化率>+3%）**且** 均线粘合（core.ma_reclaim.convergence_state：
@@ -281,6 +284,15 @@ def _coverage(watchlist_df) -> float:
 
 
 def poll_once(date_str: str = None) -> dict:
+    """30 分钟轮询的一轮（对外名不变，测试桩 monkeypatch 的就是这个名字）。
+
+    与 `regenerate_summary` 共用 `_PIPELINE_LOCK` 串行 —— 一次只跑一个全池管线。
+    """
+    with _PIPELINE_LOCK:
+        return _poll_once_inner(date_str)
+
+
+def _poll_once_inner(date_str: str = None) -> dict:
     """跑一轮：猎手取数 + 打分 + 校验。**不抛**，异常都收进 `anomalies`。
 
     返回 {"ok": bool, "anomalies": [{"kind","msg"}], "stats": {...}}
@@ -844,3 +856,97 @@ def run_and_alert(date_str: str = None) -> dict:
             log.info("猎手轮询心跳已在配置中关闭（feishu.notify_on_hunter_poll_heartbeat）")
     res["pushed"] = bool(sent)
     return res
+
+
+# ============================================================================
+# 市场风向标排名 15 分钟重跑（2026-11-14 owner：「风向标盘内排名至少15分钟级刷新」）
+# ============================================================================
+# 为什么单独一条线程：main.py 一轮 scan_once 实测 ~15 分钟，挂在主循环会把 15 分钟
+# 稀释成 30+（见 memory/main_loop_15min_dilates_all_throttles）。这里与「站上5日线」watcher
+# 同款：独立 daemon 线程自带 15 分钟节拍，不依赖主循环。
+#
+# 为什么写 daily_summary.json：市场风向标的「板块排名/均分/涨停数」真源就是这个文件，
+# 而它只有「选股猎手」跑完才会重写（GUI 按钮 / CLI）。30 分钟轮询只做异常校验、不写回。
+# 本函数 = 全池重跑猎手打分 + compute_heat_scores 落盘（就是 CLI 管线写排名的同一步）。
+SUMMARY_REGEN_INTERVAL_SEC = 900   # 15 分钟一轮（owner 2026-11-14 指定）
+
+
+def regenerate_summary(date_str: str = None) -> dict:
+    """全池重跑猎手打分，经 `compute_heat_scores` 写回 daily_summary.json。**不抛**。
+
+    与 `poll_once` 的区别：① **全池**（不做「多头+均线粘合」过滤——那过滤是给 30 分钟轮询
+    省算力的，写排名必须全池）；② **落盘**（调 `compute_heat_scores`，即 CLI 写 daily_summary.json
+    的同一步）。与 poll_once 共用 `_PIPELINE_LOCK` 串行。
+    返回 {"ok": bool, "elapsed": float, "n_sectors": int, "error": str}。
+    """
+    import time as _time
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    _t0 = _time.time()
+    out = {"ok": False, "elapsed": 0.0, "n_sectors": 0, "error": ""}
+    try:
+        with _PIPELINE_LOCK:
+            _ensure_path()
+            import stock_hunter.main as H          # noqa: N813
+            cfg = H.load_config(os.path.join(_HUNTER_DIR, "config.json"))
+            buf = io.StringIO()
+            _cap = _ThreadWarnCapture()
+            _root = logging.getLogger()
+            _root_old_level = _root.level
+            _root.addHandler(_cap)
+            try:
+                if _root.level > logging.WARNING:
+                    _root.setLevel(logging.WARNING)
+                with redirect_stdout(buf):
+                    _out = H.prepare_data(cfg, date_str)        # 全池（不传 only_codes）
+                    data, loader = (_out if isinstance(_out, tuple) else (_out, None))
+                    if loader is None:
+                        out["error"] = "prepare_data 未返回 loader（watchlist 缺失）"
+                        return out
+                    H.score_stocks(data, cfg)
+                    loader.set_watchlist(data["watchlist"])
+                    data["summary"] = loader.load_concept_summary()
+                    data["detail"] = loader.load_detail_ranking()
+                    data["sectors"] = loader.load_all_sectors()
+                    from modules.heat_tracker import compute_heat_scores
+                    data["summary"] = compute_heat_scores(
+                        data["summary"], data["sectors"], date_str.replace("-", ""))
+            finally:
+                _root.removeHandler(_cap)
+                _root.setLevel(_root_old_level)
+        _sum = data.get("summary")
+        out["n_sectors"] = int(len(_sum)) if _sum is not None and not getattr(_sum, "empty", True) else 0
+        out["ok"] = out["n_sectors"] > 0
+        if not out["ok"]:
+            out["error"] = "板块排名(summary)为空"
+    except Exception as e:
+        out["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        out["elapsed"] = round(_time.time() - _t0, 1)
+    return out
+
+
+def run_summary_regen(poll_sec: float = None, stop_event=None, sleep_fn=None, now_fn=None) -> None:
+    """独立 daemon 线程：交易时段每 `poll_sec`（默认 15 分钟）全池重跑 + 写回 daily_summary.json。
+
+    `sleep_fn` / `now_fn` 为测试缝。**不推飞书**（这不是告警，是数据刷新），失败只记日志下一轮重试。
+    """
+    import time as _time
+    poll = float(poll_sec or SUMMARY_REGEN_INTERVAL_SEC)
+    _sleep = sleep_fn or _time.sleep
+    _now = now_fn or datetime.now
+    log.info(f"[风向标排名] 15分钟重跑线程启动：每 {poll:.0f}s 一轮（交易时段）")
+    while not (stop_event is not None and stop_event.is_set()):
+        now = _now()
+        if not in_trading_hours(now):
+            _sleep(30)
+            continue
+        try:
+            res = regenerate_summary(now.strftime("%Y-%m-%d"))
+            if res.get("ok"):
+                log.info(f"[风向标排名] 重跑完成：{res.get('n_sectors')} 个板块，"
+                         f"耗时 {res.get('elapsed', 0):.1f}s")
+            else:
+                log.warning(f"[风向标排名] 重跑失败：{res.get('error') or '未知'}")
+        except Exception as e:
+            log.warning(f"[风向标排名] 重跑异常（下一轮重试）：{type(e).__name__}: {str(e)[:160]}")
+        _sleep(poll)

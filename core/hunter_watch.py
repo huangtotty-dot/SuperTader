@@ -23,6 +23,7 @@ _ma5_pullback_thread = None
 _ma60_pullback_thread = None
 _hunter_poll_last = None      # 节流（30 分钟一轮）
 _hunter_poll_thread = None    # 单飞（上一轮没跑完不开新轮）
+_summary_regen_thread = None  # 风向标排名 15 分钟重跑（单飞）
 
 
 def _hunter_ma5_feishu_enabled(key: str = "notify_on_hunter_ma5") -> bool:
@@ -161,6 +162,29 @@ def _maybe_run_hunter_poll(now: datetime) -> None:
     _hunter_poll_thread = _threading.Thread(
         target=_worker, args=(today,), name="hunter-poll", daemon=True)
     _hunter_poll_thread.start()
+
+
+def _start_summary_regen() -> None:
+    """2026-11-14 owner：「市场风向标盘内排名至少 15 分钟级刷新」。
+
+    独立 daemon 线程（**不挂主循环**，与「站上5日线」watcher 同样的理由）：每 15 分钟全池重跑
+    猎手打分并写回 daily_summary.json（风向标排名 / 星空图 / 板块贡献的真源）。**不推飞书**。
+    开关：config PARAMS 的 `summary_regen_poll_sec`（默认 900，缺省即 15 分钟）。
+    """
+    global _summary_regen_thread
+    try:
+        if _summary_regen_thread is not None and _summary_regen_thread.is_alive():
+            return
+        from core.hunter_poll import run_summary_regen, SUMMARY_REGEN_INTERVAL_SEC
+        _interval = float(PARAMS.get("summary_regen_poll_sec", SUMMARY_REGEN_INTERVAL_SEC)
+                          or SUMMARY_REGEN_INTERVAL_SEC)
+        _summary_regen_thread = _threading.Thread(
+            target=run_summary_regen, kwargs={"poll_sec": _interval},
+            name="summary-regen", daemon=True)
+        _summary_regen_thread.start()
+        log.info("🧭 风向标排名 15 分钟重跑已启动（独立线程，每 %.0f 分钟，交易时段）" % (_interval / 60.0))
+    except Exception as e:
+        log.warning(f"⚠️ 风向标排名重跑启动失败（不阻断主循环）: {str(e)[:160]}")
 
 
 def _hunter_poll_feishu_enabled() -> bool:

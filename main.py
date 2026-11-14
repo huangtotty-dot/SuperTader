@@ -40,6 +40,7 @@ from core.eod_tasks import _maybe_backfill_sentiment
 from core.price_alert_watch import _start_price_alert_watch
 from core.hunter_watch import (
     _start_hunter_ma5_watch, _start_ma5_pullback_watch, _start_ma60_pullback_watch,
+    _start_summary_regen,
 )
 from analysis.indicators import (
     add_indicators, add_5min_indicators, add_15min_indicators,
@@ -89,6 +90,8 @@ def run_watch():
     _start_ma5_pullback_watch()
     # 2026-11-04：回踩60日线不破 · 同一套轮询（独立线程/独立去重/独立开关）
     _start_ma60_pullback_watch()
+    # 2026-11-14：市场风向标排名 15 分钟重跑（独立线程，写回 daily_summary.json；不推飞书）
+    _start_summary_regen()
 
 
     log.info("========= 做T终极护城河防御版 启动 =========")
