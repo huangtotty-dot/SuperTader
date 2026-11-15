@@ -4578,39 +4578,148 @@ async function loadAbnormalPool(force) {
 /* 2026-11-09 owner：「异常监控池增加一个搜索框 搜索某只股之后只显示该股这一行」。
    纯前端按行过滤（代码/名称，部分匹配）；不改后端、不改 `_abnRows`，15s/60s 重绘后
    仍按输入框里的关键字过滤（renderAbnormalPool 末尾会再调一次）。Esc / 清空 = 恢复全部。 */
+/* 日期段折叠（2026-11-15 owner：「日期可以闭合，默认闭合」）。key=涨停日期段（""=无涨停日期）。 */
+let _abnCollapsed = {};
+function toggleAbnDate(key) {
+  _abnCollapsed[key] = !_abnCollapsed[key];
+  applyAbnFilter();
+}
+
 function applyAbnFilter() {
   const body = document.getElementById("abnormalPoolBody");
   if (!body) return;
   const inp = document.getElementById("abnFilter");
   const q = ((inp && inp.value) || "").trim().toLowerCase();
+  // 筛选时藏起连板天梯，只看明细表里匹配的那一行（2026-11-15）
+  const ladder = document.getElementById("abnormalLadder");
+  if (ladder) ladder.style.display = q ? "none" : "";
   let shown = 0, total = 0;
   body.querySelectorAll("tbody tr[data-abnrow]").forEach(tr => {
     total++;
     const hit = !q
       || String(tr.getAttribute("data-abnrow") || "").toLowerCase().includes(q)
       || String(tr.getAttribute("data-abnname") || "").toLowerCase().includes(q);
-    tr.style.display = hit ? "" : "none";
+    // 日期段折叠：默认闭合；筛选时临时全部展开（只看匹配行），清空筛选恢复各自折叠态。
+    const k = tr.getAttribute("data-abndate") || "";
+    const collapsed = !q && !!_abnCollapsed[k];
+    tr.style.display = (hit && !collapsed) ? "" : "none";
     if (hit) shown++;
+  });
+  // 日期头：折叠箭头随状态翻转；筛选时一并藏掉（只看匹配行）。
+  body.querySelectorAll("tbody tr.abn-date-head").forEach(h => {
+    const k = h.getAttribute("data-abndate") || "";
+    h.style.display = q ? "none" : "";
+    const caret = h.querySelector(".abn-caret");
+    if (caret) caret.textContent = _abnCollapsed[k] ? "▸" : "▾";
+  });
+  // 题材头（2026-11-15）：随所属日期段一起折叠；筛选时藏掉（只看匹配行）。
+  body.querySelectorAll("tbody tr.abn-theme-head").forEach(h => {
+    const k = h.getAttribute("data-abndate") || "";
+    h.style.display = (q || !!_abnCollapsed[k]) ? "none" : "";
   });
   const info = document.getElementById("abnFilterInfo");
   if (info) {
     info.textContent = q
-      ? (shown ? `筛选「${q}」：显示 ${shown} / 共 ${total} 只` : `筛选「${q}」：没有匹配的股票`)
+      ? (shown ? `筛选「${q}」：显示 ${shown} / 共 ${total} 条涨停记录` : `筛选「${q}」：没有匹配的股票`)
       : "";
   }
+}
+
+/* 连板天梯（2026-11-15 owner：「显示方式参考连板天梯」）——
+   今日涨停（连板中/今日首板/反包）按连板高度分列成天梯，一眼看高度结构；
+   断板观察条放在下方，按断板天数分三组（D+1 最该盯：次日能否反包）。
+   纯前端按 `limitup_phase`（后端 `_pool_rows` 已算好）分组，不改后端。 */
+function ladderCellHtml(r) {
+  const p = r.limitup_phase || {};
+  const reb = p.rebound === true;
+  const b = Number(p.board) || 0;
+  const t = r.limit_time || "";
+  const sealed = r.limit_sealed === true ? '<span class="lad-sealed">封</span>'
+    : r.limit_sealed === false ? '<span class="cell-dim">未封</span>' : "";
+  const cls = reb ? "rebound" : (b >= 4 ? "lb4" : b === 3 ? "lb3" : b === 2 ? "lb2" : "lb1");
+  const tip = `${r.code} ${r.name} · ${p.phase || "—"}${b ? `·${b}板` : ""}`
+    + ` · 涨停 ${t || "时间—"}`
+    + (r.limit_sealed === true ? "封" : r.limit_sealed === false ? "未封" : "")
+    + (r.limit_date ? ` · ${r.limit_date}` : "")
+    + (r.reason_manual ? ` · ${r.reason_manual}` : "");
+  return `<div class="lad-cell ${cls}" data-abnrow="${esc(r.code)}" data-abnname="${esc(r.name)}"
+      ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" title="${esc(tip)}">
+    <div class="lad-name">${reb ? "🔁 " : ""}${esc(r.name)}</div>
+    <div class="lad-time">${t ? esc(t) : "—"}${sealed}</div>
+  </div>`;
+}
+
+function renderAbnormalLadder(rows) {
+  const el = document.getElementById("abnormalLadder");
+  if (!el) return;
+  if (!rows || !rows.length) { el.innerHTML = ""; return; }
+  // 一票多日（2026-11-15）：同一只票每个涨停日各一行，但天梯只按「当前阶段」展示一次，
+  // 先按 code 去重（阶段字段是同一只票各事件行共享的）。
+  const seen = new Set();
+  rows = rows.filter(r => { if (seen.has(r.code)) return false; seen.add(r.code); return true; });
+  const p = r => (r.limitup_phase || {});
+  const today = rows.filter(r => {
+    const q = p(r);
+    return q.gap === 0 && (q.phase === "连板中" || q.phase === "今日首板" || q.phase === "反包");
+  });
+  const broken = rows.filter(r => p(r).gap >= 1);
+  const BUCKETS = [[1, "首板"], [2, "2板"], [3, "3板"], [4, "4板"], [5, "5板+"]];
+  const buckets = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+  for (const r of today) {
+    const b = Number(p(r).board) || 1;
+    buckets[b >= 5 ? 5 : b].push(r);
+  }
+  for (const k in buckets) buckets[k].sort((a, b) =>
+    String(a.limit_time || "99:99").localeCompare(String(b.limit_time || "99:99"))
+    || String(a.code).localeCompare(String(b.code)));
+  const parts = [];
+  if (today.length) {
+    const cols = BUCKETS.map(([k, label]) => {
+      const cells = buckets[k].map(ladderCellHtml).join("");
+      const hot = k >= 3 ? " hot" : "";
+      const n = buckets[k].length;
+      return `<div class="lad-col"><div class="lad-col-head${hot}">${label}`
+        + (n ? `<span class="lad-count">${n}</span>` : "")
+        + `</div>${cells}</div>`;
+    }).join("");
+    parts.push(`<div class="limitup-ladder">${cols}</div>`);
+  }
+  if (broken.length) {
+    const groups = [
+      ["断板D+1 · 盯反包", broken.filter(r => p(r).gap === 1), "d1"],
+      ["断板回踩 2~3日", broken.filter(r => p(r).gap >= 2 && p(r).gap <= 3), ""],
+      ["断板走远 ≥4日", broken.filter(r => p(r).gap >= 4), ""],
+    ].filter(g => g[1].length);
+    const chips = groups.map(([label, list, cls]) => {
+      const cells = list.map(r => {
+        const b = Number(p(r).board) || 0;
+        const g = p(r).gap;
+        const tip = `${r.code} ${r.name} · 断板 ${g} 日` + (b ? ` · 原${b}板` : "")
+          + (r.reason_manual ? ` · ${r.reason_manual}` : "");
+        return `<span class="broken-chip ${cls}" data-abnrow="${esc(r.code)}" data-abnname="${esc(r.name)}"
+          ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" title="${esc(tip)}">`
+          + `${esc(r.name)}${b ? `<span class="bc-board">${b}板</span>` : ""}</span>`;
+      }).join("");
+      return `<div class="broken-group"><span class="broken-label">${label}</span>${cells}</div>`;
+    }).join("");
+    parts.push(`<div class="broken-strip">${chips}</div>`);
+  }
+  el.innerHTML = parts.join("");
 }
 
 function renderAbnormalPool(d) {
   const el = document.getElementById("abnormalPoolBody");
   if (!el) return;
   const rows = d.rows || [];
+  // 连板天梯（2026-11-15 owner：按连板高度分列 + 断板观察）——放在明细表上方，先渲染。
+  renderAbnormalLadder(rows);
   if (!rows.length) {
     el.innerHTML = '<div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div>';
     applyAbnFilter();
     return;
   }
   const labels = d.cond_labels || {};
-  const body = rows.map(r => {
+  const rowHtml = (r, dk) => {
     // 2026-11-04：多头用红色徽标（dayStageBadgeHtml 统一渲染，三态未知码兜底「—」）
     const stage = dayStageBadgeHtml(r.build_stage) || '<span class="cell-dim">—</span>';
     // 「通过 X/3」与建仓表同口径（t_regime + t_trend + t_drawdown），不是条件圆点总数
@@ -4627,11 +4736,15 @@ function renderAbnormalPool(d) {
     //    （owner 2026-10-23 实报：深圳华强今天刚站上 5 日线，整行却是红的）。
     const _mr5 = (r.ma_reclaim || {}).above5;
     const _above5 = (typeof _mr5 === "boolean") ? _mr5 : (r.timing_features || {}).above_ma5;
-    const rowBg = (_above5 === true) ? "background:rgba(63,185,80,.10);"
+    // 反包（断板后再次涨停）高亮优先于站上/跌破 5 日线的整行底色（2026-11-15 owner）。
+    const _rebound = !!(r.limitup_phase && r.limitup_phase.phase === "反包");
+    const rowBg = _rebound ? "background:rgba(240,185,11,.10);"
+      : (_above5 === true) ? "background:rgba(63,185,80,.10);"
       : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
-    return `<tr data-abnrow="${esc(r.code)}" data-abnname="${esc(r.name)}" ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
+    return `<tr data-abnrow="${esc(r.code)}" data-abnname="${esc(r.name)}" data-abndate="${esc(dk)}" ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
         title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
       <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>${limitBoardBadge(r.limit_board, r.limit_date)}</td>
+      <td style="text-align:center">${phaseBadge(r.limitup_phase)}</td>
       <td>${verdictBadge(r.verdict)}</td>
       <td class="num"><b>${r.composite_score != null ? r.composite_score : "—"}</b></td>
       <td class="num"><b>${metTxt}</b></td>
@@ -4657,9 +4770,60 @@ function renderAbnormalPool(d) {
       <td style="text-align:center"><button class="mini-btn" title="从监控池移除"
         onclick="event.stopPropagation();abnormalRemove('${esc(r.code)}')">×</button></td>
     </tr>`;
+  };
+  // —— 按涨停日期分段（2026-11-15 owner：「列表按日期显示，像同花顺」）——
+  // 池会跨多日累加（「🚀 加入当日涨停」），把明细表按涨停日分段、新→旧；
+  // 组内按连板数降序 → 首次涨停时间 → 代码；无涨停日期的票归「无涨停日期」段（最末）。
+  const _dn = s => { const d = String(s || "").replace(/[^0-9]/g, ""); return d ? parseInt(d, 10) : 0; };
+  const _dfmt = s => { const d = String(s || "").trim(); return /^\d{8}$/.test(d) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : d; };
+  const _byDate = new Map();
+  for (const r of rows) {
+    const k = _dfmt(r.limit_date);
+    if (!_byDate.has(k)) _byDate.set(k, []);
+    _byDate.get(k).push(r);
+  }
+  const _dateKeys = Array.from(_byDate.keys()).sort((a, b) => {
+    const an = _dn(a), bn = _dn(b);
+    if (an && bn) return bn - an;
+    if (an) return -1;
+    if (bn) return 1;
+    return 0;
+  });
+  // 默认闭合：新出现的日期段记为折叠；老日期段保留用户手动展开/闭合的状态（15s/60s 重绘不清空）。
+  _dateKeys.forEach(k => { if (_abnCollapsed[k] === undefined) _abnCollapsed[k] = true; });
+  const body = _dateKeys.map(k => {
+    const list = _byDate.get(k).sort((a, b) =>
+      (Number(b.limit_board) || 0) - (Number(a.limit_board) || 0)
+      || String(a.limit_time || "99:99").localeCompare(String(b.limit_time || "99:99"))
+      || String(a.code || "").localeCompare(String(b.code || "")));
+    // —— 日期段内再按涨停题材分组（2026-11-15 owner：「每一日按图片里的题材分类」）——
+    // 题材名来自后端 `limit_theme`（韭研复盘 sector_breadth 当日 section）；空 → 「其他」。
+    // 题材排序 = 只数降序，「其他」恒垫底（与全天涨停复盘简图一致）。
+    const _byTheme = new Map();
+    for (const r of list) {
+      const t = (r.limit_theme && String(r.limit_theme).trim()) || "其他";
+      if (!_byTheme.has(t)) _byTheme.set(t, []);
+      _byTheme.get(t).push(r);
+    }
+    const _themeKeys = Array.from(_byTheme.keys()).sort((a, b) => {
+      if (a === "其他") return 1;
+      if (b === "其他") return -1;
+      return _byTheme.get(b).length - _byTheme.get(a).length || a.localeCompare(b);
+    });
+    const _themeBody = _themeKeys.map(t => {
+      const tl = _byTheme.get(t);
+      // colspan=18 与 thead 固定 18 列一致；加一列需同步改这里
+      return `<tr class="abn-theme-head" data-abndate="${esc(k)}">`
+        + `<td colspan="18"><span class="abn-theme-dot"></span>${esc(t)}<span class="abn-theme-count"> *${tl.length}</span></td></tr>`
+        + tl.map(r => rowHtml(r, k)).join("");
+    }).join("");
+    return `<tr class="abn-date-head" data-abndate="${esc(k)}" onclick="toggleAbnDate('${esc(k)}')">`
+      + `<td colspan="18"><span class="abn-caret">▸</span><span class="abn-date-bar"></span>`
+      + (k ? `📅 ${esc(k)}　涨停 ${list.length} 只` : `📅 无涨停日期　${list.length} 只`)
+      + `</td></tr>` + _themeBody;
   }).join("");
   el.innerHTML = `<table><thead><tr>
-      <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
+      <th>股票</th><th title="涨停阶段（纯组织标签，不构成买卖信号）：连板中 / 反包 / 今日首板 / 断板D+1 / 断板回踩 / 断板走远 / 无近期涨停。反包=断板后再次涨停（唯一事后正收益的断板后事件，弱提醒）">阶段</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
       <th>日线阶段</th><th title="是否站上 20 日线（观察列）">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
       <th class="num">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
@@ -4671,14 +4835,14 @@ function renderAbnormalPool(d) {
       <th title="上方 🕘 = **涨停时间**（通达信本地 1 分钟线里**首次触及涨停价**的分钟；封=收盘仍封板）。下方是**手动**记录的涨停原因（一句话，最多 120 字），只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">时间 · 手动</span></th>
       <th></th>
     </tr></thead><tbody>${body}</tbody></table>
-    <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只${
+    <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${new Set(rows.map(r => r.code)).size}</b> 只 · ${rows.length} 条涨停记录${
       (d.pending ? ` · <span style="color:#d29922">判定待算 ${d.pending} 只</span>（15s 内补齐）` : "")
     }${
-      rows.some(r => r.limit_date) ? " · 按涨停时间排序（新日期在前）"
+      rows.some(r => r.limit_date) ? " · 按涨停日期分组（新→旧），组内按涨停题材 → 连板数 → 涨停时间"
         + (rows.filter(r => r.limit_date && !r.limit_time).length
           ? ` · <span style="color:#d29922">${rows.filter(r => r.limit_date && !r.limit_time).length} 只缺涨停时间</span>`
           : " · 涨停时间已齐") : ""
-    } · 双击行看K线 ·
+    } · <span title="断板后再次涨停 = 唯一事后正收益的断板后事件（H=5 约 +0.3~1.0%，弱）；金色行高亮。其余阶段仅作组织标签，不构成买卖信号">🔁 反包 = 断板后再次涨停（弱提醒，非买入信号）</span> · 双击行看K线 ·
       判定/得分/时机条件与「建仓信号扫描」同源；本地日线缓存不足的票显示 —</div>`;
   // 重绘后沿用搜索框里的关键字（15s 行情刷新 / 60s 整行刷新都不会把筛选重置）
   applyAbnFilter();
@@ -4772,6 +4936,28 @@ function limitBoardBadge(board, date) {
   return `<span title="${esc(tip)}" style="display:inline-block;font-size:10px;line-height:1.2;`
     + `padding:0 4px;margin-left:4px;border-radius:3px;border:1px solid ${bd};`
     + `background:${bg};color:#f85149;white-space:nowrap;vertical-align:1px">${txt}</span>`;
+}
+
+/* 涨停阶段徽标（2026-11-15 owner：「按时期分类」+ 反包高亮）。纯组织标签，
+   与「建仓表」无关；反包 = 断板后首次再次涨停（唯一二波正收益，弱提醒）。
+   判词：doc/research/2026-11-15_涨停股介入时机与阶段分类.md */
+function phaseBadge(p) {
+  if (!p || !p.phase) return '<span class="cell-dim">—</span>';
+  const ph = p.phase, board = Number(p.board) || 0;
+  let label = ph, bg = "", color = "#8b949e", bd = "rgba(139,148,158,.4)", bold = "";
+  if (ph === "连板中") { label = `连板中·${board}板`; bg = "rgba(248,81,73,.18)"; color = "#f85149"; bd = "rgba(248,81,73,.5)"; }
+  else if (ph === "反包") { label = `🔁 反包${board > 1 ? "·" + board + "板" : ""}`; bg = "rgba(240,185,11,.16)"; color = "#f0b90b"; bd = "rgba(240,185,11,.6)"; bold = "font-weight:700;"; }
+  else if (ph === "今日首板") { label = "今日首板"; bg = "rgba(248,81,73,.10)"; color = "#f85149"; bd = "rgba(248,81,73,.4)"; }
+  else if (ph === "断板D+1") { label = board >= 3 ? `断板D+1·原${board}板` : "断板D+1"; bg = "rgba(248,81,73,.05)"; color = "#c9a2a0"; bd = "rgba(139,148,158,.4)"; }
+  else if (ph === "断板回踩") { label = board ? `断板回踩·原${board}板` : "断板回踩"; bg = "rgba(139,148,158,.08)"; color = "#8b949e"; bd = "rgba(139,148,158,.35)"; }
+  else if (ph === "断板走远") { label = board ? `断板走远·原${board}板` : "断板走远"; color = "#6e7681"; bd = "rgba(110,118,129,.3)"; }
+  else if (ph === "无近期涨停") { label = "无近期涨停"; color = "#6e7681"; bd = "rgba(110,118,129,.3)"; }
+  const tip = ph === "反包"
+    ? "断板后首次再次涨停（二波启动）。判词：H=5 +0.3~1.0%，唯一断板后正收益事件，但弱（扣成本≈0），仅关注提醒。"
+    : (ph === "断板D+1" ? "昨日涨停今日断板。高度板(≥3)断板是最大风险（三板+断板 H=5 −5.96%）。"
+    : (ph === "断板回踩" ? "断板后 2~3 日。回踩低吸本身无正收益（H=1 −0.51%），本阶段只在等反包。"
+    : "涨停阶段 = 按今日/昨日是否涨停 + 最近涨停日距今的纯组织分类。"));
+  return `<span title="${esc(tip)}" style="display:inline-block;font-size:10px;line-height:1.3;padding:1px 5px;border-radius:3px;border:1px solid ${bd};background:${bg};color:${color};white-space:nowrap;${bold}">${label}</span>`;
 }
 
 /* 涨停时间（2026-11-03 owner：「涨停原因中添加涨停时间」）——
@@ -13239,7 +13425,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261114l", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261115e", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

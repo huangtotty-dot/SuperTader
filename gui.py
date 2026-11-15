@@ -306,6 +306,266 @@ def _limitup_from_recap(date, fp=None):
     return sorted(seen.values(), key=lambda r: (-r["board"], r["code"]))
 
 
+# 涨停题材索引（2026-11-15 owner：「每一日按韭研复盘题材分类」，仿全天涨停复盘简图）：
+# {date: {code: 题材名}}，读 stock_hunter/data/sector_breadth.json 的 sections.members。
+# 与「每日复盘 → 主线广度」同一真源；按 (文件, mtime) 缓存（复盘 append-only，mtime 变了才重读）。
+_SECTOR_BREADTH_THEME = {"fp": None, "mtime": 0.0, "idx": None}
+_SECTOR_BREADTH_THEME_LOCK = threading.Lock()
+
+
+def _limitup_theme_index(fp=None):
+    """sector_breadth.json → {date: {code: 题材名}}（纯本地、零网络）。
+
+    同一只票同一天若出现在多个题材（极少），取先出现的那个（复盘里一票一题材）。
+    """
+    if fp is None:
+        fp = BASE / "stock_hunter" / "data" / "sector_breadth.json"
+    key_fp = str(fp)
+    try:
+        mt = Path(fp).stat().st_mtime
+    except Exception:
+        return {}
+    with _SECTOR_BREADTH_THEME_LOCK:
+        if (_SECTOR_BREADTH_THEME["fp"] == key_fp
+                and _SECTOR_BREADTH_THEME["mtime"] == mt
+                and _SECTOR_BREADTH_THEME["idx"] is not None):
+            return _SECTOR_BREADTH_THEME["idx"]
+    idx = {}
+    try:
+        d = json.loads(Path(fp).read_text(encoding="utf-8"))
+        for day, rec in (d.get("days") or {}).items():
+            m = {}
+            for sec, v in (rec.get("sections") or {}).items():
+                for mem in (v.get("members") or []):
+                    code = str(mem.get("code") or "").zfill(6)
+                    if len(code) == 6 and code.isdigit():
+                        m.setdefault(code, str(sec))
+            idx[str(day)] = m
+    except Exception:
+        idx = {}
+    with _SECTOR_BREADTH_THEME_LOCK:
+        _SECTOR_BREADTH_THEME["fp"] = key_fp
+        _SECTOR_BREADTH_THEME["mtime"] = mt
+        _SECTOR_BREADTH_THEME["idx"] = idx
+    return idx
+
+
+# 涨停题材手工分类（2026-11-15 owner「逐一分类」）：{days: {date: {code: 题材名}}}。
+# 同花顺涨停聚焦接口**不回涨停原因**，韭研 sector_breadth 只覆盖概念池；超出部分由 owner
+# 逐日手工归类（11-02 首批 125 只）。手工分类优先于韭研复盘（名字更贴近同花顺题材口径）。
+_LIMITUP_MANUAL_THEME_FP = BASE / "config" / "market" / "limitup_theme_manual.json"
+_LIMITUP_MANUAL_THEME = {"fp": None, "mtime": 0.0, "idx": None}
+_LIMITUP_MANUAL_THEME_LOCK = threading.Lock()
+
+
+def _limitup_manual_theme_index(fp=None):
+    """config/market/limitup_theme_manual.json → {date: {code: 题材名}}（纯本地、零网络）。
+
+    owner 逐日手工归类（同花顺「涨停原因」口径），优先于韭研复盘 sector_breadth。
+    """
+    if fp is None:
+        fp = _LIMITUP_MANUAL_THEME_FP
+    key_fp = str(fp)
+    try:
+        mt = Path(fp).stat().st_mtime
+    except Exception:
+        return {}
+    with _LIMITUP_MANUAL_THEME_LOCK:
+        if (_LIMITUP_MANUAL_THEME["fp"] == key_fp
+                and _LIMITUP_MANUAL_THEME["mtime"] == mt
+                and _LIMITUP_MANUAL_THEME["idx"] is not None):
+            return _LIMITUP_MANUAL_THEME["idx"]
+    idx = {}
+    try:
+        d = json.loads(Path(fp).read_text(encoding="utf-8"))
+        for day, m in (d.get("days") or {}).items():
+            if isinstance(m, dict):
+                idx[str(day)] = {str(c).zfill(6): str(t) for c, t in m.items() if t}
+    except Exception:
+        idx = {}
+    with _LIMITUP_MANUAL_THEME_LOCK:
+        _LIMITUP_MANUAL_THEME["fp"] = key_fp
+        _LIMITUP_MANUAL_THEME["mtime"] = mt
+        _LIMITUP_MANUAL_THEME["idx"] = idx
+    return idx
+
+
+# —— 一票多日（2026-11-15 owner：同一只票多日涨停要各列一行，别再被「更晚日期」吞掉）——
+def _abn_limit_dates(e):
+    """异常监控池条目 → {涨停日: {board, time, sealed, time_gran}}。
+
+    新格式存 `limit_dates`；旧格式只有单字段（limit_date/limit_board/limit_time/
+    limit_sealed/limit_time_gran），就地视为一个事件返回（迁移不落盘，写回由调用方负责）。
+    """
+    if not isinstance(e, dict):
+        return {}
+    ld = e.get("limit_dates")
+    if isinstance(ld, dict):
+        out = {}
+        for dd, ev in ld.items():
+            dd = str(dd or "")
+            if not dd:
+                continue
+            ev = ev if isinstance(ev, dict) else {}
+            out[dd] = {"board": int(ev.get("board") or 0),
+                       "time": str(ev.get("time") or ""),
+                       "sealed": ev.get("sealed"),
+                       "time_gran": str(ev.get("time_gran") or "")}
+        return out
+    dd = str(e.get("limit_date") or "")
+    if not dd:
+        return {}
+    return {dd: {"board": int(e.get("limit_board") or 0),
+                 "time": str(e.get("limit_time") or ""),
+                 "sealed": e.get("limit_sealed"),
+                 "time_gran": str(e.get("limit_time_gran") or "")}}
+
+
+def _abn_sync_limit_legacy(e):
+    """把 `limit_dates` 的最新事件镜像回旧单字段（limit_date/limit_board/limit_time/…），
+    供旧读取路径与测试直接读原始池 JSON。无事件则清掉旧字段。"""
+    if not isinstance(e, dict):
+        return e
+    dates = _abn_limit_dates(e)
+    if not dates:
+        for k in ("limit_date", "limit_board", "limit_time", "limit_sealed", "limit_time_gran"):
+            e.pop(k, None)
+        return e
+    latest = max(dates.keys())
+    ev = dates[latest]
+    e["limit_date"] = latest
+    e["limit_board"] = int(ev.get("board") or 0)
+    e["limit_time"] = ev.get("time") or ""
+    e["limit_time_gran"] = ev.get("time_gran") or ""
+    e["limit_sealed"] = ev.get("sealed")
+    return e
+
+
+# 同花顺涨停聚焦 dataapi（2026-11-15 owner「用同花顺的股票数量」）——全市场涨停清单。
+# 与 analysis/index_regime.py 的 `_ir_fetch_limit_counts_ths` 同源，但这里取 `info[]` 全名单。
+_THS_LIMIT_URL = "http://data.10jqka.com.cn/dataapi/limit_up/limit_up_pool"
+_THS_LIMIT_UAS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+]
+
+
+def _limitup_from_ths(date, timeout=12.0, retries=2):
+    """同花顺涨停聚焦 → 当日全市场涨停清单 ``[{code, name, board, data_date, tag}]``。
+
+    · 全市场口径（不限于猎手概念池），owner 2026-11-15 实报 11-02 = 125 只；
+    · 该接口**不回连板天数**（high_days_value 实测恒 null）⇒ `board` 用 change_tag 粗判：
+      FIRST_LIMIT=1（首板）、其余（LIMIT_BACK=回封/连板）=2（下界，后续用猎手 CSV/复盘精修）；
+    · `name` 字段服务端返回是乱码（双重编码）⇒ 不用它，名称由 `_concept_names()` 兜底；
+    · 接口只回 2025-07-08 以后；更早日期 status_code=-1 ⇒ 返回 []（调用方降级猎手 CSV/复盘）。
+    """
+    import random as _random
+    import requests
+    d_dashed = str(date or "").strip()[:10]
+    d0 = d_dashed.replace("-", "")
+    if len(d0) != 8 or not d0.isdigit():
+        return []
+    out = []
+    page = 1
+    # 接口 limit 上限约 200（1000/500 都 status_code=-1）⇒ 翻页拉全；≤5 页兜底。
+    while page <= 5:
+        params = {"page": page, "limit": 200, "date": d0, "_": int(_time_mod.time() * 1000)}
+        got = False
+        for attempt in range(max(1, int(retries) + 1)):
+            headers = {
+                "User-Agent": _random.choice(_THS_LIMIT_UAS),
+                "Referer": "http://data.10jqka.com.cn/",
+                "cookie": "v=AaBb1234567890abcdefghijklmnopqrstuv",
+            }
+            try:
+                r = requests.get(_THS_LIMIT_URL, params=params, headers=headers, timeout=timeout)
+                if r.status_code != 200 or not r.content:
+                    _time_mod.sleep(0.5 + attempt)
+                    continue
+                j = json.loads(r.content.decode("utf-8", errors="replace"))
+                if j.get("status_code") != 0:
+                    _time_mod.sleep(0.5 + attempt)
+                    continue
+                info = (j.get("data") or {}).get("info") or []
+                for x in info:
+                    code = str(x.get("code") or "").zfill(6)
+                    if len(code) != 6 or not code.isdigit():
+                        continue
+                    tag = str(x.get("change_tag") or "")
+                    board = 1 if tag == "FIRST_LIMIT" else 2
+                    out.append({"code": code, "name": "", "board": board,
+                                "data_date": d_dashed, "tag": tag})
+                got = True
+                if len(info) < 200:          # 这一页没拉满 ⇒ 没有下一页了
+                    page = 99
+                break
+            except Exception:
+                _time_mod.sleep(0.5 + attempt)
+        if not got:
+            break
+        page += 1
+    out.sort(key=lambda r: (-r["board"], r["code"]))
+    return out
+
+
+# 东方财富涨停池（2026-11-15 owner「板数用东财 lbc，比同花顺粗判准」）——回**真实连板数**。
+# 同花顺涨停聚焦只给 FIRST_LIMIT/LIMIT_BACK 下界（1/2）；东财 `lbc` 是真连板数（如 11-10
+# 闽发铝业 7 连板），`fbt` 是首次封板时间（HHMMSS），`hybk` 是东财行业。用于板数精修。
+_THS_EM_URL = "https://push2ex.eastmoney.com/getTopicZTPool"
+_THS_EM_UT = "7eea3edcaed734bea9cbfc24409ed989"
+
+
+def _limitup_from_em(date, timeout=12.0, retries=2):
+    """东方财富涨停池 → ``{code: 连板数}``（真实连板数，全市场口径，纯网络）。
+
+    · `lbc`=连板数（1=首板、2=二板…），比同花顺 change_tag 粗判准得多；
+    · 网络失败/日期无数据 → ``{}``（调用方降级猎手 CSV/韭研复盘）；
+    · 东财涨停池默认只回沪深 A 股（`dpt=wz.ztzt`），北交所等可能不在内，不影响降级链。
+    """
+    import random as _random
+    import requests
+    d0 = str(date or "").strip()[:10].replace("-", "")
+    if len(d0) != 8 or not d0.isdigit():
+        return {}
+    out = {}
+    page = 0
+    while page <= 3:          # 涨停数一般 <200，1 页够；多页兜底
+        params = {"ut": _THS_EM_UT, "dpt": "wz.ztzt",
+                  "Pageindex": str(page), "pagesize": "200",
+                  "sort": "fbt:asc", "date": d0,
+                  "_": int(_time_mod.time() * 1000)}
+        got = False
+        for attempt in range(max(1, int(retries) + 1)):
+            headers = {"User-Agent": _random.choice(_THS_LIMIT_UAS),
+                       "Referer": "https://quote.eastmoney.com/"}
+            try:
+                r = requests.get(_THS_EM_URL, params=params, headers=headers, timeout=timeout)
+                if r.status_code != 200 or not r.content:
+                    _time_mod.sleep(0.5 + attempt)
+                    continue
+                j = json.loads(r.content.decode("utf-8", errors="replace"))
+                pool = ((j.get("data") or {}).get("pool") or [])
+                for x in pool:
+                    code = str(x.get("c") or "").zfill(6)
+                    if len(code) != 6 or not code.isdigit():
+                        continue
+                    try:
+                        lbc = max(1, int(x.get("lbc") or 1))
+                    except Exception:
+                        lbc = 1
+                    out[code] = lbc
+                got = True
+                if len(pool) < 200:      # 这一页没拉满 ⇒ 没有下一页了
+                    page = 99
+                break
+            except Exception:
+                _time_mod.sleep(0.5 + attempt)
+        if not got:
+            break
+        page += 1
+    return out
+
+
 def _limit_time_from_min_df(df, day, limit_price):
     """分钟 K 帧 → 当日「首次触及涨停价」的 HH:MM + 是否收盘封板（纯函数，供测试/复用）。
 
@@ -627,6 +887,10 @@ _ROTATION_CACHE_DIR = BASE / "t_io" / "cache" / "sector_rotation"
 # `_compute_auto_pnl` 只用它拼 `{code}.json` 路径，却把整条 pandas 链拖进首帧的 import 锁。
 # 值必须与 core/position_builder.py::_DAILY_CACHE_DIR 一致（同为 BASE/t_io/cache/daily_kline）。
 _DAILY_KLINE_DIR = BASE / "t_io" / "cache" / "daily_kline"
+# 涨停阶段分类的行读缓存（2026-11-15）：`_pool_rows` 每 60s 全刷会重读全池 273 份日线 JSON
+# ≈0.7s；按 (code, date, 文件mtime) 缓存 phase 结果（微小 dict），日线档 append-only、mtime 变才失效。
+_LIMITUP_PHASE_CACHE = {}
+_LIMITUP_PHASE_LOCK = threading.Lock()
 # 市场情绪面板的数据源：同花顺涨停池按日缓存（`analysis.index_regime` 每天 14:30 落盘一次，
 # append-only）。面板**只读、零网络**；测试会 patch 这个常量。
 _E5_THS_FP = BASE / "t_io" / "index_regime" / "e5_ths_cache.json"
@@ -13180,38 +13444,70 @@ class Api:
     def abnormal_pool_add_limitup(self, date=None):
         """把某个交易日的**全部涨停股**累加进异常监控池（2026-11-03 owner）。
 
-        口径：
+        口径（2026-11-15 owner「用同花顺的股票数量」+ 一票多日）：
           · **累加**：已存在的票不删、不改名、不动手动填的涨停原因；只是补上「涨停日+连板数」；
-          · **标注**：每只写 `limit_board`（1=首板、2=二板…）与 `limit_date`，前端显示 首板/2板/3板；
-          · 同一只票出现在多个日期时**以更晚的日期为准**（不回退到旧数据）；
-          · 数据源 `stock_hunter/data/market_YYYYMMDD.csv`（猎手当天扫描落盘，零网络）。
+          · **一票多日**：同一只票多日涨停**各记一个事件**（存 `limit_dates`），不再被「更晚日期」吞掉；
+          · **标注**：每只按日写 `board`（1=首板、2=二板…），前端显示 首板/2板/3板；
+          · **数据源**：①同花顺涨停聚焦（全市场口径，最多）→ ②猎手当日 market CSV → ③韭研复盘名单。
+          · **板数精修**：同花顺只给首板/非首板下界 ⇒ 猎手 CSV「连板天数」> 韭研「N天M板」> 东财 `lbc`（真连板数）> 同花顺下界。
 
-        返回 {ok, date, total, added, updated, unchanged, pool}；该日无快照时 ok=False 并列出可用日期。
+        返回 {ok, date, total, added, updated, unchanged, pool, source}；该日三源皆空时 ok=False。
         """
         d = str(date or datetime.now().strftime("%Y-%m-%d"))[:10]
-        fp = _market_csv_fp(d)
-        if fp is None:
-            return {"ok": False, "error": "日期格式应为 YYYY-MM-DD"}
-        lst = _limitup_from_market_csv(fp)
-        src = "market"
+        # 数据源优先级（2026-11-15）：同花顺（全市场，11-02 实测 125 只）优先于猎手概念池（79）。
+        lst = _limitup_from_ths(d)
+        src = "ths"
+        if not lst:
+            fp = _market_csv_fp(d)
+            if fp is None:
+                return {"ok": False, "error": "日期格式应为 YYYY-MM-DD"}
+            lst = _limitup_from_market_csv(fp)
+            src = "market"
         if not lst:
             # 2026-11-03 实报：主循环当天没落 market_YYYYMMDD.csv，但复盘已入库 ⇒ 用复盘名单兜底
             lst = _limitup_from_recap(d)
             src = "recap"
         if not lst:
             try:
+                fp = _market_csv_fp(d)
                 ds = sorted(p.stem.replace("market_", "") for p in fp.parent.glob("market_*.csv"))
             except Exception:
                 ds = []
             near = "、".join(ds[-8:]) if ds else "（无）"
             return {"ok": False, "date": d,
-                    "error": f"{d} 既没有市场快照（market_{d.replace('-', '')}.csv），"
+                    "error": f"{d} 既没有同花顺涨停池、没有市场快照（market_{d.replace('-', '')}.csv），"
                              f"复盘库里也没有这天的成员。可用市场快照：{near}"}
         names = _concept_names()
         stocks = self._abn_read()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # 以 CSV 的「数据日期」为准（周末补跑的 market_20261031.csv 实际装的是 10-30 行情）
+        # 以「数据日期」为准（周末补跑的 market_20261031.csv 实际装的是 10-30 行情）
         data_date = next((r.get("data_date") for r in lst if r.get("data_date")), "") or d
+        data_date = str(data_date)[:10]
+        # 板数精修（2026-11-15 owner「同花顺数量 → 东财板数 → 猎手/韭研精修」）：
+        # 同花顺只给「首板/非首板」下界 ⇒ 猎手 CSV「连板天数」、韭研「N天M板」、东财 `lbc`
+        # 都更准，按 猎手 CSV > 韭研 > 东财 > 同花顺下界 覆盖（src=="market" 时 lst 本身即 CSV）。
+        if src != "market":
+            try:
+                _csv_fp = _market_csv_fp(d)
+                _csv_map = {r["code"]: r["board"]
+                            for r in _limitup_from_market_csv(_csv_fp)} if _csv_fp else {}
+            except Exception:
+                _csv_map = {}
+            try:
+                _recap_map = {r["code"]: r["board"] for r in _limitup_from_recap(d)}
+            except Exception:
+                _recap_map = {}
+            try:
+                _em_map = _limitup_from_em(d)
+            except Exception:
+                _em_map = {}
+            for r in lst:
+                if r["code"] in _csv_map:
+                    r["board"] = _csv_map[r["code"]]
+                elif r["code"] in _recap_map:
+                    r["board"] = _recap_map[r["code"]]
+                elif r["code"] in _em_map:
+                    r["board"] = _em_map[r["code"]]
         # 复盘来源没有「涨停价」⇒ 按昨收 × 涨跌停比例推算，供后续算涨停时间
         if src == "recap":
             for r in lst:
@@ -13222,23 +13518,29 @@ class Api:
             c = r["code"]
             e = stocks.get(c)
             if isinstance(e, dict):
-                old_d = str(e.get("limit_date") or "")
-                old_b = int(e.get("limit_board") or 0)
-                if (old_d and old_d > data_date) or (old_d == data_date and old_b == r["board"]):
-                    unchanged += 1          # 已有更新的（或同日同板）记录，不回退
+                dates = _abn_limit_dates(e)
+                cur = dates.get(data_date)
+                if cur is not None and int(cur.get("board") or 0) == r["board"]:
+                    unchanged += 1          # 该日已记、板数没变 ⇒ 不动
                     continue
-                e["limit_date"] = data_date
-                e["limit_board"] = r["board"]
+                ev = {"board": r["board"], "time": "", "sealed": None, "time_gran": ""}
+                if cur is not None:         # 该日已有（板数变）⇒ 保留已算的涨停时间
+                    ev["time"] = cur.get("time") or ""
+                    ev["sealed"] = cur.get("sealed")
+                    ev["time_gran"] = cur.get("time_gran") or ""
+                dates[data_date] = ev
+                e["limit_dates"] = dates
                 e["limit_at"] = now
-                stocks[c] = e
+                stocks[c] = _abn_sync_limit_legacy(e)
                 updated += 1
             else:
-                stocks[c] = {"name": names.get(c) or r["name"] or c,
-                             "added_at": now,
-                             "added_from": f"limitup:{data_date}",
-                             "limit_date": data_date,
-                             "limit_board": r["board"],
-                             "limit_at": now}
+                stocks[c] = _abn_sync_limit_legacy({
+                    "name": names.get(c) or r["name"] or c,
+                    "added_at": now,
+                    "added_from": f"limitup:{data_date}",
+                    "limit_dates": {data_date: {"board": r["board"], "time": "",
+                                                "sealed": None, "time_gran": ""}},
+                    "limit_at": now})
                 added += 1
         # 涨停时间（2026-11-03 owner）：用通达信本地 1 分钟线算「首次触及涨停价」的时刻。
         # 只补空值（已有时间不重算；要重算点「⏱ 补涨停时间」）。读不到就留空并回传覆盖日期。
@@ -13247,17 +13549,23 @@ class Api:
         for r in lst:
             c = r["code"]
             e = stocks.get(c)
-            if not isinstance(e, dict) or str(e.get("limit_date") or "") != data_date:
+            if not isinstance(e, dict):
                 continue
-            if e.get("limit_time"):
+            dates = _abn_limit_dates(e)
+            ev = dates.get(data_date)
+            if not ev or ev.get("time"):
                 continue
             tstr, sealed, last_date = self._tdx_first_limit_time(c, data_date, price_map.get(c, 0))
             if last_date and last_date > tdx_last:
                 tdx_last = last_date
             if tstr:
-                e["limit_time"] = tstr
+                ev["time"] = tstr
                 if sealed is not None:
-                    e["limit_sealed"] = bool(sealed)
+                    ev["sealed"] = bool(sealed)
+                ev["time_gran"] = "1m"
+                dates[data_date] = ev
+                e["limit_dates"] = dates
+                _abn_sync_limit_legacy(e)
                 time_filled += 1
         ok = self._abn_write(stocks)
         out = {"ok": ok, "date": data_date, "requested": d, "total": len(lst),
@@ -13267,6 +13575,9 @@ class Api:
         if src == "recap":
             out["note"] = (f"{d} 的市场快照尚未生成（猎手今天还没跑扫描），"
                            f"已用**概念复盘名单**兜底（{len(lst)} 只；板数取「N天M板」的 M）")
+        elif src == "ths" and data_date == d:
+            out["note"] = (f"已用**同花顺全市场涨停池**（{len(lst)} 只，含概念池外的票）。"
+                           f"板数以 猎手快照/复盘/东财连板数 精修")
         elif data_date != d:
             out["note"] = f"所选 {d} 的快照实际是 {data_date} 的行情（周末补跑），已按 {data_date} 计板数"
         if tdx_last and tdx_last < data_date:
@@ -13286,8 +13597,9 @@ class Api:
         d0 = str(date or "")[:10]
         # 2026-11-03 实报：日期框默认是「今天」(11-03)，而池里那批是 11-02 涨停的 ⇒ 一只都
         # 匹配不上、看起来"补了没变化"。这里**自动退回池里最近的涨停日**并在 note 里说明。
-        _dated = [str(e.get("limit_date") or "") for e in stocks.values()
-                  if isinstance(e, dict) and e.get("limit_date")]
+        # 一票多日（2026-11-15）：事件日期来自 `limit_dates`（含旧单字段迁移）。
+        _dated = [dd for e in stocks.values() if isinstance(e, dict)
+                  for dd in _abn_limit_dates(e)]
         _requested, _auto = d0, False
         if d0 and _dated and not any(d == d0 for d in _dated):
             d0 = max(_dated)
@@ -13298,28 +13610,34 @@ class Api:
         for c, e in stocks.items():
             if not isinstance(e, dict):
                 continue
-            d = str(e.get("limit_date") or "")
-            if not d or (d0 and d != d0):
-                continue
-            if e.get("limit_time"):
-                continue
-            if d not in price_cache:
-                fp = _market_csv_fp(d)
-                price_cache[d] = ({r["code"]: (r.get("limit_price") or 0)
-                                   for r in _limitup_from_market_csv(fp)} if fp else {})
-            # 市场快照里没有这只（复盘兜底进来的）⇒ 按昨收推算涨停价
-            lp = price_cache[d].get(c, 0) or self._limit_price_guess(c, d)
-            tstr, sealed, last_date = self._tdx_first_limit_time(c, d, lp)
-            if last_date and last_date > tdx_last:
-                tdx_last = last_date
-            if tstr:
-                e["limit_time"] = tstr
-                e["limit_time_gran"] = "1m"
-                if sealed is not None:
-                    e["limit_sealed"] = bool(sealed)
-                filled += 1
-            else:
-                todo.append((c, d, lp))
+            dates = _abn_limit_dates(e)
+            changed = False
+            for dd, ev in dates.items():
+                if not dd or (d0 and dd != d0):
+                    continue
+                if ev.get("time"):
+                    continue
+                if dd not in price_cache:
+                    fp = _market_csv_fp(dd)
+                    price_cache[dd] = ({r["code"]: (r.get("limit_price") or 0)
+                                        for r in _limitup_from_market_csv(fp)} if fp else {})
+                # 市场快照里没有这只（复盘/同花顺兜底进来的）⇒ 按昨收推算涨停价
+                lp = price_cache[dd].get(c, 0) or self._limit_price_guess(c, dd)
+                tstr, sealed, last_date = self._tdx_first_limit_time(c, dd, lp)
+                if last_date and last_date > tdx_last:
+                    tdx_last = last_date
+                if tstr:
+                    ev["time"] = tstr
+                    ev["time_gran"] = "1m"
+                    if sealed is not None:
+                        ev["sealed"] = bool(sealed)
+                    changed = True
+                    filled += 1
+                else:
+                    todo.append((c, dd, lp))
+            if changed:
+                e["limit_dates"] = dates
+                _abn_sync_limit_legacy(e)
         # 腾讯分钟线兜底（2026-11-03 owner 实报「补时间没变化」：本机通达信只到 10-14，
         # 而 11-02 的票可以用腾讯 m1/m5 拿回来）。并发 6 路，80 只约 3~8 秒；结果进进程缓存。
         if todo:
@@ -13335,13 +13653,19 @@ class Api:
                 with ThreadPoolExecutor(max_workers=6, thread_name_prefix="tx-limit") as ex:
                     for (c, _d, _lp), (tstr, sealed, gran) in ex.map(_tx_one, todo):
                         e = stocks.get(c)
-                        if not isinstance(e, dict) or e.get("limit_time"):
+                        if not isinstance(e, dict):
+                            continue
+                        dates = _abn_limit_dates(e)
+                        ev = dates.get(_d)
+                        if not ev or ev.get("time"):
                             continue
                         if tstr:
-                            e["limit_time"] = tstr
-                            e["limit_time_gran"] = gran or ""
+                            ev["time"] = tstr
+                            ev["time_gran"] = gran or ""
                             if sealed is not None:
-                                e["limit_sealed"] = bool(sealed)
+                                ev["sealed"] = bool(sealed)
+                            e["limit_dates"] = dates
+                            _abn_sync_limit_legacy(e)
                             filled += 1
                             from_tx += 1
             except Exception:
@@ -13363,6 +13687,40 @@ class Api:
             notes.append("；".join(tips) + "。更早的日期需在通达信「盘后数据下载」勾选 1 分钟线后再补")
         if notes:
             out["note"] = "；".join(notes)
+        return out
+
+    def _limitup_phase_rows(self, codes, names, date):
+        """池表每只票算「涨停阶段」标签（2026-11-15 owner：按时期分类，找介入点）。
+
+        纯组织、零网络，读本地日线缓存 `t_io/cache/daily_kline`（与 `_hunter_build_conformance`
+        同一份档）。独立于 conformance 预算：后者分批算、可能 pending，阶段必须首拍就有。
+        结果按 (code, date, mtime) 缓存——日线档 append-only，盘中阶段只看已收盘的最后一根，
+        mtime 不变就复用（省 60s 全刷的 ~0.7s 重复解析）。
+        """
+        from core.limitup_phase import limitup_phase
+        out = {}
+        _d = str(date or "")
+        for c in codes:
+            _c6 = str(c).split("_")[0]
+            try:
+                _fp = _DAILY_KLINE_DIR / f"{_c6}.json"
+                _key = (_c6, _d, _fp.stat().st_mtime)
+                with _LIMITUP_PHASE_LOCK:
+                    _hit = _LIMITUP_PHASE_CACHE.get(_key)
+                if _hit is not None:
+                    out[c] = _hit
+                    continue
+                _rows = json.loads(_fp.read_text(encoding="utf-8")).get("rows", [])
+            except Exception:
+                _rows = []
+                _key = None
+            _ph = limitup_phase(_rows, _d, code=_c6, name=names.get(c) or "")
+            if _key is not None:
+                with _LIMITUP_PHASE_LOCK:
+                    if len(_LIMITUP_PHASE_CACHE) > 20000:
+                        _LIMITUP_PHASE_CACHE.clear()
+                    _LIMITUP_PHASE_CACHE[_key] = _ph
+            out[c] = _ph
         return out
 
     def _pool_rows(self, stocks, date, note):
@@ -13396,51 +13754,91 @@ class Api:
         except Exception:
             _tags_map = {}
         names = _concept_names()
+        # 涨停阶段（2026-11-15 owner：按时期分类）——独立于 conformance 预算，首拍就有。
+        try:
+            _phase_map = self._limitup_phase_rows(codes, names, date)
+        except Exception:
+            _phase_map = {}
+        # 涨停题材（2026-11-15 owner：按题材分类）——手工分类（owner 逐一归类）优先，
+        # 韭研复盘 sector_breadth 兜底；两份都纯本地、零网络。
+        try:
+            _theme_idx = _limitup_theme_index()
+        except Exception:
+            _theme_idx = {}
+        try:
+            _manual_idx = _limitup_manual_theme_index()
+        except Exception:
+            _manual_idx = {}
+
+        def _limit_theme(code, dd):
+            return (_manual_idx.get(dd) or {}).get(code) \
+                or (_theme_idx.get(dd) or {}).get(code) or ""
+
         rows = []
         for c in codes:
             meta = stocks.get(c) or {}
             k = conf.get(c) or {}
-            rows.append({
-                "code": c,
-                "name": meta.get("name") or names.get(c) or c,
-                "added_at": meta.get("added_at") or "",
-                # 手动写的涨停原因（owner 2026-10-22）：只展示，不参与判定
-                "reason_manual": meta.get("reason") or "",
-                "reason_at": meta.get("reason_at") or "",
-                # 涨停累加（2026-11-03 owner）：1=首板、2=二板…；0/空 = 不是按涨停加进来的
-                "limit_board": int(meta.get("limit_board") or 0),
-                "limit_date": meta.get("limit_date") or "",
-                # 涨停时间（通达信 1 分钟线首个触及涨停价的分钟）；sealed=收盘是否仍封板
-                "limit_time": meta.get("limit_time") or "",
-                "limit_time_gran": meta.get("limit_time_gran") or "",
-                "limit_sealed": meta.get("limit_sealed"),
-                # 技术标签（空数组 = 后台还在批算，前端显示 ⏳ 标签 并按 15s 轮询补）
-                "tags": ((_tags_map.get(c) or {}).get("tags") or []),
-                "dev365": (_tags_map.get(c) or {}).get("dev365"),
-                "bias5": (_tags_map.get(c) or {}).get("bias5"),
-                "up30": (_tags_map.get(c) or {}).get("up30"),
-                "up30_prev": (_tags_map.get(c) or {}).get("up30_prev"),
-                # —— 以下与建仓表同名列同义 ——
-                "verdict": k.get("verdict") or ("insufficient_data" if not k else "pending"),
-                "composite_score": int(k.get("score") or 0),
-                "score_ceiling": int(k.get("score_ceiling") or 100),
-                "signal_reachable": bool(k.get("signal_reachable", False)),
-                "conditions": k.get("conds") or {},
-                "timing": None,
-                "timing_features": {"above_ma5": k.get("above_ma5"),
-                                    "above_ma20": k.get("above_ma20")},
-                "build_stage": k.get("stage"), "build_stage_slope20": k.get("stage_slope20"),
-                # 与建仓表「通过 X/3」同口径：t_regime + t_trend + t_drawdown 三条
-                "build_met": int(k.get("met") or 0) if k else None,
-                "build_above_ma20": k.get("above_ma20"),
-                "build_above_ma5": k.get("above_ma5"),
-                "build_reason": k.get("reason") or "",
-                "pool": "manual",
-                "in_holdings": False,
-                "scan_time": "",
-                "_scans": 0,
-                "_has_conf": bool(k),
-            })
+            _nm = meta.get("name") or names.get(c) or c
+            _events = _abn_limit_dates(meta)
+            # 一票多日（2026-11-15）：同一只票每个涨停日各出一行；没涨停事件的（纯手动）出一行空日期。
+            _event_items = sorted(_events.items(), key=lambda kv: kv[0], reverse=True) \
+                if _events else [(("", {"board": 0, "time": "", "sealed": None, "time_gran": ""}))]
+            _reason = meta.get("reason") or ""
+            _reason_at = meta.get("reason_at") or ""
+            _added_at = meta.get("added_at") or ""
+            _ph = _phase_map.get(c) or {"phase": "无数据", "board": 0, "gap": None, "rebound": False}
+            _tags = ((_tags_map.get(c) or {}).get("tags") or [])
+            _dev365 = (_tags_map.get(c) or {}).get("dev365")
+            _bias5 = (_tags_map.get(c) or {}).get("bias5")
+            _up30 = (_tags_map.get(c) or {}).get("up30")
+            _up30_prev = (_tags_map.get(c) or {}).get("up30_prev")
+            for _ld, _ev in _event_items:
+                _ld10 = str(_ld)[:10]
+                rows.append({
+                    "code": c,
+                    "name": _nm,
+                    "added_at": _added_at,
+                    # 手动写的涨停原因（owner 2026-10-22）：只展示，不参与判定
+                    "reason_manual": _reason,
+                    "reason_at": _reason_at,
+                    # 涨停累加（2026-11-03 owner）：1=首板、2=二板…；0/空 = 不是按涨停加进来的
+                    "limit_board": int(_ev.get("board") or 0),
+                    "limit_date": _ld10,
+                    # 涨停题材（手工分类优先，韭研复盘 section 兜底；都不在=空，前端归「其他」）
+                    "limit_theme": _limit_theme(c, _ld10),
+                    # 涨停时间（通达信 1 分钟线首个触及涨停价的分钟）；sealed=收盘是否仍封板
+                    "limit_time": _ev.get("time") or "",
+                    "limit_time_gran": _ev.get("time_gran") or "",
+                    "limit_sealed": _ev.get("sealed"),
+                    # 涨停阶段（2026-11-15）：连板中/反包/今日首板/断板D+1/断板回踩/断板走远…
+                    "limitup_phase": _ph,
+                    # 技术标签（空数组 = 后台还在批算，前端显示 ⏳ 标签 并按 15s 轮询补）
+                    "tags": _tags,
+                    "dev365": _dev365,
+                    "bias5": _bias5,
+                    "up30": _up30,
+                    "up30_prev": _up30_prev,
+                    # —— 以下与建仓表同名列同义 ——
+                    "verdict": k.get("verdict") or ("insufficient_data" if not k else "pending"),
+                    "composite_score": int(k.get("score") or 0),
+                    "score_ceiling": int(k.get("score_ceiling") or 100),
+                    "signal_reachable": bool(k.get("signal_reachable", False)),
+                    "conditions": k.get("conds") or {},
+                    "timing": None,
+                    "timing_features": {"above_ma5": k.get("above_ma5"),
+                                        "above_ma20": k.get("above_ma20")},
+                    "build_stage": k.get("stage"), "build_stage_slope20": k.get("stage_slope20"),
+                    # 与建仓表「通过 X/3」同口径：t_regime + t_trend + t_drawdown 三条
+                    "build_met": int(k.get("met") or 0) if k else None,
+                    "build_above_ma20": k.get("above_ma20"),
+                    "build_above_ma5": k.get("above_ma5"),
+                    "build_reason": k.get("reason") or "",
+                    "pool": "manual",
+                    "in_holdings": False,
+                    "scan_time": "",
+                    "_scans": 0,
+                    "_has_conf": bool(k),
+                })
         # 当日「均线回站」+ 突破时刻（2026-10-23 owner，三张表同源）
         try:
             self._attach_ma_reclaim(rows, date)
@@ -13451,9 +13849,14 @@ class Api:
         #   · 没算到时间的排在当日末尾（"99:99"），板数高的靠前，最后按代码稳定排序；
         #   · 池里一张涨停票都没有（纯手动池）⇒ 退回原来的「按得分降序」。
         def _limit_key(r):
+            # 2026-11-15：先按阶段分组（连板中→反包→今日首板→断板D+1→回踩→走远），
+            # 组内再按涨停日期新→旧、涨停时间、板数降序、代码稳定排序。
+            from core.limitup_phase import PHASE_ORDER
+            _ph = ((r.get("limitup_phase") or {}).get("phase")) or "无数据"
+            _ord = PHASE_ORDER.get(_ph, PHASE_ORDER["无数据"])
             d = str(r.get("limit_date") or "")
             dn = int(d.replace("-", "")) if d else 0
-            return (-dn, str(r.get("limit_time") or "99:99"),
+            return (_ord, -dn, str(r.get("limit_time") or "99:99"),
                     -int(r.get("limit_board") or 0), str(r.get("code") or ""))
         if any(str(r.get("limit_date") or "") for r in rows):
             rows.sort(key=_limit_key)

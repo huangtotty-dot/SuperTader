@@ -367,6 +367,8 @@
                onkeydown="if(event.key==='Escape'){this.value='';applyAbnFilter();}">
         <span id="abnFilterInfo" class="cell-dim" style="font-size:11px"></span>
       </div>
+      <!-- 连板天梯（2026-11-15 owner）：今日涨停按连板高度分列 + 断板观察条，放在明细表上方 -->
+      <div id="abnormalLadder"></div>
       <div id="abnormalPoolBody"><div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div></div>
     </div>
 
@@ -837,6 +839,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261114l"></script>
+<script src="app.js?v=20261115e"></script>
 </body>
 </html>

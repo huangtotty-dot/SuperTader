@@ -819,3 +819,75 @@ tr.mark-red td:first-child { color: var(--red); font-weight: 700; }
   border-radius: 7px; color: #fff; background: #9aa4b2; margin-left: 4px;
   vertical-align: middle; font-weight: 600; }
 .wm-chip.on { font-weight: 700; }
+
+/* ===== 涨停连板天梯（2026-11-15 owner：异常监控池按连板高度分列，一眼看高度结构）=====
+   今日涨停（连板中/今日首板/反包）按连板数分列；反包用金色高亮（弱提醒，非买入信号）。
+   断板观察条放在天梯下方：D+1 最该盯（次日能否反包）。 */
+.limitup-ladder { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 10px;
+  padding: 10px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--bg-soft); }
+.lad-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lad-col-head { font-size: 11px; font-weight: 700; color: var(--text-dim); text-align: center;
+  padding: 3px 4px; border-radius: 6px; background: var(--bg-card); border: 1px solid var(--border-soft);
+  white-space: nowrap; }
+.lad-col-head .lad-count { font-size: 9px; font-weight: 600; opacity: .7; margin-left: 3px; }
+.lad-col-head.hot { color: #d1242f; border-color: rgba(209,36,47,.4); background: rgba(209,36,47,.08); }
+.lad-cell { padding: 4px 6px; border-radius: 6px; background: var(--bg-card); cursor: pointer;
+  border: 1px solid var(--border-soft); font-size: 12px; line-height: 1.3; }
+.lad-cell:hover { border-color: var(--accent); }
+.lad-cell.lb1 { border-color: rgba(209,36,47,.20); }
+.lad-cell.lb2 { border-color: rgba(209,36,47,.40); background: rgba(209,36,47,.05); }
+.lad-cell.lb3 { border-color: rgba(209,36,47,.55); background: rgba(209,36,47,.10); }
+.lad-cell.lb4 { border-color: rgba(209,36,47,.70); background: rgba(209,36,47,.16); }
+.lad-cell.rebound { border-color: rgba(201,126,0,.5); background: rgba(201,126,0,.10); }
+.lad-name { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lad-cell.rebound .lad-name { color: #9a6200; }
+.lad-time { font-size: 10px; color: var(--text-dim); font-family: var(--mono); white-space: nowrap; }
+.lad-cell.rebound .lad-time { color: #9a6200; }
+.lad-sealed { color: #d1242f; font-weight: 700; }
+/* 断板观察条：天梯下方，按断板天数分三组（D+1 最该盯反包） */
+.broken-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; margin: 0 0 10px;
+  padding: 8px 10px; border: 1px dashed var(--border); border-radius: 10px; background: var(--bg-card); }
+.broken-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.broken-label { font-size: 10px; color: var(--text-faint); white-space: nowrap; }
+.broken-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 1px 6px;
+  border-radius: 10px; border: 1px solid var(--border-soft); background: var(--bg-soft); color: var(--text-dim);
+  cursor: pointer; white-space: nowrap; }
+.broken-chip:hover { border-color: var(--accent); color: var(--text); }
+.broken-chip.d1 { border-color: rgba(209,36,47,.35); color: #9a3a3a; background: rgba(209,36,47,.05); }
+.broken-chip .bc-board { color: #d1242f; font-weight: 700; }
+/* 异常监控池：明细表按涨停日期分段（2026-11-15 owner：「列表按日期显示，像同花顺」） */
+#abnormalPoolBody .abn-date-head { cursor: pointer; }
+#abnormalPoolBody .abn-caret { display: inline-block; width: 14px; color: var(--text-dim); font-size: 11px; }
+#abnormalPoolBody .abn-date-head td {
+  background: var(--bg-soft);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  letter-spacing: .3px;
+}
+#abnormalPoolBody .abn-date-bar {
+  display: inline-block; width: 4px; height: 14px; margin-right: 8px;
+  background: var(--accent); border-radius: 2px; vertical-align: -2px;
+}
+/* 异常监控池：日期段内再按涨停题材分组（2026-11-15 owner：「每一日按图片里的题材分类」） */
+#abnormalPoolBody .abn-theme-head td {
+  background: #fbdcdb;   /* 题材分类行：特殊红底填充 */
+  color: #b3261e;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 10px 4px 32px;
+  border-top: 1px dashed #f3b3ae;
+  text-align: left;
+}
+#abnormalPoolBody .abn-theme-dot {
+  display: inline-block; width: 6px; height: 6px; margin-right: 7px;
+  background: #e8531f; border-radius: 50%; vertical-align: 1px;
+  opacity: .9;
+}
+#abnormalPoolBody .abn-theme-count {
+  color: #b3261e; font-weight: 400; font-size: 11px; margin-left: 3px;
+}

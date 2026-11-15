@@ -82,14 +82,30 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         self.api._ABN_FP = self.tmp / "abnormal_pool.json"
         # 测试禁网：腾讯兜底默认返回空，个别用例再覆盖
         self.api._tencent_limit_time = lambda code, day, lp: ("", None, "")
+        # 同花顺涨停池默认空（个别用例覆盖），避免测试真联网
+        self._old_ths = gui._limitup_from_ths
+        gui._limitup_from_ths = lambda d, timeout=12.0, retries=2: []
         # 复盘兜底默认空（个别用例覆盖），避免读真实 sector_breadth.json
         self._old_recap = gui._limitup_from_recap
         gui._limitup_from_recap = lambda d, fp=None: []
+        # 涨停题材索引默认空（个别用例覆盖），避免读真实 sector_breadth.json
+        self._old_theme = gui._limitup_theme_index
+        gui._limitup_theme_index = lambda fp=None: {}
+        # 手工题材分类默认空（个别用例覆盖），避免读真实 config/market/limitup_theme_manual.json
+        self._old_manual = gui._limitup_manual_theme_index
+        gui._limitup_manual_theme_index = lambda fp=None: {}
+        # 东财涨停池默认空（个别用例覆盖），避免测试真联网
+        self._old_em = gui._limitup_from_em
+        gui._limitup_from_em = lambda d, timeout=12.0, retries=2: {}
 
     def tearDown(self):
         gui._market_csv_fp = self._old_fp
         gui._concept_names = self._old_names
+        gui._limitup_from_ths = self._old_ths
         gui._limitup_from_recap = self._old_recap
+        gui._limitup_theme_index = self._old_theme
+        gui._limitup_manual_theme_index = self._old_manual
+        gui._limitup_from_em = self._old_em
         self._td.cleanup()
 
     def _mk(self, date, rows, data_date=""):
@@ -100,7 +116,7 @@ class TestAddLimitupAccumulates(unittest.TestCase):
     def _pool(self):
         return json.loads(self.api._ABN_FP.read_text(encoding="utf-8"))["stocks"]
 
-    def test_累加且以更晚日期为准(self):
+    def test_累加且一票多日(self):
         self._mk("2026-11-02", [("600000", "", 1, 2), ("300001", "", 1, 1)])
         r1 = self.api.abnormal_pool_add_limitup("2026-11-02")
         self.assertTrue(r1["ok"])
@@ -117,6 +133,11 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         r2 = self.api.abnormal_pool_add_limitup("2026-11-03")
         self.assertEqual((r2["added"], r2["updated"], r2["unchanged"], r2["pool"]), (1, 1, 0, 3))
         p = self._pool()
+        # 一票多日：600000 两个涨停日**各记一个事件**（不再被更晚日期吞掉）
+        self.assertEqual(sorted(p["600000"]["limit_dates"].keys()), ["2026-11-02", "2026-11-03"])
+        self.assertEqual(p["600000"]["limit_dates"]["2026-11-02"]["board"], 2)
+        self.assertEqual(p["600000"]["limit_dates"]["2026-11-03"]["board"], 3)
+        # 旧单字段仍镜像「最新事件」（供旧读取路径直接读原始池 JSON）
         self.assertEqual(p["600000"]["limit_board"], 3)
         self.assertEqual(p["600000"]["limit_date"], "2026-11-03")
         self.assertEqual(p["600000"]["reason"], "银行+国资", "只增不改：手动原因要保留")
@@ -125,10 +146,80 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         r3 = self.api.abnormal_pool_add_limitup("2026-11-03")
         self.assertEqual((r3["added"], r3["updated"], r3["unchanged"]), (0, 0, 2))
 
-        # 再点更早的 11-02 = 不回退（600000 保持 3 板）
+        # 再点更早的 11-02 = 不新增不覆盖（600000 那两个事件已在，板数各保持）
         r4 = self.api.abnormal_pool_add_limitup("2026-11-02")
         self.assertEqual(r4["added"], 0)
-        self.assertEqual(self._pool()["600000"]["limit_board"], 3, "旧日期不能把板数改回去")
+        self.assertEqual(self._pool()["600000"]["limit_board"], 3, "旧日期不能把最新板数改回去")
+        self.assertEqual(self._pool()["600000"]["limit_dates"]["2026-11-02"]["board"], 2)
+
+    def test_一票多日每行各列(self):
+        """一票多日：同一只票每个涨停日**各出一行**（前端按日期分段靠它）。"""
+        self._mk("2026-11-02", [("600000", "", 1, 2)])
+        self.api.abnormal_pool_add_limitup("2026-11-02")
+        self._mk("2026-11-03", [("600000", "", 1, 3)])
+        self.api.abnormal_pool_add_limitup("2026-11-03")
+        api = self.api
+        api._hunter_build_conformance = lambda codes, date: {}
+        api.load_stock_tags_batch = lambda *a, **k: {"tags": {}}
+        api._limitup_phase_rows = lambda codes, names, date: {}
+        rows = api._pool_rows(api._abn_read(), "2026-11-03", "")["rows"]
+        self.assertEqual(len(rows), 2, "600000 两日涨停应出两行")
+        self.assertEqual(sorted(r["limit_date"] for r in rows),
+                         ["2026-11-02", "2026-11-03"])
+        self.assertEqual(sorted(r["limit_board"] for r in rows), [2, 3])
+
+    def test_同花顺全市场优先且板数精修(self):
+        """2026-11-15 owner「用同花顺的股票数量」：同花顺全市场名单优先于猎手概念池。
+        同花顺只给 首板/非首板 下界，板数用猎手 CSV「连板天数」精修。"""
+        gui._limitup_from_ths = lambda d, timeout=12.0, retries=2: [
+            {"code": "600000", "name": "", "board": 1, "data_date": d, "tag": "FIRST_LIMIT"},
+            {"code": "000002", "name": "", "board": 2, "data_date": d, "tag": "LIMIT_BACK"},
+            {"code": "300999", "name": "", "board": 2, "data_date": d, "tag": "LIMIT_BACK"},  # 不在 CSV 里
+        ]
+        # 猎手 CSV 有 600000 的精确连板天数=3（覆盖同花顺下界 1）
+        self._mk("2026-11-02", [("600000", "", 1, 3)])
+        r = self.api.abnormal_pool_add_limitup("2026-11-02")
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["source"], "ths")
+        self.assertEqual(r["total"], 3, "同花顺全市场 3 只，多过猎手 CSV 的 1 只")
+        p = self._pool()
+        self.assertEqual(p["600000"]["limit_dates"]["2026-11-02"]["board"], 3, "CSV 连板天数覆盖同花顺下界")
+        self.assertEqual(p["000002"]["limit_dates"]["2026-11-02"]["board"], 2, "无 CSV 时用同花顺下界")
+        self.assertEqual(p["300999"]["name"], "300999", "概念表没有的票名称退回代码")
+
+    def test_东财连板数兜底同花顺下界(self):
+        """2026-11-15 owner「板数用东财 lbc」：既不在猎手 CSV 也不在韭研复盘的票，板数只剩
+        同花顺首板/非首板下界（1/2）⇒ 用东财真实连板数兜底。猎手 CSV 仍优先于东财。"""
+        gui._limitup_from_ths = lambda d, timeout=12.0, retries=2: [
+            {"code": "600000", "name": "", "board": 1, "data_date": d, "tag": "FIRST_LIMIT"},
+            {"code": "000002", "name": "", "board": 2, "data_date": d, "tag": "LIMIT_BACK"},   # 只东财有
+            {"code": "300999", "name": "", "board": 2, "data_date": d, "tag": "LIMIT_BACK"},   # 三源皆无
+        ]
+        # 猎手 CSV 有 600000 的精确连板天数=3；东财给 600000=4（应被 CSV 盖掉）、000002=5
+        self._mk("2026-11-02", [("600000", "", 1, 3)])
+        gui._limitup_from_em = lambda d, timeout=12.0, retries=2: {"600000": 4, "000002": 5}
+        r = self.api.abnormal_pool_add_limitup("2026-11-02")
+        self.assertTrue(r["ok"])
+        p = self._pool()
+        self.assertEqual(p["600000"]["limit_dates"]["2026-11-02"]["board"], 3,
+                         "猎手 CSV 连板天数优先于东财")
+        self.assertEqual(p["000002"]["limit_dates"]["2026-11-02"]["board"], 5,
+                         "东财真连板数覆盖同花顺下界")
+        self.assertEqual(p["300999"]["limit_dates"]["2026-11-02"]["board"], 2,
+                         "三源皆无时保留同花顺下界")
+
+    def test_手工题材分类优先于韭研复盘(self):
+        """2026-11-15 owner「逐一分类」：手工分类（同花顺涨停原因口径）优先于韭研 section。"""
+        self._mk("2026-11-02", [("600000", "", 1, 2)])
+        self.api.abnormal_pool_add_limitup("2026-11-02")
+        gui._limitup_manual_theme_index = lambda fp=None: {"2026-11-02": {"600000": "AI影视"}}
+        gui._limitup_theme_index = lambda fp=None: {"2026-11-02": {"600000": "半导体"}}
+        api = self.api
+        api._hunter_build_conformance = lambda codes, date: {}
+        api.load_stock_tags_batch = lambda *a, **k: {"tags": {}}
+        api._limitup_phase_rows = lambda codes, names, date: {}
+        rows = api._pool_rows(api._abn_read(), "2026-11-02", "")["rows"]
+        self.assertEqual(rows[0]["limit_theme"], "AI影视", "手工分类优先于韭研复盘")
 
     def test_以CSV的数据日期为准(self):
         """周末补跑的 market_20261031.csv 实际装的是 10-30 行情 —— 不能按文件名计板数。"""
@@ -156,6 +247,21 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["limit_board"], 2)
         self.assertEqual(rows[0]["limit_date"], "2026-11-02")
+
+    def test_行里带涨停题材(self):
+        """2026-11-15 owner：「每一日按韭研复盘题材分类」——题材来自 sector_breadth 当日 section。"""
+        self._mk("2026-11-02", [("600000", "", 1, 2), ("300001", "", 1, 1)])
+        self.api.abnormal_pool_add_limitup("2026-11-02")
+        # 600000 命中「半导体」，300001 不在复盘里 ⇒ 空（前端归「其他」）
+        gui._limitup_theme_index = lambda fp=None: {"2026-11-02": {"600000": "半导体"}}
+        api = self.api
+        api._hunter_build_conformance = lambda codes, date: {}
+        api.load_stock_tags_batch = lambda *a, **k: {"tags": {}}
+        api._limitup_phase_rows = lambda codes, names, date: {}
+        rows = api._pool_rows(api._abn_read(), "2026-11-02", "")["rows"]
+        by_code = {r["code"]: r for r in rows}
+        self.assertEqual(by_code["600000"]["limit_theme"], "半导体")
+        self.assertEqual(by_code["300001"]["limit_theme"], "")
 
 
     def test_加入时补算涨停时间(self):
@@ -196,6 +302,9 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         api._hunter_build_conformance = lambda codes, date: {}
         api.load_stock_tags_batch = lambda *a, **k: {"tags": {}}
         api._concept_names = lambda: {"601398": "工商银行"}
+        # 本测试只钉「组内按涨停时间排序」；把阶段全打成无数据，避免真实日线缓存里
+        # 某只票的历史阶段把顺序搅乱（阶段分组排序由 test_limitup_phase.py 单独钉）。
+        api._limitup_phase_rows = lambda codes, names, date: {}
         rows = api._pool_rows(api._abn_read(), "2026-11-02", "")["rows"]
         self.assertEqual([r["code"] for r in rows], ["300001", "600000", "000002", "601398"])
 
@@ -356,6 +465,33 @@ class TestFallbacks(unittest.TestCase):
         assert lst[0]["board"] == 3, "同日多段出现取更大板数"
         assert gui._limitup_from_recap("2026-12-01", fp=fp) == []
 
+    def test_旧单字段迁移为一票多日(self):
+        """旧池条目（只有 limit_date/limit_board/limit_time/…）就地视为一个事件，写回后多日可并存。"""
+        e = {"name": "浦发银行", "limit_date": "2026-11-02", "limit_board": 2,
+             "limit_time": "09:35", "limit_sealed": True, "limit_time_gran": "1m"}
+        dates = gui._abn_limit_dates(e)
+        self.assertEqual(dates, {"2026-11-02": {"board": 2, "time": "09:35",
+                                                "sealed": True, "time_gran": "1m"}})
+        # 镜像回旧字段（最新事件）：单事件时不变
+        gui._abn_sync_limit_legacy(e)
+        self.assertEqual(e["limit_board"], 2)
+        # 没有 limit_date 的纯手动条目 → 空事件
+        self.assertEqual(gui._abn_limit_dates({"name": "X"}), {})
+        self.assertEqual(gui._abn_limit_dates(None), {})
+
+    def test_涨停题材索引(self):
+        with tempfile.TemporaryDirectory() as td:
+            fp = Path(td) / "sector_breadth.json"
+            fp.write_text(json.dumps({"days": {"2026-11-03": {"sections": {
+                "大消费": {"members": [{"code": "600000", "name": "浦发", "board": 2}]},
+                "其他": {"members": [{"code": "300001", "name": "特锐德", "board": 1}]},
+            }}}}, ensure_ascii=False), encoding="utf-8")
+            idx = gui._limitup_theme_index(fp=fp)
+            self.assertEqual(idx, {"2026-11-03": {"600000": "大消费", "300001": "其他"}})
+            # 同文件 mtime 未变 ⇒ 命中缓存；文件不存在 ⇒ 空
+            self.assertEqual(gui._limitup_theme_index(fp=fp)["2026-11-03"]["600000"], "大消费")
+            self.assertEqual(gui._limitup_theme_index(fp=Path(td) / "no.json"), {})
+
     def test_按昨收推算涨停价(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)
@@ -385,7 +521,7 @@ class TestFrontendTime(unittest.TestCase):
         self.assertIn("🕘", JS)
         self.assertIn('id="abnLimitNotice"', HTML)
         self.assertIn("function _abnNotice(html)", JS)
-        self.assertIn("按涨停时间排序", JS)
+        self.assertIn("按涨停日期分组（新→旧）", JS)
         self.assertIn("_lds[_lds.length - 1]", JS, "日期框跟随池里最近的涨停日")
         self.assertIn("function limitBoardText(board)", JS)
         self.assertIn('_CN_NUM', JS)
@@ -405,6 +541,13 @@ class TestFrontend(unittest.TestCase):
         self.assertIn("首板", JS)
         # 日期框默认跟随全局选中日
         self.assertIn('getElementById("abnLimitDate")', JS)
+
+    def test_题材分组前端(self):
+        # 2026-11-15 owner：「每一日按图片里的题材分类」——日期段内再按涨停题材分组
+        self.assertIn("abn-theme-head", JS)
+        self.assertIn("r.limit_theme", JS)
+        self.assertIn("abn-theme-count", JS)
+        self.assertIn("其他", JS)
 
 
 if __name__ == "__main__":

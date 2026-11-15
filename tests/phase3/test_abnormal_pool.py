@@ -21,6 +21,13 @@ _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 _HTML = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
 
 
+def _abn_body():
+    """renderAbnormalPool 函数整段（函数体已超旧 3000/4000/5000 字符窗口，改按函数边界切）。"""
+    i = _JS.index("function renderAbnormalPool")
+    j = _JS.index("async function _patchPoolQuotes", i)
+    return _JS[i:j]
+
+
 @pytest.fixture()
 def api(tmp_path, monkeypatch):
     monkeypatch.setattr(gui.Api, "_ABN_FP", tmp_path / "abnormal_pool.json")
@@ -152,16 +159,14 @@ class TestFrontendWiring:
         assert 'id="abnSearch"' in _HTML and "abnormalAdd()" in _HTML
 
     def test_reuses_shared_cells(self):
-        i = _JS.index("function renderAbnormalPool")
-        seg = _JS[i:i + 3000]
+        seg = _abn_body()
         for fn in ("verdictBadge", "condCellHtml", "ma20FlagCellHtml",
                    "hunterPriceHtml", "hunterMktcapHtml"):
             assert fn in seg, f"单元格必须复用 {fn}（与建仓表同一套样式）"
 
     def test_tags_column_and_ma5_row_bg(self):
         """技术标签列 + 整行底色按 5 日线（owner 2026-10-23：颜色要与建仓信号扫描对齐）。"""
-        i = _JS.index("function renderAbnormalPool")
-        seg = _JS[i:i + 5000]
+        seg = _abn_body()
         assert "tagBadge" in seg, "技术标签列必须复用建仓表/猎手的 tagBadge"
         assert "above_ma5" in seg, "整行底色要按 5 日线特征"
         assert "rgba(63,185,80" in seg and "rgba(248,81,73" in seg, \
@@ -179,8 +184,7 @@ class TestFrontendWiring:
         assert "loadAbnormalPool()" in _JS, "切回手动盘页要补一次（否则离开再回来不刷新）"
 
     def test_reason_cell_editable(self):
-        i = _JS.index("function renderAbnormalPool")
-        seg = _JS[i:i + 4000]
+        seg = _abn_body()
         assert "abnormalSetReason" in seg, "涨停原因格要可编辑并保存"
         assert "涨停原因" in seg
         assert "event.stopPropagation()" in seg, "格内输入框别触发整行的双击看图"
