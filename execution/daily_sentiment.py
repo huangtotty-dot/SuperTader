@@ -572,7 +572,25 @@ def _load_report_gen_modules(report_gen_dir: str) -> Dict[str, Any]:
             raise FileNotFoundError(f"report_gen 模块缺失: {path}")
         spec = importlib.util.spec_from_file_location(alias, path)
         mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        # 2026-11-16：外部 report_gen 的 market_data 用 `https://ifzq.gtimg.cn/...fqkline`，
+        # 该主机对 fqkline 现在直接回 **HTTP 501**（我们自己的 tencent_provider 早已改走
+        # `web.ifzq.gtimg.cn`，见 core/market_data/tencent_provider.py::daily_kline_raw 注释）。
+        # 后果：1227 只**全部**取数失败 ⇒ 概念 TOP3 恒 0、打分池空。
+        # 这里在**加载时改写主机名**，外部仓库文件一个字节都不动。
+        _patched = None
+        if alias == "rg_market_data":
+            try:
+                with open(path, "r", encoding="utf-8") as _f:
+                    _src = _f.read()
+                _cand = _src.replace("https://ifzq.gtimg.cn/", "https://web.ifzq.gtimg.cn/")
+                if _cand != _src:
+                    _patched = _cand
+            except Exception:
+                _patched = None
+        if _patched is not None:
+            exec(compile(_patched, path, "exec"), mod.__dict__)
+        else:
+            spec.loader.exec_module(mod)
         mods[alias] = mod
     _RG_MOD_CACHE = {"dir": report_gen_dir, "mods": mods}
     return mods
