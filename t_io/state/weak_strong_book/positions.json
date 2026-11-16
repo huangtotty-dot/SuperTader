@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-11-13 14:50:06",
+  "updated_at": "2026-11-16 14:50:00",
   "open": {
     "300534": {
       "entry_date": "2026-11-10",
@@ -8,8 +8,8 @@
       "dev20": -0.005353,
       "gap": 0.11056751467710368,
       "board": "医药",
-      "days_held": 3,
-      "last_check_date": "2026-11-13"
+      "days_held": 4,
+      "last_check_date": "2026-11-16"
     },
     "600629": {
       "entry_date": "2026-11-13",
@@ -18,8 +18,8 @@
       "dev20": -0.043571,
       "gap": 0.05050505050505061,
       "board": "地产",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-11-16"
     },
     "688708": {
       "entry_date": "2026-11-13",
@@ -28,8 +28,8 @@
       "dev20": -0.009589,
       "gap": 0.037151702786377694,
       "board": "军工",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-11-16"
     }
   },
   "closed": {
