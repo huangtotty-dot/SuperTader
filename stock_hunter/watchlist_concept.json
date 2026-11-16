@@ -15,20 +15,23 @@
   "business_summary": "主营房地产业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "冰雪经济",
+  "category": "冰雪经济|同花顺漂亮100",
   "concept": "旅游消费",
   "name": "万科A",
   "primary_source": "legacy",
   "sector": "房地产业/租售同权/物业管理/养老概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 19:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "concept_desc": {
    "旅游消费": "旅游消费（冰雪口径下的景区/酒店/服务）"
   },
   "tag_verdict": "边缘",
   "concept_reason": {
    "旅游消费": "万科A：地产主业，早年运营松花湖滑雪度假区，已非主要业务"
-  }
+  },
+  "category1": "冰雪经济",
+  "concept1": "旅游消费",
+  "category2": "同花顺漂亮100"
  },
  "000006": {
   "business_summary": "主营房地产业",
@@ -728,7 +731,7 @@
   "primary_source": "legacy",
   "sector": "通信设备/AI手机/汽车电子/6G概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-11-16 21:51:16",
   "concept_desc": {
    "芯片设计-CPU/GPU/AI计算": "CPU、GPU、AI训练推理和数据中心计算芯片设计。"
   },
@@ -738,10 +741,6 @@
    "液冷服务器": "中兴通讯：通信设备为主，自研芯片为辅",
    "芯片设计-CPU/GPU/AI计算": "公司具备自研芯片能力，真实产品边界包括服务器及数据中心相关的中央处理器、人工智能计算等芯片研发，并服务于自身通信和算力产品体系；这与单纯采购芯片组装服务器不同，但也不能把整机或方案收入当作芯片收入。iFinD二〇二五年运营商网络收入六百二十八点五七亿元，占百分之四十六点九四，政企业务三百七十二点二二亿元，占百分之二十七点八零，消费者业务三百三十八点一六亿元，占百分之二十五点二六，芯片没有独立收入分部。半导体能力真实存在，但从上市公司收入结构看仍依附于通信设备与算力系统主业，因此定为相关而非核心。旧标签若把整个公司归为AI芯片核心股、晶圆制造或虚构独立芯片收入，均需纠正。"
   },
-  "category2": "液冷",
-  "concept2": "液冷服务器",
-  "category1": "半导体",
-  "concept1": "芯片设计-CPU/GPU/AI计算",
   "semiconductor_verdicts": {
    "半导体": "相关"
   },
@@ -769,7 +768,14 @@
    ],
    "verdict": "相关",
    "reason": "公司具备自研芯片能力，真实产品边界包括服务器及数据中心相关的中央处理器、人工智能计算等芯片研发，并服务于自身通信和算力产品体系；这与单纯采购芯片组装服务器不同，但也不能把整机或方案收入当作芯片收入。iFinD二〇二五年运营商网络收入六百二十八点五七亿元，占百分之四十六点九四，政企业务三百七十二点二二亿元，占百分之二十七点八零，消费者业务三百三十八点一六亿元，占百分之二十五点二六，芯片没有独立收入分部。半导体能力真实存在，但从上市公司收入结构看仍依附于通信设备与算力系统主业，因此定为相关而非核心。旧标签若把整个公司归为AI芯片核心股、晶圆制造或虚构独立芯片收入，均需纠正。"
-  }
+  },
+  "category1": "半导体",
+  "concept1": "芯片设计-CPU/GPU/AI计算",
+  "category2": "液冷",
+  "concept2": "液冷服务器",
+  "category3": "同花顺漂亮100",
+  "category": "半导体|液冷|同花顺漂亮100",
+  "concept": "芯片设计-CPU/GPU/AI计算|液冷服务器"
  },
  "000065": {
   "business_summary": "专注于国际市场的国际工程承包商",
@@ -1225,7 +1231,7 @@
   "primary_source": "legacy",
   "sector": "炼化及贸易/环氧丙烷/煤化工概念/POE胶膜",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "concept_desc": {
    "煤化工": "以煤为原料做烯烃、乙二醇、尿素等化工品，赚钱看煤价与油价（油煤价差）"
   },
@@ -1238,40 +1244,45 @@
   "category1": "电池",
   "concept1": "其他关键材料及设备",
   "category2": "煤化工",
-  "concept2": "煤化工"
+  "concept2": "煤化工",
+  "category3": "同花顺漂亮100",
+  "category": "电池|煤化工|同花顺漂亮100",
+  "concept": "其他关键材料及设备|煤化工"
  },
  "000333": {
   "business_summary": "智能家居、工业技术、楼宇科技、机器人与自动化、新能源、健康医疗、智慧物流等业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "美的集团",
   "primary_source": "legacy",
   "sector": "白色家电/超级品牌/高股息精选/证金持股",
   "sector_type": "legacy",
-  "updated_at": "2026-06-24 11:21:37"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "000338": {
   "business_summary": "主营汽车零部件",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电力",
+  "category": "电力|同花顺漂亮100",
   "concept": "发电设备（整机与辅机）",
   "name": "潍柴动力",
   "primary_source": "legacy",
   "sector": "汽车零部件/汽车电子/数据中心/同花顺出海50",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 08:28:59",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'SOFC|中军-SOFC/燃料电池布局' → 'SOFC'",
   "tag_verdict": "相关",
   "concept_reason": {
    "发电设备（整机与辅机）": "潍柴动力：动力总成主业，燃料电池/SOFC 为新能源板块"
   },
   "power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：SOFC → 发电设备",
+  "power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 发电设备（整机与辅机）",
   "category1": "电力",
   "concept1": "发电设备（整机与辅机）",
-  "power_gen_split_20261109": "2026-11-09 08:28:59 发电设备拆分/归位 → 发电设备（整机与辅机）"
+  "category2": "同花顺漂亮100"
  },
  "000400": {
   "business_summary": "为国民经济和社会发展提供能源电力高端技术装备，为清洁能源生产、传输、配送以及高效使用提供全面的技术、产品和服务支撑。",
@@ -2201,13 +2212,13 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "中药",
+  "category": "中药|同花顺漂亮100",
   "concept": "中药品牌",
   "name": "云南白药",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'种植|民族药|百年老字号|中药饮片|中军-白药平台中军' → '种植|民族药|百年老字号|中药饮片'",
   "concept_note": "2026-10-19 医药二级概念整合：剥AI4S前缀/删公司名标签/同义词收编",
   "concept_desc": {
@@ -2217,7 +2228,10 @@
   "tag_verdict": "核心",
   "concept_reason": {
    "中药品牌": "主营：药品；与本标签一致"
-  }
+  },
+  "category1": "中药",
+  "concept1": "中药品牌",
+  "category2": "同花顺漂亮100"
  },
  "000539": {
   "business_summary": "主营电力",
@@ -2822,15 +2836,16 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大消费",
+  "category": "大消费|同花顺漂亮100",
   "concept": "白酒",
   "name": "泸州老窖",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-30 21:40:08",
+  "updated_at": "2026-11-16 21:51:16",
   "category1": "大消费",
-  "concept1": "白酒"
+  "concept1": "白酒",
+  "category2": "同花顺漂亮100"
  },
  "000570": {
   "business_summary": "主营乡村振兴",
@@ -3600,13 +3615,14 @@
   "business_summary": "享誉全球的空调行业第一品牌，利润和市占率第一的空调企业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "格力电器",
   "primary_source": "legacy",
   "sector": "白色家电/超级品牌/高股息精选",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "000652": {
   "business_summary": "主营批发业",
@@ -4581,13 +4597,14 @@
   "business_summary": "显示器件业务、物联网创新业务、传感业务、MLED业务、智慧医工业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "京东方A",
   "primary_source": "legacy",
   "sector": "光学光电子/同花顺果指数/电子纸/MicroLED概念",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:25:44"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "000726": {
   "business_summary": "主营纺织业",
@@ -5143,19 +5160,22 @@
   "business_summary": "投资银行业务、财富管理业务、交易及机构业务和投资管理业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "金融",
+  "category": "金融|同花顺漂亮100",
   "concept": "券商",
   "name": "广发证券",
   "primary_source": "legacy",
   "sector": "证券Ⅱ/期货概念/同花顺漂亮100/证金持股",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'券商|龙头-广东国资券商' → '券商'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "券商": "主营：投资银行业务；与本标签一致"
-  }
+  },
+  "category1": "金融",
+  "concept1": "券商",
+  "category2": "同花顺漂亮100"
  },
  "000777": {
   "business_summary": "主营通用设备制造业",
@@ -5327,19 +5347,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
+  "category": "电池|同花顺漂亮100",
   "concept": "锂矿资源",
   "name": "盐湖股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'锂矿资源|中军-盐湖提锂中军' → '锂矿资源'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "锂矿资源": "盐湖股份：钾肥+盐湖提锂"
-  }
+  },
+  "category1": "电池",
+  "concept1": "锂矿资源",
+  "category2": "同花顺漂亮100"
  },
  "000795": {
   "business_summary": "主营非金属矿物制品业",
@@ -6120,19 +6143,20 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大消费",
+  "category": "大消费|同花顺漂亮100",
   "concept": "白酒",
   "name": "五粮液",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 22:26:11",
-  "category1": "大消费",
-  "concept1": "白酒",
+  "updated_at": "2026-11-16 21:51:16",
   "concept_reason": {
    "白酒": "五粮液：白酒（东财白酒板块 19 只补齐）"
   },
-  "baijiu_snow_20261109": "2026-11-09 22:26:11 补充 大消费/白酒"
+  "baijiu_snow_20261109": "2026-11-09 22:26:11 补充 大消费/白酒",
+  "category1": "大消费",
+  "concept1": "白酒",
+  "category2": "同花顺漂亮100"
  },
  "000859": {
   "business_summary": "高分子功能膜材料、光电新材料、聚酰亚胺材料、绿色环保木塑新材料、新能源汽车轻量化材料的研发、采购、生产、销售。",
@@ -8819,15 +8843,15 @@
   "business_summary": "主营碳交易",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "category1": "央企",
+  "category": "央企|同花顺漂亮100",
   "concept": "",
-  "concept1": "",
   "name": "龙源电力",
   "primary_source": "legacy",
   "sector": "碳交易/绿色电力",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "央企",
+  "category2": "同花顺漂亮100"
  },
  "001296": {
   "business_summary": "主营非金属矿物制品业",
@@ -10529,14 +10553,12 @@
   "primary_source": "legacy",
   "sector": "商务服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "AI营销": "公司主营楼宇及影院等生活圈媒体，已基于通义百炼推出“众智AI”，覆盖客户洞察、创意生成、策略制定和投放优化；后续“分众智投”面向本地生活客户提供潜客筛选、点位优选、智能监播及效果评估，“众小智”已在内部使用。AI产品直接服务主营广告营销且已有客户应用，但AI收入未单独披露，故保留AI营销并定为相关。"
   },
-  "category1": "AI应用",
-  "concept1": "AI营销",
   "concept_desc": {
    "AI营销": "以AIGC、智能体或营销大模型完成客户洞察、内容生成、投放和归因；普通广告代理、媒介采购或仅使用平台算法不直接纳入。"
   },
@@ -10567,7 +10589,12 @@
    ],
    "verdict": "相关",
    "reason": "公司主营楼宇及影院等生活圈媒体，已基于通义百炼推出“众智AI”，覆盖客户洞察、创意生成、策略制定和投放优化；后续“分众智投”面向本地生活客户提供潜客筛选、点位优选、智能监播及效果评估，“众小智”已在内部使用。AI产品直接服务主营广告营销且已有客户应用，但AI收入未单独披露，故保留AI营销并定为相关。"
-  }
+  },
+  "category1": "AI应用",
+  "concept1": "AI营销",
+  "category2": "同花顺漂亮100",
+  "category": "AI应用|同花顺漂亮100",
+  "concept": "AI营销"
  },
  "002028": {
   "business_summary": "主营电网设备",
@@ -11033,7 +11060,7 @@
   "primary_source": "legacy",
   "sector": "半导体/存储芯片/汽车芯片/MCU芯片",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 21:32:22",
+  "updated_at": "2026-11-16 21:51:16",
   "role": "龙头",
   "role_reason": "特种集成电路龙头，特种FPGA国内市占率60-70%，2025年特种业务营收占比52%（2026-05雪球/2026-04年报）",
   "exclude_note_2026_10_20": "剔除存储标签：特种存储器属特种IC口径，军工标签已覆盖；军工龙头role保留",
@@ -11074,11 +11101,12 @@
    "verdict": "核心",
    "reason": "公司特种集成电路已形成处理器、可编程器件、存储器、网络与接口、模拟器件、ASIC及SoPC等八百多个货架品种，宇航用耐辐照FPGA、回读刷新芯片、存储器和总线接口已获得核心用户应用并产生持续收入，属于高可靠特种芯片实际供货，而非把普通安全芯片泛化为军工。2025年特种集成电路收入32.1201亿元，占52.26%；智能安全芯片25.4714亿元，占41.45%，晶体元器件3.2029亿元，占5.2116%，特种集成电路已超过半数且为两大主业之一，故列核心。旧“军工电子-军工芯片”与业务一致，但应改用产品实质更明确的军工芯片与特种集成电路，并避免把民用智能安全芯片一并计入军工。"
   },
+  "category": "军工|同花顺漂亮100",
+  "concept": "军工电子与元器件",
+  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 军工电子与元器件",
   "category1": "军工",
   "concept1": "军工电子与元器件",
-  "category": "军工",
-  "concept": "军工电子与元器件",
-  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 军工电子与元器件"
+  "category2": "同花顺漂亮100"
  },
  "002050": {
   "business_summary": "制冷空调电器与汽车的零件部件组件的研发、生产与销售。",
@@ -12531,7 +12559,7 @@
   "primary_source": "legacy",
   "sector": "光伏设备/TOPCON电池/BC电池/HJT电池",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-16 21:51:16",
   "concept_desc": {
    "太空光伏组件": "空间用太阳能电池与组件（砷化镓等）",
    "半导体材料-硅片与硅部件": "半导体硅片、硅棒、硅电极和硅结构部件。"
@@ -12571,13 +12599,14 @@
    "verdict": "核心",
    "reason": "公司半导体业务的真实产品是半导体硅片等硅材料，服务集成电路及功率器件等制造环节；光伏硅片虽然也属硅材料，却不能与半导体硅片混为同一终端口径。iFinD二〇二五年半导体材料收入五十七点零七亿元，占营业收入百分之十九点六四，光伏硅片收入一百二十二点三八亿元，占百分之四十二点一三，组件收入九十三点二四亿元，占百分之三十二点一零，显示公司仍是混合业务结构。半导体材料已达到重要收入规模，故可由一般相关提升为核心，但核心不代表全部营收来自半导体。旧标签若只列光伏、把全部硅片收入归入半导体，或误写为芯片制造，应纠正为半导体硅片与硅部件并明确光伏边界。"
   },
+  "category": "半导体|光伏|同花顺漂亮100",
+  "concept": "半导体材料-硅片与硅部件|硅料硅片",
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 硅料硅片",
   "category1": "半导体",
   "concept1": "半导体材料-硅片与硅部件",
   "category2": "光伏",
   "concept2": "硅料硅片",
-  "category": "半导体|光伏",
-  "concept": "半导体材料-硅片与硅部件|硅料硅片",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 硅料硅片"
+  "category3": "同花顺漂亮100"
  },
  "002130": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -14826,7 +14855,7 @@
   "primary_source": "legacy",
   "sector": "软件开发/ChatGPT概念/华为昇腾/互联网保险",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-16 21:51:16",
   "concept_desc": {
    "AI大模型": "自研通用或垂直大模型并通过API、MaaS、订阅、部署或行业项目商业化。"
   },
@@ -14836,10 +14865,6 @@
    "AI大模型": "公司主营即人工智能核心技术、产品及行业应用，星火大模型已广泛用于教育、医疗、央国企、金融及消费者软硬件。2025年AI平台及授权收入12.52亿元，其中大模型API及MaaS收入3.85亿元、同比增长263%，并有企业级项目规模化落地。主营方向、真实产品、客户交付和可量化收入相互印证，因此保留AI大模型并维持核心定级。",
    "昇腾应用软件伙伴": "科大讯飞：AI 平台与行业应用"
   },
-  "category2": "超节点",
-  "concept2": "昇腾应用软件伙伴",
-  "category1": "AI应用",
-  "concept1": "AI大模型",
   "aiapp_verdicts": {
    "AI应用": "核心"
   },
@@ -14867,7 +14892,14 @@
    ],
    "verdict": "核心",
    "reason": "公司主营即人工智能核心技术、产品及行业应用，星火大模型已广泛用于教育、医疗、央国企、金融及消费者软硬件。2025年AI平台及授权收入12.52亿元，其中大模型API及MaaS收入3.85亿元、同比增长263%，并有企业级项目规模化落地。主营方向、真实产品、客户交付和可量化收入相互印证，因此保留AI大模型并维持核心定级。"
-  }
+  },
+  "category1": "AI应用",
+  "concept1": "AI大模型",
+  "category2": "超节点",
+  "concept2": "昇腾应用软件伙伴",
+  "category3": "同花顺漂亮100",
+  "category": "AI应用|超节点|同花顺漂亮100",
+  "concept": "AI大模型|昇腾应用软件伙伴"
  },
  "002232": {
   "business_summary": "主营软件和信息技术服务业",
@@ -15056,13 +15088,14 @@
   "business_summary": "提供精密零组件和智能硬件整机的垂直整合产品解决方案，以及相关设计研发和生产制造服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "歌尔股份",
   "primary_source": "legacy",
   "sector": "消费电子/智能音箱/同花顺果指数/无线耳机",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "002242": {
   "business_summary": "主营电气机械和器材制造业",
@@ -15604,13 +15637,14 @@
   "business_summary": "主营非金属矿物制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "东方雨虹",
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "002272": {
   "business_summary": "新能源流体系统及液压元件制造及销售、提供流体工业技术服务、清洁能源装备及解决方案、储能装备及系统集成、数字化供应链智造服务等。",
@@ -16315,19 +16349,22 @@
   "business_summary": "主营饲料",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大农业",
+  "category": "大农业|同花顺漂亮100",
   "concept": "猪",
   "name": "海大集团",
   "primary_source": "legacy",
   "sector": "饲料/猪肉/生态农业/同花顺漂亮100",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'猪|中军-饲料龙头' → '猪'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "猪": "主营：饲料、种苗、动保；与本标签一致"
-  }
+  },
+  "category1": "大农业",
+  "concept1": "猪",
+  "category2": "同花顺漂亮100"
  },
  "002312": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -17188,18 +17225,21 @@
   "business_summary": "主营物流",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "低空经济",
+  "category": "低空经济|同花顺漂亮100",
   "concept": "物流",
   "name": "顺丰控股",
   "primary_source": "legacy",
   "sector": "物流/超级品牌/统一大市场/冷链物流",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 11:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "物流": "顺丰控股：快递龙头，低空物流探索"
-  }
+  },
+  "category1": "低空经济",
+  "concept1": "物流",
+  "category2": "同花顺漂亮100"
  },
  "002353": {
   "business_summary": "高端装备制造、油气工程及技术服务、油气田开发、新能源及再生循环等。",
@@ -17582,7 +17622,7 @@
   "primary_source": "legacy",
   "sector": "半导体/国家大基金持股/中芯国际概念/存储芯片",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19": "去掉分层标签：'半导体设备|中军-平台型设备龙头' → '半导体设备'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
@@ -17595,16 +17635,6 @@
    "半导体设备-涂胶显影": "公司真实半导体装备覆盖刻蚀、物理及化学气相沉积等薄膜设备、氧化扩散与快速热处理、清洗、离子注入、涂胶显影以及键合焊接等工艺环节，均有明确产品平台支撑，不是以泛半导体概念拼接待定设备。iFinD二〇二五年电子工艺装备收入三百六十七点三一亿元，占营业收入百分之九十三点三四，核心定级由主营规模直接支持；但该分部还含真空及新能源等装备，不能把三百六十七点三一亿元全部认作半导体收入，各设备收入也未逐项独立披露。旧标签若仅保留单一刻蚀或薄膜环节会遗漏真实产品，若写芯片制造则越过设备边界，应按已证实设备类别纠正并排除未经核实的设备概念。",
    "半导体设备-键合与焊接": "公司真实半导体装备覆盖刻蚀、物理及化学气相沉积等薄膜设备、氧化扩散与快速热处理、清洗、离子注入、涂胶显影以及键合焊接等工艺环节，均有明确产品平台支撑，不是以泛半导体概念拼接待定设备。iFinD二〇二五年电子工艺装备收入三百六十七点三一亿元，占营业收入百分之九十三点三四，核心定级由主营规模直接支持；但该分部还含真空及新能源等装备，不能把三百六十七点三一亿元全部认作半导体收入，各设备收入也未逐项独立披露。旧标签若仅保留单一刻蚀或薄膜环节会遗漏真实产品，若写芯片制造则越过设备边界，应按已证实设备类别纠正并排除未经核实的设备概念。"
   },
-  "category1": "半导体",
-  "concept1": [
-   "半导体设备-刻蚀",
-   "半导体设备-薄膜沉积",
-   "半导体设备-热处理与去胶",
-   "半导体设备-清洗",
-   "半导体设备-离子注入",
-   "半导体设备-涂胶显影",
-   "半导体设备-键合与焊接"
-  ],
   "concept_desc": {
    "半导体设备-刻蚀": "集成电路和功率器件干法、湿法刻蚀设备。",
    "半导体设备-薄膜沉积": "PVD、CVD、ALD等半导体薄膜沉积设备。",
@@ -17665,7 +17695,12 @@
    ],
    "verdict": "核心",
    "reason": "公司真实半导体装备覆盖刻蚀、物理及化学气相沉积等薄膜设备、氧化扩散与快速热处理、清洗、离子注入、涂胶显影以及键合焊接等工艺环节，均有明确产品平台支撑，不是以泛半导体概念拼接待定设备。iFinD二〇二五年电子工艺装备收入三百六十七点三一亿元，占营业收入百分之九十三点三四，核心定级由主营规模直接支持；但该分部还含真空及新能源等装备，不能把三百六十七点三一亿元全部认作半导体收入，各设备收入也未逐项独立披露。旧标签若仅保留单一刻蚀或薄膜环节会遗漏真实产品，若写芯片制造则越过设备边界，应按已证实设备类别纠正并排除未经核实的设备概念。"
-  }
+  },
+  "category1": "半导体",
+  "concept1": "半导体设备-刻蚀|半导体设备-薄膜沉积|半导体设备-热处理与去胶|半导体设备-清洗|半导体设备-离子注入|半导体设备-涂胶显影|半导体设备-键合与焊接",
+  "category2": "同花顺漂亮100",
+  "category": "半导体|同花顺漂亮100",
+  "concept": "半导体设备-刻蚀|半导体设备-薄膜沉积|半导体设备-热处理与去胶|半导体设备-清洗|半导体设备-离子注入|半导体设备-涂胶显影|半导体设备-键合与焊接"
  },
  "002372": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -18867,13 +18902,14 @@
   "business_summary": "以智能物联为战略定位，视频技术为核心打造从研发，制造到营销的完整价值链。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "海康威视",
   "primary_source": "legacy",
   "sector": "计算机设备/足球概念/同花顺漂亮100/养老概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "002416": {
   "business_summary": "主营批发业",
@@ -19720,19 +19756,22 @@
   "business_summary": "锂资源开发、锂盐深加工及金属锂冶炼、锂电池制造及退役锂电池综合回收利用。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
+  "category": "电池|同花顺漂亮100",
   "concept": "锂矿资源",
   "name": "赣锋锂业",
   "primary_source": "legacy",
   "sector": "能源金属/盐湖提锂/金属钴/小金属概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'锂矿资源|中军-锂盐龙头' → '锂矿资源'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "锂矿资源": "赣锋锂业：锂化合物全产业链"
-  }
+  },
+  "category1": "电池",
+  "concept1": "锂矿资源",
+  "category2": "同花顺漂亮100"
  },
  "002461": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -19933,19 +19972,22 @@
   "business_summary": "硬岩型锂矿资源的开发、锂精矿生产销售以及锂化工产品的生产销售，为清洁能源的转型发展提供可持续、高质量的锂解决方案。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
+  "category": "电池|同花顺漂亮100",
   "concept": "锂矿资源",
   "name": "天齐锂业",
   "primary_source": "legacy",
   "sector": "能源金属/盐湖提锂/小金属概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'锂矿资源|中军-锂矿巨头' → '锂矿资源'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "锂矿资源": "天齐锂业：锂矿与锂盐龙头"
-  }
+  },
+  "category1": "电池",
+  "concept1": "锂矿资源",
+  "category2": "同花顺漂亮100"
  },
  "002467": {
   "business_summary": "主营互联网和相关服务",
@@ -20164,13 +20206,14 @@
   "business_summary": "消费电子、通信及数据中心、汽车、医疗等领域相关零组件、模组及系统集成业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "立讯精密",
   "primary_source": "legacy",
   "sector": "消费电子/同花顺果指数/铜缆高速连接/共封装光学(CPO)",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "002476": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -20473,18 +20516,21 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "煤化工",
+  "category": "煤化工|同花顺漂亮100",
   "concept": "煤化工",
   "name": "荣盛石化",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 13:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "煤化工": "荣盛石化：炼化一体化，非煤化工"
-  }
+  },
+  "category1": "煤化工",
+  "concept1": "煤化工",
+  "category2": "同花顺漂亮100"
  },
  "002494": {
   "business_summary": "主营皮革、毛皮、羽毛及其制品和制鞋业",
@@ -22264,13 +22310,14 @@
   "business_summary": "以新能源汽车为主的汽车业务、手机部件及组装业务，二次充电电池及光伏业务，同时利用自身的技术优势积极拓展城市轨道交通业务领域。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "比亚迪",
   "primary_source": "legacy",
   "sector": "乘用车/超级品牌/同花顺漂亮100/盐湖提锂",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "002595": {
   "business_summary": "主营专用设备制造业",
@@ -24091,7 +24138,7 @@
   "primary_source": "legacy",
   "sector": "电池/氟化工概念/钠离子电池/固态电池",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'正极材料|电解液|中军-电解液龙头' → '正极材料|电解液'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
@@ -24100,7 +24147,10 @@
    "电解液": "天赐材料：电解液+磷酸铁锂一体化"
   },
   "category1": "电池",
-  "concept1": "正极材料"
+  "concept1": "正极材料",
+  "category2": "同花顺漂亮100",
+  "category": "电池|同花顺漂亮100",
+  "concept": "正极材料"
  },
  "002712": {
   "business_summary": "主营商务服务业",
@@ -24176,19 +24226,22 @@
   "business_summary": "主营畜牧业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大农业",
+  "category": "大农业|同花顺漂亮100",
   "concept": "猪",
   "name": "牧原股份",
   "primary_source": "legacy",
   "sector": "畜牧业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'猪|中军-生猪养殖龙头' → '猪'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "猪": "主营：生猪的养殖销售、生猪屠宰；与本标签一致"
-  }
+  },
+  "category1": "大农业",
+  "concept1": "猪",
+  "category2": "同花顺漂亮100"
  },
  "002715": {
   "business_summary": "主营汽车制造业",
@@ -25570,19 +25623,22 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
+  "category": "电池|同花顺漂亮100",
   "concept": "其他关键材料及设备",
   "name": "恩捷股份",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'其他关键材料及设备|中军-隔膜全球龙头' → '其他关键材料及设备'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "其他关键材料及设备": "恩捷股份：隔膜龙头"
-  }
+  },
+  "category1": "电池",
+  "concept1": "其他关键材料及设备",
+  "category2": "同花顺漂亮100"
  },
  "002813": {
   "business_summary": "主营人工智能",
@@ -30368,25 +30424,27 @@
   "business_summary": "主营电池",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "亿纬锂能",
   "primary_source": "legacy",
   "sector": "电池/钠离子电池/盐湖提锂/动力电池回收",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "300015": {
   "business_summary": "主营卫生",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "爱尔眼科",
   "primary_source": "legacy",
   "sector": "卫生",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "300016": {
   "business_summary": "主营医药制造业",
@@ -31445,19 +31503,22 @@
   "business_summary": "主营证券Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "金融",
+  "category": "金融|同花顺漂亮100",
   "concept": "金融IT",
   "name": "东方财富",
   "primary_source": "legacy",
   "sector": "证券Ⅱ/互联网保险/期货概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'金融IT|中军-互联网券商中军' → '金融IT'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "金融IT": "主营：证券业务；与本标签一致"
-  }
+  },
+  "category1": "金融",
+  "concept1": "金融IT",
+  "category2": "同花顺漂亮100"
  },
  "300061": {
   "business_summary": "主营商务服务业",
@@ -32508,17 +32569,20 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "医药",
+  "category": "医药|同花顺漂亮100",
   "concept": "已上市",
   "name": "智飞生物",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 01:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_verdict": "核心",
   "concept_reason": {
    "已上市": "智飞生物：疫苗代理+自研（「已上市」只是上市状态标签）"
-  }
+  },
+  "category1": "医药",
+  "concept1": "已上市",
+  "category2": "同花顺漂亮100"
  },
  "300124": {
   "business_summary": "工业自动化产品领军企业，国内最大的低压变频器与伺服系统供应商",
@@ -32528,7 +32592,7 @@
   "primary_source": "legacy",
   "sector": "自动化设备/人形机器人/一体化压铸",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'电机|中军-工控伺服龙头' → '电机'",
   "role": "中军",
   "role_reason": "工控+机器人双龙头：伺服系统国内市占约28-32%第一、SCARA销量国内第一，市值约2000亿元，机构重仓的板块定海神针（2025-2026年行业榜单/研报）",
@@ -32571,11 +32635,12 @@
    },
    "reason": "2025年伺服系统收入约68.5亿元、通用自动化收入169亿元，工业机器人、机器视觉及人形机器人零部件均已有实际产品，SCARA市占率约28%。传统工控、伺服和机器人产品主业明确，并具备大规模商业化基础；即使覆盖人形机器人部件，也不改变其机器人核心供应商定位。"
   },
+  "category": "机器人|同花顺漂亮100",
+  "concept": "电机电控与感知",
+  "robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 电机电控与感知",
   "category1": "机器人",
   "concept1": "电机电控与感知",
-  "category": "机器人",
-  "concept": "电机电控与感知",
-  "robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 电机电控与感知"
+  "category2": "同花顺漂亮100"
  },
  "300125": {
   "business_summary": "",
@@ -35145,19 +35210,22 @@
   "business_summary": "光伏逆变器、储能系统、风电变流及传动产品、新能源汽车电控及电源系统、充电设备、氢能装备等新能源电源设备的研产销服和新能源投资开发，并布局AIDC电源业务，提供固态变压器SST及电源解决方案。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电力",
+  "category": "电力|同花顺漂亮100",
   "concept": "储能",
   "name": "阳光电源",
   "primary_source": "legacy",
   "sector": "光伏设备/宁德时代概念/同花顺漂亮100/氢能源",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'储能|中军-全球储能系统龙头' → '储能'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "储能": "阳光电源：光伏逆变器+储能"
-  }
+  },
+  "category1": "电力",
+  "concept1": "储能",
+  "category2": "同花顺漂亮100"
  },
  "300275": {
   "business_summary": "主营软件和信息技术服务业",
@@ -38538,13 +38606,13 @@
   "business_summary": "智能手机与电脑、智能汽车及座舱、智能头显与智能穿戴、人形机器人等智能终端的结构件、功能模组、整机组装等配套服务的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "商业航天|光伏",
+  "category": "商业航天|光伏|同花顺漂亮100",
   "concept": "卫星通信与运营|辅材与结构",
   "name": "蓝思科技",
   "primary_source": "legacy",
   "sector": "消费电子/同花顺果指数/AI手机/无线耳机",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
@@ -38583,11 +38651,12 @@
    "reason": "公司并非仅把消费电子玻璃想象空间应用，2025年报明确在地面端已向头部商业航天客户批量出货地面接收器外观件和结构件模组，具体包括低介电防护玻璃屏幕、路由器结构件等；卫星端航天级UTG产品则仍应区分验证进展与批量收入。2025年智能手机与电脑类收入611.8420亿元，新能源汽车及智能座舱64.6166亿元，智能头显与穿戴39.7817亿元，商业航天未独立拆分收入，在744.0973亿元总收入中占比无法核定。基于地面终端部件已有批量交付但仍属新业务，定为相关；旧“SpaceX潜在供应商-太阳能”和太空光伏辅材未获实证，改为真实地面接收终端配套。"
   },
   "space_reagg_20261109": "2026-11-09 18:31:20 商业航天聚合：卫星通信与运营",
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 辅材与结构",
   "category1": "商业航天",
   "concept1": "卫星通信与运营",
   "category2": "光伏",
   "concept2": "辅材与结构",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 辅材与结构"
+  "category3": "同花顺漂亮100"
  },
  "300434": {
   "business_summary": "主营医药制造业",
@@ -38908,24 +38977,25 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池|光伏",
+  "category": "电池|光伏|同花顺漂亮100",
   "concept": "其他关键材料及设备|设备",
   "name": "先导智能",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "其他关键材料及设备": "先导智能：锂电装备龙头",
    "设备": "先导智能：太空光伏设备（设备）"
   },
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 设备",
   "category1": "电池",
   "concept1": "其他关键材料及设备",
   "category2": "光伏",
   "concept2": "设备",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 设备"
+  "category3": "同花顺漂亮100"
  },
  "300451": {
   "business_summary": "主营软件和信息技术服务业",
@@ -45166,14 +45236,17 @@
   "primary_source": "legacy",
   "sector": "电池/钠离子电池/动力电池回收/同花顺漂亮100",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 17:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_removed_20261025": "太空光伏/太空光伏组件（实际主营：动力电池）",
-  "category": "电池",
+  "category": "电池|同花顺漂亮100",
   "concept": "其他关键材料及设备",
   "tag_verdict": "核心",
   "concept_reason": {
    "其他关键材料及设备": "宁德时代：动力/储能电池龙头"
-  }
+  },
+  "category1": "电池",
+  "concept1": "其他关键材料及设备",
+  "category2": "同花顺漂亮100"
  },
  "300751": {
   "business_summary": "主营光伏设备",
@@ -45449,13 +45522,14 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "迈瑞医疗",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "300761": {
   "business_summary": "主营畜牧业",
@@ -46029,13 +46103,14 @@
   "business_summary": "射频集成电路领域的研究、开发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "卓胜微",
   "primary_source": "legacy",
   "sector": "半导体/WiFi 6/先进封装/6G概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "300783": {
   "business_summary": "主营零售业",
@@ -48227,13 +48302,14 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "爱美客",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "300897": {
   "business_summary": "为水务企业提供稳定、可靠的智慧水务技术、产品及服务。",
@@ -49850,13 +49926,14 @@
   "business_summary": "主营农副食品加工业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "金龙鱼",
   "primary_source": "legacy",
   "sector": "农副食品加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "301000": {
   "business_summary": "精密注塑件及配套精密注塑模具的研发、生产和销售。",
@@ -58560,18 +58637,21 @@
   "business_summary": "主营航空运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大消费",
+  "category": "大消费|同花顺漂亮100",
   "concept": "大消费_免税概念",
   "name": "上海机场",
   "primary_source": "legacy",
   "sector": "航空运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 02:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "大消费_免税概念": "上海机场：机场免税靠租金与分成，主业是航空服务"
-  }
+  },
+  "category1": "大消费",
+  "concept1": "大消费_免税概念",
+  "category2": "同花顺漂亮100"
  },
  "600010": {
   "business_summary": "矿产资源开发利用、钢铁产品的生产与销售。",
@@ -58671,13 +58751,14 @@
   "business_summary": "主营黑色金属冶炼和压延加工业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "宝钢股份",
   "primary_source": "legacy",
   "sector": "黑色金属冶炼和压延加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600020": {
   "business_summary": "主营道路运输业",
@@ -58743,17 +58824,13 @@
   "business_summary": "主营电力、热力生产和供应业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "category1": "央企",
-  "category2": "电力",
-  "concept": "",
-  "concept1": "",
-  "concept2": "电力运营",
+  "category": "央企|电力|同花顺漂亮100",
+  "concept": "电力运营",
   "name": "华能水电",
   "primary_source": "legacy",
   "sector": "电力、热力生产和供应业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -58761,7 +58838,11 @@
   },
   "power_reason_20261108": "2026-11-08 20:01:08",
   "power_type": "水电",
-  "power_type_20261108": "2026-11-08 20:45:36"
+  "power_type_20261108": "2026-11-08 20:45:36",
+  "category1": "央企",
+  "category2": "电力",
+  "concept2": "电力运营",
+  "category3": "同花顺漂亮100"
  },
  "600026": {
   "business_summary": "主营水上运输业",
@@ -58837,31 +58918,35 @@
   "business_summary": "主营证券Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "金融",
+  "category": "金融|同花顺漂亮100",
   "concept": "券商",
   "name": "中信证券",
   "primary_source": "legacy",
   "sector": "证券Ⅱ/期货概念/同花顺漂亮100/证金持股",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'券商|中军-券商一哥' → '券商'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "券商": "主营：资本市场服务业务；与本标签一致"
-  }
+  },
+  "category1": "金融",
+  "concept1": "券商",
+  "category2": "同花顺漂亮100"
  },
  "600031": {
   "business_summary": "工程机械的研发、制造、销售和服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "三一重工",
   "primary_source": "legacy",
   "sector": "工程机械/同花顺出海50/雅下水电概念/同花顺漂亮100",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600032": {
   "business_summary": "风电、光伏、水电、氢能、储能等可再生能源业务方向的投资、开发、建设、运营、管理。",
@@ -58913,13 +58998,14 @@
   "business_summary": "主营货币金融服务",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "招商银行",
   "primary_source": "legacy",
   "sector": "货币金融服务",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600037": {
   "business_summary": "主营电信、广播电视和卫星传输服务",
@@ -59024,13 +59110,14 @@
   "business_summary": "主营房地产业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "保利发展",
   "primary_source": "legacy",
   "sector": "房地产业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600050": {
   "business_summary": "主营电信、广播电视和卫星传输服务",
@@ -59644,13 +59731,14 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "上汽集团",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:29:31"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600105": {
   "business_summary": "光纤预制棒、通信光纤、特种光纤、通信光缆、光电复合缆、通信电缆、数据电缆",
@@ -59833,13 +59921,14 @@
   "business_summary": "稀土精矿，稀土深加工产品，稀土新材料生产与销售，稀土高科技应用产品的开发、生产和销售；稀土技术转让等。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "北方稀土",
   "primary_source": "legacy",
   "sector": "小金属/稀土永磁/小金属概念/金属回收",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:29:31"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600113": {
   "business_summary": "主营商务服务业",
@@ -60966,18 +61055,21 @@
   "business_summary": "主营煤炭开采和洗选业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "煤化工",
+  "category": "煤化工|同花顺漂亮100",
   "concept": "煤化工",
   "name": "兖矿能源",
   "primary_source": "legacy",
   "sector": "煤炭开采和洗选业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 13:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "煤化工": "兖矿能源：煤炭+煤化工"
-  }
+  },
+  "category1": "煤化工",
+  "concept1": "煤化工",
+  "category2": "同花顺漂亮100"
  },
  "600189": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -62053,13 +62145,13 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "创新药",
+  "category": "创新药|同花顺漂亮100",
   "concept": "创新药",
   "name": "恒瑞医药",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'ADC|双特异性抗体|GLP|肿瘤免疫|中军-创新药一哥中军' → 'ADC|双特异性抗体|GLP|肿瘤免疫'",
   "concept_note": "2026-10-19 医药二级概念整合：剥AI4S前缀/删公司名标签/同义词收编",
   "concept_desc": {
@@ -62069,7 +62161,10 @@
   "tag_verdict": "核心",
   "concept_reason": {
    "创新药": "主营：药品的研发、生产和销售；与本标签一致"
-  }
+  },
+  "category1": "创新药",
+  "concept1": "创新药",
+  "category2": "同花顺漂亮100"
  },
  "600278": {
   "business_summary": "主营批发业",
@@ -62366,19 +62461,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "煤化工",
+  "category": "煤化工|同花顺漂亮100",
   "concept": "煤化工",
   "name": "万华化学",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 13:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'煤化工|中军-化工巨头中军' → '煤化工'",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "煤化工": "万华化学：聚氨酯/MDI，非煤化工"
-  }
+  },
+  "category1": "煤化工",
+  "concept1": "煤化工",
+  "category2": "同花顺漂亮100"
  },
  "600310": {
   "business_summary": "发电、供电、电力投资开发、供水、交通建设及其基础设施开发等。",
@@ -62972,7 +63070,7 @@
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
   "concept_reason": {
@@ -62982,19 +63080,24 @@
   "category1": "电池",
   "concept1": "其他关键材料及设备",
   "category2": "煤化工",
-  "concept2": "煤化工"
+  "concept2": "煤化工",
+  "category3": "同花顺漂亮100",
+  "category": "电池|煤化工|同花顺漂亮100",
+  "concept": "其他关键材料及设备|煤化工"
  },
  "600348": {
   "business_summary": "主营煤炭开采和洗选业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "煤炭",
+  "concept": "煤炭开采",
   "name": "华阳股份",
   "primary_source": "legacy",
   "sector": "煤炭开采和洗选业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:19:39",
+  "category1": "煤炭",
+  "concept1": "煤炭开采"
  },
  "600350": {
   "business_summary": "主营道路运输业",
@@ -63672,13 +63775,15 @@
   "business_summary": "主营煤炭开采和洗选业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "煤炭",
+  "concept": "煤炭开采",
   "name": "盘江股份",
   "primary_source": "legacy",
   "sector": "煤炭开采和洗选业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:19:39",
+  "category1": "煤炭",
+  "concept1": "煤炭开采"
  },
  "600396": {
   "business_summary": "电力、热力的生产与销售。",
@@ -63842,21 +63947,22 @@
   "primary_source": "legacy",
   "sector": "电网设备/柔性直流输电/抽水蓄能/虚拟电厂",
   "sector_type": "legacy",
-  "updated_at": "2026-11-08 19:32:26",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "智能电网": "国电南瑞：电网设备相关业务（能源管理/虚拟电厂）",
    "电源": "国电南瑞：电网自动化龙头"
   },
+  "category": "电力|可控核聚变|同花顺漂亮100",
+  "concept": "智能电网|电源",
+  "power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-输变配电|智能电网-虚拟电厂 → 智能电网",
+  "power_reason_20261108": "2026-11-08 20:01:08",
   "category1": "电力",
   "concept1": "智能电网",
   "category2": "可控核聚变",
   "concept2": "电源",
-  "category": "电力|可控核聚变",
-  "concept": "智能电网|电源",
-  "power_reclass_20261108": "2026-11-08 19:32:26 电力二级细分重整：智能电网-输变配电|智能电网-虚拟电厂 → 智能电网",
-  "power_reason_20261108": "2026-11-08 20:01:08"
+  "category3": "同花顺漂亮100"
  },
  "600408": {
   "business_summary": "主营型钢及焦炭，山西煤焦化产业重点基地",
@@ -64246,39 +64352,43 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "中药",
+  "category": "中药|同花顺漂亮100",
   "concept": "百年老字号",
   "name": "片仔癀",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 01:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'百年老字号|中军-绝密配方中军' → '百年老字号'",
   "tag_verdict": "核心",
   "concept_reason": {
    "百年老字号": "片仔癀：国家绝密配方中成药"
-  }
+  },
+  "category1": "中药",
+  "concept1": "百年老字号",
+  "category2": "同花顺漂亮100"
  },
  "600438": {
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "光伏",
+  "category": "光伏|同花顺漂亮100",
   "concept": "硅料硅片",
   "name": "通威股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'太空光伏组件|中军-硅料电池中军' → '太空光伏组件'",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
   "concept_reason": {
    "硅料硅片": "通威股份：太空光伏组件（硅料硅片）"
   },
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 硅料硅片",
   "category1": "光伏",
   "concept1": "硅料硅片",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 硅料硅片"
+  "category2": "同花顺漂亮100"
  },
  "600444": {
   "business_summary": "主营其他",
@@ -65486,19 +65596,20 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大消费",
+  "category": "大消费|同花顺漂亮100",
   "concept": "白酒",
   "name": "贵州茅台",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 22:26:11",
-  "category1": "大消费",
-  "concept1": "白酒",
+  "updated_at": "2026-11-16 21:51:16",
   "concept_reason": {
    "白酒": "贵州茅台：白酒（东财白酒板块 19 只补齐）"
   },
-  "baijiu_snow_20261109": "2026-11-09 22:26:11 补充 大消费/白酒"
+  "baijiu_snow_20261109": "2026-11-09 22:26:11 补充 大消费/白酒",
+  "category1": "大消费",
+  "concept1": "白酒",
+  "category2": "同花顺漂亮100"
  },
  "600520": {
   "business_summary": "主营专用设备制造业",
@@ -65825,13 +65936,15 @@
   "business_summary": "主营煤炭开采和洗选业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "煤炭",
+  "concept": "煤炭开采",
   "name": "山煤国际",
   "primary_source": "legacy",
   "sector": "煤炭开采和洗选业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:19:39",
+  "category1": "煤炭",
+  "concept1": "煤炭开采"
  },
  "600547": {
   "business_summary": "主营有色金属矿采选业",
@@ -66541,13 +66654,14 @@
   "business_summary": "主营非金属矿物制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "海螺水泥",
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600586": {
   "business_summary": "主营非金属矿物制品业",
@@ -66585,13 +66699,13 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "AI应用|云计算|同花顺漂亮100",
+  "concept": "AI办公|SaaS-企业管理|PaaS-企业应用开发",
   "name": "用友网络",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 10:49:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -66599,8 +66713,6 @@
    "SaaS-企业管理": "公司主营企业软件与云服务，用友BIP、YonSuite、U9cloud覆盖财务、人力、供应链、制造等在线企业管理场景，iuap则包含云技术、应用、数据、开发及连接集成平台，兼具真实SaaS与PaaS能力。2025年云服务收入70.64亿元、ARR29.0亿元，累计付费客户106.70万家，已是主要收入和规模化核心产品，故将泛化SaaS标签细化为企业管理，并补充企业应用开发PaaS。",
    "PaaS-企业应用开发": "公司主营企业软件与云服务，用友BIP、YonSuite、U9cloud覆盖财务、人力、供应链、制造等在线企业管理场景，iuap则包含云技术、应用、数据、开发及连接集成平台，兼具真实SaaS与PaaS能力。2025年云服务收入70.64亿元、ARR29.0亿元，累计付费客户106.70万家，已是主要收入和规模化核心产品，故将泛化SaaS标签细化为企业管理，并补充企业应用开发PaaS。"
   },
-  "category1": "AI应用",
-  "concept1": "AI办公",
   "concept_desc": {
    "AI办公": "嵌入公文、文档、协同、财务、人力、评审和ERP流程的AI助手、智能体及企业软件。",
    "SaaS-企业管理": "以在线订阅提供财务、人力、供应链、制造等企业管理软件。",
@@ -66634,11 +66746,6 @@
    "verdict": "核心",
    "reason": "公司主营企业软件与云服务，用友BIP企业AI产品矩阵覆盖财务、人力、采购、生产等经营管理环节，与企业数字化主业直接融合。2025年AI合同达到16.7亿元、客户超过400家，已形成合同和批量客户验证的规模商业化，故保留更精确的AI办公概念并定为核心，不是泛化AI应用贴标。"
   },
-  "category2": "云计算",
-  "concept2": [
-   "SaaS-企业管理",
-   "PaaS-企业应用开发"
-  ],
   "cloud_verdicts": {
    "云计算": "核心"
   },
@@ -66670,7 +66777,12 @@
    ],
    "verdict": "核心",
    "reason": "公司主营企业软件与云服务，用友BIP、YonSuite、U9cloud覆盖财务、人力、供应链、制造等在线企业管理场景，iuap则包含云技术、应用、数据、开发及连接集成平台，兼具真实SaaS与PaaS能力。2025年云服务收入70.64亿元、ARR29.0亿元，累计付费客户106.70万家，已是主要收入和规模化核心产品，故将泛化SaaS标签细化为企业管理，并补充企业应用开发PaaS。"
-  }
+  },
+  "category1": "AI应用",
+  "concept1": "AI办公",
+  "category2": "云计算",
+  "concept2": "SaaS-企业管理|PaaS-企业应用开发",
+  "category3": "同花顺漂亮100"
  },
  "600589": {
   "business_summary": "为客户提供全面、优质的数据中心及算力专业解决方案，助力各行业客户实现数字化转型需求。",
@@ -66961,13 +67073,14 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "青岛啤酒",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600601": {
   "business_summary": "印制电路板（PCB）的研发设计、生产制造及销售。",
@@ -67879,13 +67992,14 @@
   "business_summary": "为各种交通运输工具提供安全玻璃、汽车饰件全解决方案。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "福耀玻璃",
   "primary_source": "legacy",
   "sector": "汽车零部件/证金持股/同花顺出海50/同花顺漂亮100",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "600661": {
   "business_summary": "主营教育",
@@ -68321,16 +68435,17 @@
   "business_summary": "领先的智慧家电解决方案能力，冰箱、洗衣机的市占率位列前茅",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "液冷",
+  "category": "液冷|同花顺漂亮100",
   "concept": "CDU柜",
   "name": "海尔智家",
   "primary_source": "legacy",
   "sector": "白色家电/超级品牌/高股息精选/同花顺漂亮100",
   "sector_type": "legacy",
-  "updated_at": "2026-10-26 18:47:06",
+  "updated_at": "2026-11-16 21:51:16",
+  "tag_source": "2026-10-26 液冷产业链全景图补漏（owner 确认）",
   "category1": "液冷",
   "concept1": "CDU柜",
-  "tag_source": "2026-10-26 液冷产业链全景图补漏（owner 确认）"
+  "category2": "同花顺漂亮100"
  },
  "600691": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -68523,22 +68638,23 @@
   "business_summary": "主营光学光电子",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "光伏",
+  "category": "光伏|同花顺漂亮100",
   "concept": "电池与组件",
   "name": "三安光电",
   "primary_source": "legacy",
   "sector": "光学光电子/共封装光学(CPO)/MicroLED概念/第三代半导体",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'砷化镓电池|中军-化合物半导体中军' → '砷化镓电池'",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "电池与组件": "三安光电：砷化镓电池（电池与组件）"
   },
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 电池与组件",
   "category1": "光伏",
   "concept1": "电池与组件",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 电池与组件"
+  "category2": "同花顺漂亮100"
  },
  "600704": {
   "business_summary": "主营批发业",
@@ -69295,7 +69411,7 @@
   "primary_source": "legacy",
   "sector": "铁路、船舶、航空航天和其他运输设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 21:32:22",
+  "updated_at": "2026-11-16 21:51:16",
   "role": "龙头",
   "role_reason": "国内唯一歼击机/舰载机总装上市平台，歼-16/歼-35主力生产商，2025年中报合同负债大增155%（2025-2026年多券商研报）",
   "tag_evidence": "text",
@@ -69334,11 +69450,12 @@
    "verdict": "核心",
    "reason": "公司核心产品为航空防务装备，承担固定翼军用飞机整机及航空产品制造，直接面向空海军航空装备建设，兼具民用航空产品但不存在仅靠航空零部件泛化贴标的问题。2025年航空制造业和航空产品收入均为443.7850亿元，占99.3791%；其他业务2.3588亿元、其他0.4140亿元，航空制造占绝对主导，军用航空防务装备又属于其核心主业，因此明确列核心。输入没有把军机与民机收入进一步独立拆分，不应将全部443.7850亿元等同军品，但不影响主营性质判断。旧“空军”只指向一个军种，既过粗又可能遗漏其他用户，需按产品实质统一为航空整机-固定翼。"
   },
+  "category": "军工|同花顺漂亮100",
+  "concept": "航空装备",
+  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 航空装备",
   "category1": "军工",
   "concept1": "航空装备",
-  "category": "军工",
-  "concept": "航空装备",
-  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 航空装备"
+  "category2": "同花顺漂亮100"
  },
  "600761": {
   "business_summary": "主营通用设备制造业",
@@ -70030,15 +70147,16 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大消费",
+  "category": "大消费|同花顺漂亮100",
   "concept": "白酒",
   "name": "山西汾酒",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-31 14:24:59",
+  "updated_at": "2026-11-16 21:51:16",
   "category1": "大消费",
-  "concept1": "白酒"
+  "concept1": "白酒",
+  "category2": "同花顺漂亮100"
  },
  "600810": {
   "business_summary": "主营化学纤维制造业",
@@ -71286,18 +71404,21 @@
   "business_summary": "各类乳品及健康饮品的生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大消费",
+  "category": "大消费|同花顺漂亮100",
   "concept": "大消费_常温奶",
   "name": "伊利股份",
   "primary_source": "legacy",
   "sector": "饮料乳品/超级品牌/高股息精选/乳业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "大消费_常温奶": "主营：乳品及健康饮品的生产与销售；与本标签一致"
-  }
+  },
+  "category1": "大消费",
+  "concept1": "大消费_常温奶",
+  "category2": "同花顺漂亮100"
  },
  "600888": {
   "business_summary": "铝电子新材料和铝及合金制品的研发、生产和销售。",
@@ -71354,7 +71475,7 @@
   "primary_source": "legacy",
   "sector": "铁路、船舶、航空航天和其他运输设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 21:32:22",
+  "updated_at": "2026-11-16 21:51:16",
   "role": "龙头",
   "role_reason": "国内唯一覆盖全谱系军用航空发动机整机企业，战机动力垄断供应商，合同负债210亿（2025-2026研报）",
   "tag_evidence": "text",
@@ -71393,11 +71514,12 @@
    "verdict": "核心",
    "reason": "公司研制生产航空发动机及燃气轮机整机、部件和零组件，并提供维修保障，航空发动机直接用于军用飞机动力系统，外贸转包和非航空贸易则是独立业务，不是仅凭航发集团身份贴标。2025年航空发动机含衍生产品收入434.7625亿元，约占总收入463.3149亿元的93.84%；外贸转包19.5052亿元、非航空产品及贸易2.3201亿元，制造业收入455.0557亿元、占98.2174%。输入未将军用与民用发动机进一步拆分，但航空发动机整机及衍生产品已是绝对规模主业，核心判断充分。旧“空军”无法覆盖发动机维修、燃气轮机及其他军种用户，应细化为航空发动机与燃气轮机。"
   },
+  "category": "军工|同花顺漂亮100",
+  "concept": "航空装备",
+  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 航空装备",
   "category1": "军工",
   "concept1": "航空装备",
-  "category": "军工",
-  "concept": "航空装备",
-  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 航空装备"
+  "category2": "同花顺漂亮100"
  },
  "600894": {
   "business_summary": "研发、设计、生产、安装、维修及保养电梯、自动扶梯、自动人行道等设备，设计和生产电梯电气零部件及相关电气产品、电梯导轨以及相关零配件，并提供物流配送等完整电梯产业链服务。",
@@ -71510,17 +71632,13 @@
   "business_summary": "中国综合实力最优质的电力企业，运行管理三峡、葛洲坝等电站",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "category1": "央企",
-  "category2": "电力",
-  "concept": "",
-  "concept1": "",
-  "concept2": "电力运营",
+  "category": "央企|电力|同花顺漂亮100",
+  "concept": "电力运营",
   "name": "长江电力",
   "primary_source": "legacy",
   "sector": "电力/高股息精选/同花顺中特估100/同花顺漂亮100",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -71528,7 +71646,11 @@
   },
   "power_reason_20261108": "2026-11-08 20:01:08",
   "power_type": "水电",
-  "power_type_20261108": "2026-11-08 20:45:36"
+  "power_type_20261108": "2026-11-08 20:45:36",
+  "category1": "央企",
+  "category2": "电力",
+  "concept2": "电力运营",
+  "category3": "同花顺漂亮100"
  },
  "600901": {
   "business_summary": "主营货币金融服务",
@@ -71568,19 +71690,21 @@
   "primary_source": "legacy",
   "sector": "电力/同花顺中特估100/绿色电力/碳交易",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "电力运营": "三峡能源：风能、太阳能的开发、投资和运营（发电运营·风光）"
   },
-  "category1": "央企",
-  "concept1": "",
-  "category2": "电力",
-  "concept2": "电力运营",
   "power_reason_20261108": "2026-11-08 20:01:08",
   "power_type": "风光",
-  "power_type_20261108": "2026-11-08 20:45:36"
+  "power_type_20261108": "2026-11-08 20:45:36",
+  "category1": "央企",
+  "category2": "电力",
+  "concept2": "电力运营",
+  "category3": "同花顺漂亮100",
+  "category": "央企|电力|同花顺漂亮100",
+  "concept": "电力运营"
  },
  "600906": {
   "business_summary": "主营期货概念",
@@ -71691,13 +71815,15 @@
   "business_summary": "主营煤炭开采和洗选业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "煤炭",
+  "concept": "煤炭开采",
   "name": "苏能股份",
   "primary_source": "legacy",
   "sector": "煤炭开采和洗选业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:19:39",
+  "category1": "煤炭",
+  "concept1": "煤炭开采"
  },
  "600926": {
   "business_summary": "主营货币金融服务",
@@ -72165,13 +72291,15 @@
   "business_summary": "主营煤炭开采和洗选业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "煤炭",
+  "concept": "煤炭开采",
   "name": "恒源煤电",
   "primary_source": "legacy",
   "sector": "煤炭开采和洗选业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:19:39",
+  "category1": "煤炭",
+  "concept1": "煤炭开采"
  },
  "600973": {
   "business_summary": "电线电缆及电缆附件的研发、生产、销售及其服务。",
@@ -72794,22 +72922,23 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "光伏",
+  "category": "光伏|同花顺漂亮100",
   "concept": "电池与组件",
   "name": "隆基绿能",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'太空光伏组件|中军-光伏一体化中军' → '太空光伏组件'",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
   "concept_reason": {
    "电池与组件": "隆基绿能：太空光伏组件（电池与组件）"
   },
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 电池与组件",
   "category1": "光伏",
   "concept1": "电池与组件",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 电池与组件"
+  "category2": "同花顺漂亮100"
  },
  "601015": {
   "business_summary": "以煤炭资源高效综合利用为主，主营焦炭，兼营焦油、LNG、精煤等",
@@ -73101,19 +73230,22 @@
   "business_summary": "主营煤炭开采和洗选业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "煤化工",
+  "category": "煤化工|同花顺漂亮100",
   "concept": "煤化工",
   "name": "中国神华",
   "primary_source": "legacy",
   "sector": "煤炭开采和洗选业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 13:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'煤化工|中军-煤化电一体化' → '煤化工'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "煤化工": "中国神华：煤炭开采+煤电一体化"
-  }
+  },
+  "category1": "煤化工",
+  "concept1": "煤化工",
+  "category2": "同花顺漂亮100"
  },
  "601089": {
   "business_summary": "主营医药制造业",
@@ -73176,7 +73308,7 @@
   "primary_source": "legacy",
   "sector": "工程机械/高端装备/无人驾驶/中国AI 50",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:53:14",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'丝杠|中军-液压件中军' → '丝杠'",
   "role": "中军",
   "role_reason": "液压件绝对龙头、千亿市值平台型公司，15亿元线性驱动器项目已投产，行星滚柱丝杠2025年获北美大客户（特斯拉）定点（2025-12产业链报道及公司公告）",
@@ -73219,11 +73351,12 @@
    "reason": "公司线性驱动器、滚珠及行星滚柱丝杠、一体化电动执行器已形成量产能力，行星丝杠执行器可直接用于机器人线性关节，具备明确产品和产业化基础。高压油缸、泵阀等液压件仍是主营基本盘，机器人丝杠及执行器属于新板块，因此由核心降级为相关。"
   },
   "tag_evidence": "text",
+  "category": "机器人|同花顺漂亮100",
+  "concept": "核心零部件-传动",
+  "robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 核心零部件-传动",
   "category1": "机器人",
   "concept1": "核心零部件-传动",
-  "category": "机器人",
-  "concept": "核心零部件-传动",
-  "robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 核心零部件-传动"
+  "category2": "同花顺漂亮100"
  },
  "601101": {
   "business_summary": "主营煤炭开采和洗选业",
@@ -73532,19 +73665,22 @@
   "business_summary": "设计、研发、制造和销售通信及移动网络设备、云计算、工业互联网及机器人等电子设备产品。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "超节点",
+  "category": "超节点|同花顺漂亮100",
   "concept": "交换机",
   "name": "工业富联",
   "primary_source": "legacy",
   "sector": "消费电子/同花顺果指数/共封装光学(CPO)/英伟达概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'交换机|中军-AI硬件制造中军' → '交换机'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "交换机": "主营：云计算；与本标签一致"
-  }
+  },
+  "category1": "超节点",
+  "concept1": "交换机",
+  "category2": "同花顺漂亮100"
  },
  "601139": {
   "business_summary": "主营燃气生产和供应业",
@@ -73941,13 +74077,16 @@
   "business_summary": "主营煤炭开采和洗选业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "煤炭|同花顺漂亮100",
+  "concept": "煤炭开采",
   "name": "陕西煤业",
   "primary_source": "legacy",
   "sector": "煤炭开采和洗选业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "煤炭",
+  "concept1": "煤炭开采",
+  "category2": "同花顺漂亮100"
  },
  "601226": {
   "business_summary": "主营专业技术服务业",
@@ -74052,17 +74191,20 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "低空经济",
+  "category": "低空经济|同花顺漂亮100",
   "concept": "制造链",
   "name": "广汽集团",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 11:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_verdict": "相关",
   "concept_reason": {
    "制造链": "广汽集团：整车厂，布局飞行汽车"
-  }
+  },
+  "category1": "低空经济",
+  "concept1": "制造链",
+  "category2": "同花顺漂亮100"
  },
  "601279": {
   "business_summary": "主营汽车制造业",
@@ -74116,13 +74258,14 @@
   "business_summary": "主营保险业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "中国平安",
   "primary_source": "legacy",
   "sector": "保险业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "601319": {
   "business_summary": "主营保险业",
@@ -74226,7 +74369,7 @@
   "primary_source": "legacy",
   "sector": "互联网和相关服务",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 10:19:00",
+  "updated_at": "2026-11-16 21:51:16",
   "concept_desc": {
    "AI大模型": "自研通用或垂直大模型并通过API、MaaS、订阅、部署或行业项目商业化。",
    "AI安全": "面向大模型、智能体及AI应用的安全评估、护栏、威胁检测和防护产品；须有正式产品或客户交付，普通AI应用不等同AI安全。",
@@ -74239,8 +74382,6 @@
    "AI大模型": "公司主营互联网安全及相关服务，360智脑、纳米AI、360AI办公、安全大模型和安全智能体均为真实产品，并已有政企交付，与安全和办公场景直接关联。不过互联网广告等仍是主要收入来源，AI收入未单独证明占据主体，商业化虽落地但占比依据不足，因此保留AI大模型概念并定为相关而非核心。",
    "网络安全综合平台": "iFinD主营本身包括互联网安全技术研发和安全产品设计推广，2025年报进一步明确互联网、数字安全、智能硬件三大主业。公司拥有360安全卫士、安全云、安全大模型、大模型卫士及安全智能体等真实规模化产品，面向个人终端和政企提供威胁检测、漏洞治理、攻击溯源与安全服务；2025年安全及其他业务收入14.46亿元，同比增长12.33%。虽广告收入更高，但安全已是明确主业和重要收入板块，故补增综合平台并提升为核心。"
   },
-  "category2": "AI应用",
-  "concept2": "AI大模型",
   "aiapp_verdicts": {
    "AI应用": "相关"
   },
@@ -74269,11 +74410,6 @@
    "verdict": "相关",
    "reason": "公司主营互联网安全及相关服务，360智脑、纳米AI、360AI办公、安全大模型和安全智能体均为真实产品，并已有政企交付，与安全和办公场景直接关联。不过互联网广告等仍是主要收入来源，AI收入未单独证明占据主体，商业化虽落地但占比依据不足，因此保留AI大模型概念并定为相关而非核心。"
   },
-  "category1": "网络安全",
-  "concept1": [
-   "AI安全",
-   "网络安全综合平台"
-  ],
   "cybersecurity_verdicts": {
    "网络安全": "核心"
   },
@@ -74305,7 +74441,14 @@
    ],
    "verdict": "核心",
    "reason": "iFinD主营本身包括互联网安全技术研发和安全产品设计推广，2025年报进一步明确互联网、数字安全、智能硬件三大主业。公司拥有360安全卫士、安全云、安全大模型、大模型卫士及安全智能体等真实规模化产品，面向个人终端和政企提供威胁检测、漏洞治理、攻击溯源与安全服务；2025年安全及其他业务收入14.46亿元，同比增长12.33%。虽广告收入更高，但安全已是明确主业和重要收入板块，故补增综合平台并提升为核心。"
-  }
+  },
+  "category1": "网络安全",
+  "concept1": "AI安全|网络安全综合平台",
+  "category2": "AI应用",
+  "concept2": "AI大模型",
+  "category3": "同花顺漂亮100",
+  "category": "网络安全|AI应用|同花顺漂亮100",
+  "concept": "AI安全|网络安全综合平台|AI大模型"
  },
  "601366": {
   "business_summary": "主营零售业",
@@ -74957,13 +75100,14 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "长城汽车",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "601636": {
   "business_summary": "浮法玻璃、节能建筑玻璃、光伏玻璃、电子玻璃、药用玻璃的制造与销售。",
@@ -75034,22 +75178,22 @@
   "business_summary": "主营土木工程建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "category1": "央企",
-  "category2": "电力",
-  "concept": "",
-  "concept1": "",
-  "concept2": "电力建设",
+  "category": "央企|电力|同花顺漂亮100",
+  "concept": "电力建设",
   "name": "中国电建",
   "primary_source": "legacy",
   "sector": "土木工程建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "电力建设": "中国电建：电力工程总包"
-  }
+  },
+  "category1": "央企",
+  "category2": "电力",
+  "concept2": "电力建设",
+  "category3": "同花顺漂亮100"
  },
  "601677": {
   "business_summary": "主营工业金属",
@@ -75956,18 +76100,21 @@
   "business_summary": "主营商务服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "大消费",
+  "category": "大消费|同花顺漂亮100",
   "concept": "大消费_免税概念",
   "name": "中国中免",
   "primary_source": "legacy",
   "sector": "商务服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 02:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "大消费_免税概念": "中国中免：免税零售龙头"
-  }
+  },
+  "category1": "大消费",
+  "concept1": "大消费_免税概念",
+  "category2": "同花顺漂亮100"
  },
  "601890": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -76014,7 +76161,7 @@
   "primary_source": "legacy",
   "sector": "贵金属/黄金概念/金属铅/金属锌",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'铜|中军-铜金全球龙头' → '铜'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
@@ -76025,7 +76172,10 @@
   "category1": "有色金属",
   "concept1": "铜",
   "category2": "有色金属",
-  "concept2": "黄金_金矿"
+  "concept2": "黄金_金矿",
+  "category3": "同花顺漂亮100",
+  "category": "有色金属|有色金属|同花顺漂亮100",
+  "concept": "铜|黄金_金矿"
  },
  "601900": {
   "business_summary": "主营新闻和出版业",
@@ -76101,13 +76251,14 @@
   "business_summary": "主营水上运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "中远海控",
   "primary_source": "legacy",
   "sector": "水上运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-04 22:53:53"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "601921": {
   "business_summary": "主营新闻和出版业",
@@ -79864,13 +80015,14 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "公牛集团",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "603196": {
   "business_summary": "主营纺织服装、服饰业",
@@ -80854,7 +81006,7 @@
   "primary_source": "legacy",
   "sector": "研究和试验发展",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'CXO|中军-CXO全球龙头' → 'CXO'",
   "concept_note": "2026-10-19 医药二级概念整合：剥AI4S前缀/删公司名标签/同义词收编",
   "concept_desc": {
@@ -80870,7 +81022,10 @@
    "CDMO": "主营：新药研发和生产服务；与本标签一致"
   },
   "category1": "创新药",
-  "concept1": "临床前CRO"
+  "concept1": "临床前CRO",
+  "category2": "同花顺漂亮100",
+  "category": "创新药|同花顺漂亮100",
+  "concept": "临床前CRO"
  },
  "603260": {
   "business_summary": "工业硅、有机硅及多晶硅等硅基新材料产品的研发、生产及销售。",
@@ -81464,13 +81619,14 @@
   "business_summary": "主营食品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "海天味业",
   "primary_source": "legacy",
   "sector": "食品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "603289": {
   "business_summary": "主营专用设备制造业",
@@ -83101,17 +83257,20 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "医药",
+  "category": "医药|同花顺漂亮100",
   "concept": "未上市",
   "name": "万泰生物",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 01:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_verdict": "核心",
   "concept_reason": {
    "未上市": "万泰生物：疫苗+IVD（「未上市」只是状态标签，属误用）"
-  }
+  },
+  "category1": "医药",
+  "concept1": "未上市",
+  "category2": "同花顺漂亮100"
  },
  "603393": {
   "business_summary": "主营燃气生产和供应业",
@@ -83689,13 +83848,14 @@
   "business_summary": "主营业务为半导体分立器件和电源管理IC等产品的研发设计",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "豪威集团",
   "primary_source": "legacy",
   "sector": "半导体/OLED/汽车电子/机器视觉",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "603505": {
   "business_summary": "中国萤石行业拥有资源储量、开采及生产加工规模最大的企业",
@@ -86650,19 +86810,22 @@
   "business_summary": "主营有色金属冶炼和压延加工业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
+  "category": "电池|同花顺漂亮100",
   "concept": "正极材料",
   "name": "华友钴业",
   "primary_source": "legacy",
   "sector": "有色金属冶炼和压延加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'正极材料|中军-钴镍正极一体化' → '正极材料'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "正极材料": "华友钴业：钴镍锂+正极材料一体化"
-  }
+  },
+  "category1": "电池",
+  "concept1": "正极材料",
+  "category2": "同花顺漂亮100"
  },
  "603800": {
   "business_summary": "电解铜箔高端生产装备制造业务、超精密真空镀膜设备制造业务、精密光学设备制造业务和油气钻采设备制造业务。",
@@ -87019,13 +87182,14 @@
   "business_summary": "主营家具制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "欧派家居",
   "primary_source": "legacy",
   "sector": "家具制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "603836": {
   "business_summary": "主营商务服务业",
@@ -88853,7 +89017,7 @@
   "primary_source": "legacy",
   "sector": "工业金属/黄金概念/金属铜/金属镍",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -88864,7 +89028,10 @@
   "category1": "有色金属",
   "concept1": "钨",
   "category2": "可控核聚变",
-  "concept2": "第一壁材料"
+  "concept2": "第一壁材料",
+  "category3": "同花顺漂亮100",
+  "category": "有色金属|可控核聚变|同花顺漂亮100",
+  "concept": "钨|第一壁材料"
  },
  "603995": {
   "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -92132,13 +92299,14 @@
   "business_summary": "手机为核心的智能终端的设计、研发、生产、销售和品牌运营。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "传音控股",
   "primary_source": "legacy",
   "sector": "消费电子/语音技术/MLOps概念/AI手机",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "688037": {
   "business_summary": "主营其他",
@@ -93689,7 +93857,7 @@
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-10-27 10:49:00",
+  "updated_at": "2026-11-16 21:51:16",
   "role": "中军",
   "role_reason": "AI办公容量中军，9/22主力净买入2.43亿，机构参与度高",
   "tag_evidence": "text",
@@ -93698,8 +93866,6 @@
    "AI办公": "公司主营WPS Office及WPS 365，AI已深度嵌入文档、表格、演示、协作等核心办公流程，并推出WPS灵犀办公智能体。2025年末WPS AI国内月活超过8013万、同比增长307%，同时个人订阅和WPS 365持续商业化，属于主营产品的规模化AI应用而非规划或普通办公贴标，因此保留AI办公并维持核心。",
    "SaaS-办公协同": "公司主营WPS Office及WPS 365，云文档、在线协作和组织办公订阅属于真实云交付，区别于本地WPS软件授权。2025年WPS 365收入7.20亿元，同比增长64.93%；个人业务收入36.26亿元，国内累计年度付费个人用户4615万，WPS云文档数量突破2900亿份，说明在线办公已具备大规模用户、收入和持续订阅基础。云办公是主营产品的重要形态和增长板块，故将泛SaaS标签细化为办公协同并维持核心。"
   },
-  "category1": "AI应用",
-  "concept1": "AI办公",
   "concept_desc": {
    "AI办公": "嵌入公文、文档、协同、财务、人力、评审和ERP流程的AI助手、智能体及企业软件。",
    "SaaS-办公协同": "以云文档、在线表单和协作平台提供组织办公及协同服务。"
@@ -93732,8 +93898,6 @@
    "verdict": "核心",
    "reason": "公司主营WPS Office及WPS 365，AI已深度嵌入文档、表格、演示、协作等核心办公流程，并推出WPS灵犀办公智能体。2025年末WPS AI国内月活超过8013万、同比增长307%，同时个人订阅和WPS 365持续商业化，属于主营产品的规模化AI应用而非规划或普通办公贴标，因此保留AI办公并维持核心。"
   },
-  "category2": "云计算",
-  "concept2": "SaaS-办公协同",
   "cloud_verdicts": {
    "云计算": "核心"
   },
@@ -93761,7 +93925,14 @@
    ],
    "verdict": "核心",
    "reason": "公司主营WPS Office及WPS 365，云文档、在线协作和组织办公订阅属于真实云交付，区别于本地WPS软件授权。2025年WPS 365收入7.20亿元，同比增长64.93%；个人业务收入36.26亿元，国内累计年度付费个人用户4615万，WPS云文档数量突破2900亿份，说明在线办公已具备大规模用户、收入和持续订阅基础。云办公是主营产品的重要形态和增长板块，故将泛SaaS标签细化为办公协同并维持核心。"
-  }
+  },
+  "category1": "AI应用",
+  "concept1": "AI办公",
+  "category2": "云计算",
+  "concept2": "SaaS-办公协同",
+  "category3": "同花顺漂亮100",
+  "category": "AI应用|云计算|同花顺漂亮100",
+  "concept": "AI办公|SaaS-办公协同"
  },
  "688112": {
   "business_summary": "通用电子测试测量仪器的研发、生产和销售。",
@@ -95902,7 +96073,7 @@
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'太空光伏组件|马斯克走访企业|中军-组件出货龙头' → '太空光伏组件|马斯克走访企业'",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
@@ -95910,11 +96081,12 @@
    "马斯克走访企业": "晶科能源：地面光伏组件",
    "电池与组件": "晶科能源：太空光伏组件（电池与组件）"
   },
+  "category": "光伏|同花顺漂亮100",
+  "concept": "电池与组件",
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 电池与组件",
   "category1": "光伏",
   "concept1": "电池与组件",
-  "category": "光伏",
-  "concept": "电池与组件",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 电池与组件"
+  "category2": "同花顺漂亮100"
  },
  "688225": {
   "business_summary": "主营软件和信息技术服务业",
@@ -102772,19 +102944,22 @@
   "business_summary": "主营光伏设备",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电力",
+  "category": "电力|同花顺漂亮100",
   "concept": "储能",
   "name": "天合光能",
   "primary_source": "legacy",
   "sector": "光伏设备/BC电池/HJT电池/TOPCON电池",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 23:00:00",
+  "updated_at": "2026-11-16 21:51:16",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'储能|中军-组件+储能一体化' → '储能'",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "储能": "天合光能：组件为主，储能为延伸"
-  }
+  },
+  "category1": "电力",
+  "concept1": "储能",
+  "category2": "同花顺漂亮100"
  },
  "688600": {
   "business_summary": "主营专精特新",
@@ -106267,13 +106442,14 @@
   "business_summary": "基于多种技术节点和技术平台的集成电路晶圆代工业务，并提供设计服务与IP支持、光掩模制造等配套服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "同花顺漂亮100",
   "concept": "",
   "name": "中芯国际",
   "primary_source": "legacy",
   "sector": "半导体/国家大基金持股/中芯国际概念/存储芯片",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 21:51:16",
+  "category1": "同花顺漂亮100"
  },
  "689009": {
   "business_summary": "主营其他",
@@ -111721,18 +111897,13 @@
   "industry_boards": [],
   "concept_boards": [],
   "business_summary": "",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-11-16 21:51:16",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "芯片设计-功率半导体": "公司半导体业务以安世半导体为主体，真实产品包括二极管、双极性晶体管、ESD保护器件、MOSFET、GaN FET、SiC二极管、IGBT以及模拟和逻辑IC，具备设计、晶圆制造、封装测试一体的IDM属性，不只是功率模块组装厂。2025年半导体产品收入133.4755亿元，占总收入约312.5253亿元的42.71%；半导体行业分部收入136.1616亿元，产品集成业务收入175.2470亿元，占56.07%，两者不能混算。尽管当年产品集成收入更大，半导体产品收入绝对规模巨大且构成核心主业，故仍定为半导体核心。此次纠错保留功率半导体并补充晶圆制造与IDM，同时明确功率器件之外还有模拟、逻辑等混合产品边界。",
    "晶圆制造与IDM": "公司半导体业务以安世半导体为主体，真实产品包括二极管、双极性晶体管、ESD保护器件、MOSFET、GaN FET、SiC二极管、IGBT以及模拟和逻辑IC，具备设计、晶圆制造、封装测试一体的IDM属性，不只是功率模块组装厂。2025年半导体产品收入133.4755亿元，占总收入约312.5253亿元的42.71%；半导体行业分部收入136.1616亿元，产品集成业务收入175.2470亿元，占56.07%，两者不能混算。尽管当年产品集成收入更大，半导体产品收入绝对规模巨大且构成核心主业，故仍定为半导体核心。此次纠错保留功率半导体并补充晶圆制造与IDM，同时明确功率器件之外还有模拟、逻辑等混合产品边界。"
   },
-  "category1": "半导体",
-  "concept1": [
-   "芯片设计-功率半导体",
-   "晶圆制造与IDM"
-  ],
   "concept_desc": {
    "芯片设计-功率半导体": "IGBT、MOSFET、SiC、功率模块和功率器件设计或IDM。",
    "晶圆制造与IDM": "晶圆代工、特色工艺制造及设计制造一体化的IDM业务。"
@@ -111768,7 +111939,12 @@
    ],
    "verdict": "核心",
    "reason": "公司半导体业务以安世半导体为主体，真实产品包括二极管、双极性晶体管、ESD保护器件、MOSFET、GaN FET、SiC二极管、IGBT以及模拟和逻辑IC，具备设计、晶圆制造、封装测试一体的IDM属性，不只是功率模块组装厂。2025年半导体产品收入133.4755亿元，占总收入约312.5253亿元的42.71%；半导体行业分部收入136.1616亿元，产品集成业务收入175.2470亿元，占56.07%，两者不能混算。尽管当年产品集成收入更大，半导体产品收入绝对规模巨大且构成核心主业，故仍定为半导体核心。此次纠错保留功率半导体并补充晶圆制造与IDM，同时明确功率器件之外还有模拟、逻辑等混合产品边界。"
-  }
+  },
+  "category1": "半导体",
+  "concept1": "芯片设计-功率半导体|晶圆制造与IDM",
+  "category2": "同花顺漂亮100",
+  "category": "半导体|同花顺漂亮100",
+  "concept": "芯片设计-功率半导体|晶圆制造与IDM"
  },
  "688066": {
   "name": "航天宏图",
