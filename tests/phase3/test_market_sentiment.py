@@ -17,6 +17,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
@@ -40,12 +41,14 @@ class TestMarketSentiment(unittest.TestCase):
         # 本地历史档也要隔离：生产那份有 800 天，会把"最近 N 日"的断言全部打乱
         gui._SENT_LOCAL_FP = type(self._old_loc)(os.path.join(self.td, "sentiment_local.json"))
         gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
+        gui.Api._SENT_LIVE_MEM = {"ts": None, "date": None, "val": None}
         self.api = gui.Api()
 
     def tearDown(self):
         gui._E5_THS_FP = self._old
         gui._SENT_LOCAL_FP = self._old_loc
         gui.Api._SENT_MEM = {"ts": 0.0, "mtime": None, "val": None}
+        gui.Api._SENT_LIVE_MEM = {"ts": None, "date": None, "val": None}
 
     def _write(self, data):
         with open(self.fp, "w", encoding="utf-8") as f:
@@ -220,6 +223,90 @@ class TestMarketSentiment(unittest.TestCase):
         os.utime(self.fp, (os.path.getatime(self.fp), os.path.getmtime(self.fp) + 5))
         r3 = self.api.load_market_sentiment(120)
         self.assertEqual(r3["last"]["zt"], 999)
+
+    def test_live_off_session(self):
+        """开盘前/周末 → available=False 且零网络（2026-11-16 起收盘后例外，见下一条）。"""
+        import datetime as _dt
+        with mock.patch.object(gui, "_in_trading_session", return_value=False), \
+                mock.patch.object(gui, "datetime") as _m:
+            _m.now.return_value = _dt.datetime(2026, 11, 16, 8, 40)     # 周一开盘前
+            r = self.api.load_sentiment_live()
+        self.assertFalse(r["available"])
+        self.assertFalse(r["intraday"])
+
+    def test_live_after_close_intraday_false(self):
+        """收盘后（15:05~当晚）仍给当日读数，但标 intraday=False（已定型）。
+
+        2026-11-16 owner 报「尾盘没有实时更新」：原来 15:05 一到就 available=False，加上
+        14:30 尾盘快照任务当天崩溃 ⇒ 面板整天停在上一交易日。"""
+        import datetime as _dt
+        fake = {"zt": 32, "dt": 60, "touch": 48, "zb_rate": 33.33}
+        with mock.patch.object(gui, "_in_trading_session", return_value=False), \
+                mock.patch.object(gui, "_limit_counts_from_ths", return_value=fake), \
+                mock.patch.object(gui, "datetime") as _m:
+            _m.now.return_value = _dt.datetime(2026, 11, 16, 15, 40)
+            r = self.api.load_sentiment_live()
+        self.assertTrue(r["available"])
+        self.assertFalse(r["intraday"])
+        self.assertEqual(r["zt"], 32)
+        self.assertEqual(r["dt"], 60)
+
+    def test_live_weekend_hidden(self):
+        """周末（没有"今天的行情"）⇒ 收盘后口径也不放行。"""
+        import datetime as _dt
+        with mock.patch.object(gui, "_in_trading_session", return_value=False), \
+                mock.patch.object(gui, "datetime") as _m:
+            _m.now.return_value = _dt.datetime(2026, 11, 14, 16, 0)     # 周六
+            r = self.api.load_sentiment_live()
+        self.assertFalse(r["available"])
+
+    def test_live_on_session(self):
+        """盘中读数：交易时段读同花顺计数（patch 网络），字段齐、不写日频 series。"""
+        fake = {"zt": 55, "dt": 3, "touch": 88, "zb_rate": 22.5}
+        with mock.patch.object(gui, "_in_trading_session", return_value=True), \
+                mock.patch.object(gui, "_limit_counts_from_ths", return_value=fake):
+            r = self.api.load_sentiment_live()
+        self.assertTrue(r["available"])
+        self.assertTrue(r["intraday"])
+        self.assertEqual(r["zt"], 55)
+        self.assertEqual(r["dt"], 3)
+        self.assertEqual(r["touch"], 88)
+        self.assertEqual(r["zb_rate"], 22.5)
+        self.assertIn("fetched_at", r)
+
+    def test_live_provisional_index(self):
+        """盘中读数：今日计数按同口径折算成温度；**不写进**日频 series。"""
+        from datetime import date, timedelta
+        d0 = date(2026, 1, 1)
+        self._write({(d0 + timedelta(days=i)).strftime("%Y%m%d"): _rec(i, 10 + i, i % 5)
+                     for i in range(80)})
+        fake = {"zt": 30, "dt": 2, "touch": 40, "zb_rate": 20.0}
+        with mock.patch.object(gui, "_in_trading_session", return_value=True), \
+                mock.patch.object(gui, "_limit_counts_from_ths", return_value=fake):
+            r = self.api.load_sentiment_live()
+        self.assertTrue(r["available"])
+        self.assertIsNotNone(r["sent"])
+        self.assertIsNotNone(r["sent_ma"])
+        self.assertIn(r["zone"], (0, 1, 2))
+        self.assertGreaterEqual(r["zone_days"], 1)
+        self.assertEqual(set(r["parts"]), {"touch", "zb", "dt"})
+        # 日频序列仍是最后一个定型日 —— 盘中那格只在显示层拼上去
+        h = self.api.load_market_sentiment(1200)
+        self.assertEqual(h["end"], (d0 + timedelta(days=79)).isoformat())
+
+    def test_pct_of_excludes_self(self):
+        """今日分位用历史窗口（不含自身）：顶到历史最高 = 1.0；样本不足/值为空 → None。"""
+        self.assertEqual(gui._sent_pct_of([1, 2, 3], 3, min_n=3), 1.0)
+        self.assertEqual(gui._sent_pct_of([1, 2, 3], 1, min_n=3), round(1 / 3, 4))
+        self.assertIsNone(gui._sent_pct_of([1, 2], 3, min_n=3))
+        self.assertIsNone(gui._sent_pct_of([1, 2, 3], None, min_n=3))
+
+    def test_live_fetch_failure(self):
+        """盘中读数：交易时段但取数失败/全零 → available=False，不抛。"""
+        with mock.patch.object(gui, "_in_trading_session", return_value=True), \
+                mock.patch.object(gui, "_limit_counts_from_ths", return_value=None):
+            r = self.api.load_sentiment_live()
+        self.assertFalse(r["available"])
 
 
 if __name__ == "__main__":

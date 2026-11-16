@@ -189,7 +189,9 @@ class TestUp30Backend(unittest.TestCase):
     def test_后端三条下发路径都带up30(self):
         src = (Path(_ROOT) / "gui.py").read_text(encoding="utf-8")
         self.assertIn('"up30": _tagres.get("up30")', src, "持仓体检")
-        self.assertIn('"up30": (_tags_map.get(c) or {}).get("up30")', src, "异常监控池/避风港湾")
+        # 2026-11-15 起池表行构造把取值提到局部变量（一票多日要复用），断言改为"取值 + 落行"两段
+        self.assertIn('_up30 = (_tags_map.get(c) or {}).get("up30")', src, "异常监控池/避风港湾")
+        self.assertIn('"up30": _up30', src, "异常监控池/避风港湾行字段")
         self.assertEqual(src.count('r["up30"] = info.get("up30")'), 2, "建仓表两条路径")
 
 

@@ -566,6 +566,83 @@ def _limitup_from_em(date, timeout=12.0, retries=2):
     return out
 
 
+def _limit_counts_from_ths(date, timeout=8.0, retries=1):
+    """同花顺涨停聚焦 → 当日 涨停/跌停/触板/炸板 计数（单请求 limit=1，供情绪面板盘中读数）。
+
+    · 与 `analysis/index_regime.py::_ir_fetch_limit_counts_ths` 同源，但**不落盘** —— 只读盘中
+      读数，不污染 `e5_ths_cache.json` 那份 14:30 尾盘快照；返回 {zt, dt, touch, zb_rate}；
+    · 盘中涨停/跌停是**形成中**的数字（未定型），只在交易时段调用；
+    · 失败 / 非交易日（today 全 0）→ None（调用方隐藏盘中读数）。
+    """
+    import random as _random
+    import requests
+    d_dashed = str(date or "").strip()[:10]
+    d0 = d_dashed.replace("-", "")
+    if len(d0) != 8 or not d0.isdigit():
+        return None
+    params = {"page": 1, "limit": 1, "date": d0, "_": int(_time_mod.time() * 1000)}
+    for attempt in range(max(1, int(retries) + 1)):
+        headers = {
+            "User-Agent": _random.choice(_THS_LIMIT_UAS),
+            "Referer": "http://data.10jqka.com.cn/",
+            "cookie": "v=AaBb1234567890abcdefghijklmnopqrstuv",
+        }
+        try:
+            r = requests.get(_THS_LIMIT_URL, params=params, headers=headers, timeout=timeout)
+            if r.status_code != 200 or not r.content:
+                _time_mod.sleep(0.4 + attempt)
+                continue
+            j = json.loads(r.content.decode("utf-8", errors="replace"))
+            if j.get("status_code") != 0:
+                _time_mod.sleep(0.4 + attempt)
+                continue
+            data = j.get("data") or {}
+            up = (data.get("limit_up_count") or {}).get("today") or {}
+            down = (data.get("limit_down_count") or {}).get("today") or {}
+            zt, dt = up.get("num"), down.get("num")
+            if zt is None or dt is None:
+                _time_mod.sleep(0.4 + attempt)
+                continue
+            if int(zt) == 0 and int(dt) == 0:
+                return None                     # 非交易日/未开盘 → 无盘中读数
+            touched = up.get("history_num")
+            zb = up.get("open_num")
+            zb_rate = (round(zb / touched, 4) if (zb is not None and touched) else None)
+            return {
+                "zt": int(zt), "dt": int(dt),
+                "touch": (int(touched) if touched is not None else None),
+                "zb_rate": (round(float(zb_rate) * 100, 2) if zb_rate is not None else None),
+            }
+        except Exception:
+            _time_mod.sleep(0.4 + attempt)
+    return None
+
+
+def _sent_roll_pct(vals, w=60, min_n=20):
+    """滚动分位（**含当日**，窗口 w，最少 min_n 个有效样本）；不足 → None。
+
+    市场情绪温度指数的唯一口径源：历史行（`load_market_sentiment`）与
+    今日盘中行（`load_sentiment_live`）都走这里，避免两条路各写一份漂移。
+    """
+    out = []
+    for j, v in enumerate(vals):
+        seg = [x for x in vals[max(0, j - w + 1):j + 1] if x is not None]
+        out.append(round(sum(1 for x in seg if x <= v) / len(seg), 4)
+                   if (v is not None and len(seg) >= min_n) else None)
+    return out
+
+
+def _sent_pct_of(seg, x, min_n=20):
+    """x 在 seg（已定型历史值，**不含 x 自身**）里的分位；样本不足/无效 → None。
+
+    今日盘中值用它：一根未定型的数不该给自己打分（自包含会把分布整体抬一档）。
+    """
+    vals = [v for v in (seg or []) if v is not None]
+    if x is None or len(vals) < min_n:
+        return None
+    return round(sum(1 for v in vals if v <= x) / len(vals), 4)
+
+
 def _limit_time_from_min_df(df, day, limit_price):
     """分钟 K 帧 → 当日「首次触及涨停价」的 HH:MM + 是否收盘封板（纯函数，供测试/复用）。
 
@@ -891,6 +968,15 @@ _DAILY_KLINE_DIR = BASE / "t_io" / "cache" / "daily_kline"
 # ≈0.7s；按 (code, date, 文件mtime) 缓存 phase 结果（微小 dict），日线档 append-only、mtime 变才失效。
 _LIMITUP_PHASE_CACHE = {}
 _LIMITUP_PHASE_LOCK = threading.Lock()
+# 池表（异常监控池 / 避风港湾）整表结果：**单飞 + 上一拍兜底**（2026-11-16 owner 报
+# 「后端 load_abnormal_pool 超时 45000ms」）。池子涨到 571 只 / 844 行后整表冷算要 30~50s
+# （阶段 22s + 标签里的 ma5_streak 9s + 建仓符合度 7.6s），前端 15s 一次的短轮询会同时
+# 压两三个整表计算 ⇒ 谁都被拖过超时、结果全被丢弃（表一直空着）。
+# 这里只做两件事：同一 (池子成员, 日期) 同时只让一个线程算；算的时候后来的请求直接拿
+# **上一拍**的结果（行数据不变的部分占绝对多数），不再叠加一份 CPU。
+_POOL_ROWS_RUN: set = set()          # 正在算的 key
+_POOL_ROWS_MEM: dict = {}            # key -> 上一拍 payload
+_POOL_ROWS_LOCK = threading.Lock()
 # 市场情绪面板的数据源：同花顺涨停池按日缓存（`analysis.index_regime` 每天 14:30 落盘一次，
 # append-only）。面板**只读、零网络**；测试会 patch 这个常量。
 _E5_THS_FP = BASE / "t_io" / "index_regime" / "e5_ths_cache.json"
@@ -4565,18 +4651,9 @@ class Api:
         # ⚠️ 合成**比单看触板更弱**（分位差 3.35pp → 1.39pp），且信息集中在 2026 后半段
         #   ⇒ 它是**可读性工具**，不是更好用的信号；面板上照实写。
         # 不用上涨家数占比：IC 方向与上证温度相反（+0.056）且与指数相关 0.71，加进去只会稀释。
-        def _roll_pct(vals, w=60):
-            """滚动分位（含当日，窗口 w，最少 20 个样本）；不足 → None。"""
-            out = []
-            for j, v in enumerate(vals):
-                seg = [x for x in vals[max(0, j - w + 1):j + 1] if x is not None]
-                out.append(round(sum(1 for x in seg if x <= v) / len(seg), 4)
-                           if (v is not None and len(seg) >= 20) else None)
-            return out
-
-        p_touch = _roll_pct([r["touch"] for r in rows])
-        p_zb = _roll_pct([r["zb_rate"] for r in rows])
-        p_dt = _roll_pct([r["dt"] for r in rows])
+        p_touch = _sent_roll_pct([r["touch"] for r in rows])
+        p_zb = _sent_roll_pct([r["zb_rate"] for r in rows])
+        p_dt = _sent_roll_pct([r["dt"] for r in rows])
 
         # 2026-11-13 owner：「指标通过算 5 日平均值进行平滑处理」。
         # 先把三个分位各自取 5 日均值，再加权 —— 与"先合成再平均"数学上等价
@@ -4662,6 +4739,133 @@ class Api:
                        "transitions": transitions,
                        "start": series[0]["date"], "end": last["date"],
                        "latest_date": last["date"]})
+
+    # 盘中实时情绪读数（2026-11-16 owner「盘中情绪盘内无法实时更新」）：上面的
+    # `load_market_sentiment` 只读 14:30 尾盘快照 ⇒ 盘中（约 09:25~14:30）面板数字是昨天的。
+    # 这里补一条**独立**盘中读数：同花顺涨停池 limit=1 计数（与日频同源、零缓存写入），
+    # 只在交易时段发起、~60s 内存缓存；前端标「今日盘中（实时，未定型）」。
+    # **不写进日频 series** —— 60 日分位 / 5 日均值不能被一根未定型的盘中数污染。
+    _SENT_LIVE_MEM: dict = {"ts": None, "date": None, "val": None}
+
+    def load_sentiment_live(self):
+        """盘中实时情绪读数（只读、独立于日频 series）。
+
+        返回 {available, intraday, date, zt, dt, touch, zb_rate, sent, sent_ma,
+        zone, zone_days, fetched_at}；
+        非交易时段 / 网络失败 → {available: False}（前端隐藏盘中条）。
+
+        `sent` / `sent_ma` = 用**同一套权重**把今日盘中计数折算成情绪温度：
+          · `sent`    = 当日原始温度（今日分位 vs 历史最近 60 行，**不含今日自身**）；
+          · `sent_ma` = 5 日均值（前 4 个已定型交易日各自的原始分位 + 今日）；
+        只是把已有的日频读数往今天延一格，**不落盘**、不参与跨越统计。
+        """
+        now = datetime.now()
+        today = now.strftime("%Y%m%d")
+        _in_sess = _in_trading_session(now)
+        # 2026-11-16：收盘后（15:05~当晚）也算「今日读数」——同一接口这会儿给的是**已定型**
+        # 的收盘数（实测 15:2x 仍返回 涨停32/跌停60/触板48）。原来 15:05 一到就 available:False，
+        # 面板整天退回上一交易日，直到次日 14:30 才有当天行（owner 说的"尾盘不更新"就是这个）。
+        _after_close = (now.weekday() < 5 and now.strftime("%H:%M") > "15:05")
+        if not (_in_sess or _after_close):
+            return _clean({"available": False, "intraday": False})
+        mem = self._SENT_LIVE_MEM
+        _ttl = 60 if _in_sess else 600          # 收盘后数字不再变 ⇒ 少打网络
+        fresh = (mem.get("date") == today and mem.get("ts")
+                 and (now - mem.get("ts")).total_seconds() < _ttl)
+        if not fresh:
+            try:
+                val = _limit_counts_from_ths(now.strftime("%Y-%m-%d"))
+            except Exception:
+                val = None
+            self._SENT_LIVE_MEM = {"ts": now, "date": today, "val": val}
+        else:
+            val = mem.get("val")
+        if not val:
+            return _clean({"available": False, "intraday": _in_sess,
+                           "date": now.strftime("%Y-%m-%d")})
+        out = {"available": True, "intraday": bool(_in_sess),
+               "date": now.strftime("%Y-%m-%d"),
+               "zt": val.get("zt"), "dt": val.get("dt"),
+               "touch": val.get("touch"), "zb_rate": val.get("zb_rate"),
+               "fetched_at": now.strftime("%H:%M:%S")}
+        out.update(self._sent_today_parts(val, today=out["date"]))
+        return _clean(out)
+
+    def _sent_today_parts(self, val, today=None):
+        """今日盘中计数 → 情绪温度（`sent` / `sent_ma` / `zone` / `zone_days`）。
+
+        历史行取 `load_market_sentiment(1200)`（300s 内存缓存、零网络），算法与日频
+        **逐项同口径**（`_sent_roll_pct` 同一实现）：
+          · 今日分位：与历史**最后 60 行**比，且**不含今日自身**（未定型值不给自己打分）；
+          · 5 日均值：前 4 个已定型交易日的分位 + 今日分位（不足 3 个 → None）。
+        任何一步缺数据 → 对应字段给 None，前端退回"只有计数"的盘中条。
+
+        ⚠️ **今日已在日频序列里**（14:30 尾盘快照落盘之后）⇒ 直接回定型值，不再自己折算：
+        否则会出现「大数字 46.2（定型）/ 📡 行 32.4（折算）」这种自相矛盾的两套数。
+        """
+        empty = {"sent": None, "sent_ma": None, "zone": None, "zone_days": None,
+                 "parts": {"touch": None, "zb": None, "dt": None}}
+        try:
+            rows = (self.load_market_sentiment(1200) or {}).get("series") or []
+        except Exception:
+            rows = []
+        if len(rows) < 20:
+            return empty
+        _d = str(today or "")[:10]
+        if _d and str(rows[-1].get("date") or "")[:10] == _d:
+            v = rows[-1].get("sent_ma")
+            if v is None:
+                return empty
+            zone = 0 if v < 40 else (1 if v < 60 else 2)
+            days = 0
+            for r in reversed(rows):
+                x = r.get("sent_ma")
+                if x is None:
+                    continue
+                z = 0 if x < 40 else (1 if x < 60 else 2)
+                if z != zone:
+                    break
+                days += 1
+            return {"sent": rows[-1].get("sent"), "sent_ma": v, "zone": zone,
+                    "zone_days": days, "parts": {"touch": None, "zb": None, "dt": None}}
+        t_v = [r.get("touch") for r in rows]
+        z_v = [r.get("zb_rate") for r in rows]
+        d_v = [r.get("dt") for r in rows]
+        p_t = _sent_pct_of(t_v[-60:], val.get("touch"))
+        p_z = _sent_pct_of(z_v[-60:], val.get("zb_rate"))
+        p_d = _sent_pct_of(d_v[-60:], val.get("dt"))
+
+        def _ma5(last4, today):
+            # 今日分位拿不到 ⇒ 整格不给（否则会出一条"没有今日"却顶在今日头上的均值）
+            if today is None:
+                return None
+            seg = [x for x in (list(last4 or [])[-4:] + [today]) if x is not None]
+            return round(sum(seg) / len(seg), 4) if len(seg) >= 3 else None
+
+        mt = _ma5(_sent_roll_pct(t_v), p_t)
+        mz = _ma5(_sent_roll_pct(z_v), p_z)
+        md = _ma5(_sent_roll_pct(d_v), p_d)
+
+        out = dict(empty)
+        out["parts"] = {"touch": mt, "zb": mz, "dt": md}
+        if None not in (p_t, p_z, p_d):
+            out["sent"] = round(100.0 * (0.5 * p_t + 0.3 * (1.0 - p_z)
+                                         + 0.2 * (1.0 - p_d)), 1)
+        if None not in (mt, mz, md):
+            out["sent_ma"] = round(100.0 * (0.5 * mt + 0.3 * (1.0 - mz)
+                                            + 0.2 * (1.0 - md)), 1)
+            out["zone"] = 0 if out["sent_ma"] < 40 else (1 if out["sent_ma"] < 60 else 2)
+            # 已连续几天在这个区：今天的值先顶上这一格，再从尾往前数历史同区行
+            out["zone_days"] = 1
+            for r in reversed(rows):
+                v = r.get("sent_ma")
+                if v is None:
+                    continue
+                z = 0 if v < 40 else (1 if v < 60 else 2)
+                if z != out["zone"]:
+                    break
+                out["zone_days"] += 1
+        return out
 
     @staticmethod
     def _sent_transitions(vals, dates):
@@ -13729,12 +13933,37 @@ class Api:
         `stocks`: {code: {name, added_at, reason?, ...}}；`note`: 表尾那句说明。
         行字段刻意做成**建仓表的形状**（verdict/composite_score/conditions/…），
         前端直接复用同一套单元格渲染（色阶、圆点、阶段徽章），不另写一份样式。
+
+        ⚠️ 外层这层只负责**单飞 + 上一拍兜底**（见 `_POOL_ROWS_RUN` 注释）：整表算一次
+        在池子 571 只时要 30~50s，而前端在 pending>0 时每 15s 就来一发；不挡住的话两三个
+        整表计算互相抢 CPU，谁都被拖过前端超时、结果全被扔掉。真正的行构造在
+        `_pool_rows_compute`。
         """
         date = str(date or datetime.now().strftime("%Y-%m-%d"))
         codes = list(stocks.keys())
         if not codes:
             return _clean({"has_data": True, "date": date, "rows": [], "counts": {},
                            "cond_labels": COND_LABELS, "note": "", "pending": 0})
+        import hashlib
+        key = (date, hashlib.md5(",".join(sorted(codes)).encode()).hexdigest()[:12])
+        with _POOL_ROWS_LOCK:
+            if key in _POOL_ROWS_RUN and key in _POOL_ROWS_MEM:
+                return _POOL_ROWS_MEM[key]        # 上一拍结果，别再叠加一份计算
+            _POOL_ROWS_RUN.add(key)
+        try:
+            payload = self._pool_rows_compute(stocks, date, note)
+            with _POOL_ROWS_LOCK:
+                if len(_POOL_ROWS_MEM) > 8:
+                    _POOL_ROWS_MEM.clear()
+                _POOL_ROWS_MEM[key] = payload
+            return payload
+        finally:
+            with _POOL_ROWS_LOCK:
+                _POOL_ROWS_RUN.discard(key)
+
+    def _pool_rows_compute(self, stocks, date, note):
+        """`_pool_rows` 的实算部分（见上）。"""
+        codes = list(stocks.keys())
         # 2026-11-03：池子变大后一次冷算会卡住 js_api ⇒ 分批（已算的复用，新算每拍 ≤24 只）
         conf = {}
         _pending = 0

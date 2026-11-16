@@ -601,9 +601,34 @@ def compute_concept_top3(date_str: str, params: Optional[Dict[str, Any]] = None)
     watchlist_df = loader.load_watchlist()
     if watchlist_df is None or watchlist_df.empty:
         raise RuntimeError("watchlist_concept.json 加载失败或为空")
-    df_pool = watchlist_df[watchlist_df["概念板块"].str.strip().ne("")].copy()
+    # 2026-11-16（owner 报「尾盘市场温度不更新」）根因：report_gen 的 DataLoader 把分类放在
+    # `韭研分类`/`韭研概念`，旧字段 `概念板块`（concept_boards）**恒为空** ⇒ 原来按
+    # `概念板块 != ""` 过滤永远 0 行 ⇒ `fetch_for_date([])` 里
+    # `ThreadPoolExecutor(max_workers=min(N, 0))` 抛 "max_workers must be greater than 0"
+    # ⇒ 14:30 尾盘任务整个中断（e5 涨跌停缓存 / sentiment_daily.jsonl 都没有当天行），
+    # 市场情绪面板尾盘就一直停在上一交易日。这里按**实际有值**的列取，并保证空池不再出网。
+    def _pick_col(*names):
+        for n in names:
+            if n in watchlist_df.columns:
+                s = watchlist_df[n].astype(str).str.strip()
+                if s.ne("").any() and s.ne("nan").any():
+                    return n
+        return None
+
+    concept_col = _pick_col("韭研概念", "概念板块", "concept")
+    cat_col = _pick_col("韭研分类", "概念板块", "category")
+    if concept_col is None:
+        _log.warning("⚠️  watchlist 里没有任何概念标签列（韭研概念/概念板块/concept 全空）"
+                     "⇒ 概念热度记 0，跳过行情获取")
+        return {"date": date_str, "sector_avgs": {}, "top3_avg": 0.0, "top3_names": [],
+                "pool_rows": 0, "pool_codes": 0, "fetch_ok": 0, "fetch_failed": []}
+    df_pool = watchlist_df[watchlist_df[concept_col].astype(str).str.strip().ne("")].copy()
     codes = list(dict.fromkeys(df_pool["代码"].astype(str).tolist()))
-    _log.info(f"📊 概念打分池: {len(df_pool)} 行 / {len(codes)} 只标的，获取 {date_str} 行情...")
+    _log.info(f"📊 概念打分池: {len(df_pool)} 行 / {len(codes)} 只标的"
+              f"（列={concept_col}），获取 {date_str} 行情...")
+    if not codes:                       # 空池不出网：`fetch_for_date([])` 会 ValueError
+        return {"date": date_str, "sector_avgs": {}, "top3_avg": 0.0, "top3_names": [],
+                "pool_rows": 0, "pool_codes": 0, "fetch_ok": 0, "fetch_failed": []}
 
     fetcher = MarketDataFetcher()
     market_df = fetcher.fetch_for_date(codes, date_str)
@@ -616,7 +641,7 @@ def compute_concept_top3(date_str: str, params: Optional[Dict[str, Any]] = None)
         if "名称" in market_df.columns:
             market_df = market_df.drop(columns=["名称"])
         merged_pool = df_pool.merge(market_df, on="代码", how="left")
-        merged_pool = merged_pool[merged_pool["概念板块"].str.strip().ne("")].copy()
+        merged_pool = merged_pool[merged_pool[concept_col].astype(str).str.strip().ne("")].copy()
 
     # —— score_stocks 口径（setdefault 不覆盖已有键，与生产 main.py / run_backtest_v2 一致）——
     scorer = ConceptScorer(dimensions=dimensions if dimensions else None)
@@ -628,7 +653,8 @@ def compute_concept_top3(date_str: str, params: Optional[Dict[str, Any]] = None)
         stock.setdefault("领涨天数", 0)
         stock.setdefault("突破", 1 if abs(row.get("涨跌幅", 0) or 0) > 5 else 0)
         stock.setdefault("封单质量", 0)
-        stock.setdefault("暗线概念数", len(str(stock.get("概念板块", "")).split("_")))
+        stock.setdefault("暗线概念数",
+                           len(str(stock.get(concept_col, "")).split("_")))
         stock.setdefault("量比", float(row.get("量比", 1.0)) if _pd.notna(row.get("量比")) else 1.0)
         stock.setdefault("板块涨停家数", 0)
         stock.setdefault("近5日振幅", float(row.get("振幅", 5.0)) if _pd.notna(row.get("振幅")) else 5.0)
@@ -639,10 +665,10 @@ def compute_concept_top3(date_str: str, params: Optional[Dict[str, Any]] = None)
 
     # —— 板块聚合（load_concept_summary 口径：简单均值）——
     sector_avgs: Dict[str, Dict[str, Any]] = {}
-    for category in sorted(scored_df["概念分类"].unique()):
+    for category in sorted(scored_df[cat_col].astype(str).unique()):
         if not category:
             continue
-        cat_df = scored_df[scored_df["概念分类"] == category]
+        cat_df = scored_df[scored_df[cat_col].astype(str) == category]
         sector_avgs[str(category)] = {
             "avg": round(float(cat_df["总得分"].fillna(0).mean()), 2),
             "n": int(len(cat_df)),
@@ -755,7 +781,15 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
         regime_name = regime
 
     # 2) 概念 TOP3 板块热度
-    concept = compute_concept_top3(date_str, params=p)
+    # 2026-11-16：概念段**不许拖垮整张日档**。它依赖外部 report_gen（`E:\04_实战资料\report_gen`）
+    # 的列名/网络，历史上一次列名错位就让 14:30 的 `push_daily_sentiment` 整个抛错 ⇒
+    # e5 涨跌停缓存与 sentiment_daily.jsonl 都缺当天行（市场情绪面板尾盘不更新）。
+    # 这里降级：概念段失败只记 0 并告警，大盘态势/涨跌停照常落盘。
+    try:
+        concept = compute_concept_top3(date_str, params=p)
+    except Exception as e:
+        _log.warning(f"⚠️  概念TOP3计算失败（降级为0，不影响落盘）: {type(e).__name__}: {str(e)[:100]}")
+        concept = {"top3_avg": 0.0, "top3_names": [], "pool_rows": 0, "pool_codes": 0}
     top3_avg = float(concept["top3_avg"])
     top3_names = list(concept["top3_names"])
 

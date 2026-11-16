@@ -182,7 +182,9 @@ class TestBias5(unittest.TestCase):
         from pathlib import Path as _P
         src = (_P(_ROOT) / "gui.py").read_text(encoding="utf-8")
         self.assertIn('"bias5": _tagres.get("bias5")', src, "持仓30min体检")
-        self.assertIn('"bias5": (_tags_map.get(c) or {}).get("bias5")', src, "异常监控池")
+        # 2026-11-15 起池表行构造把取值提到局部变量（一票多日要复用），断言改为"取值 + 落行"两段
+        self.assertIn('_bias5 = (_tags_map.get(c) or {}).get("bias5")', src, "异常监控池")
+        self.assertIn('"bias5": _bias5', src, "异常监控池行字段")
         self.assertEqual(src.count('r["bias5"] = info.get("bias5")'), 2,
                          "建仓信号扫描（load_position_builder + refresh_pb 两条路径）")
 

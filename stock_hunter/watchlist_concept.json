@@ -1063,7 +1063,7 @@
   "primary_source": "legacy",
   "sector": "电视广播Ⅱ/短剧游戏/文化传媒概念/虚拟数字人",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 10:19:00",
+  "updated_at": "2026-11-16 15:08:51",
   "dataelement_verdict": "错标",
   "concept_reason": {
    "内容安全与智能审核": "公司主营仍是有线电视、新媒体、宽带和智慧城市，并非通用网络安全厂商；但2025年报披露文盾大模型已完成文化市场综合执法国家级试点阶段研发并取得一定规模合同营收，同时升级智能审核与播控治理体系，说明内容安全监管已有真实客户项目和商业化，而非仅内部制度或战略设想。因未披露该业务独立收入且相对九十余亿元营收仍属新业务，新增内容安全标签并定相关。"
@@ -1085,8 +1085,6 @@
    ],
    "reason": "主业为有线电视、新媒体、宽带、智慧城市数字化及广电5G，收入来自节目传输、网络接入和数字化项目。数据要素仅是未来投资方向，未核到独立数据产品，更不属于物理AI数据采集。"
   },
-  "category1": "网络安全",
-  "concept1": "内容安全与智能审核",
   "concept_desc": {
    "内容安全与智能审核": "以智能审核模型和播控治理系统服务文化执法、传媒或内容平台，须有实际项目或合同。"
   },
@@ -1117,7 +1115,13 @@
    ],
    "verdict": "相关",
    "reason": "公司主营仍是有线电视、新媒体、宽带和智慧城市，并非通用网络安全厂商；但2025年报披露文盾大模型已完成文化市场综合执法国家级试点阶段研发并取得一定规模合同营收，同时升级智能审核与播控治理体系，说明内容安全监管已有真实客户项目和商业化，而非仅内部制度或战略设想。因未披露该业务独立收入且相对九十余亿元营收仍属新业务，新增内容安全标签并定相关。"
-  }
+  },
+  "category1": "网络安全",
+  "concept1": "内容安全与智能审核",
+  "category2": "AI应用",
+  "concept2": "AI影视短剧",
+  "category": "网络安全|AI应用",
+  "concept": "内容安全与智能审核|AI影视短剧"
  },
  "000157": {
   "business_summary": "中国工程机械装备制造领军企业",
@@ -1935,13 +1939,14 @@
   "business_summary": "中国知名电器制造商之一，拥有冰箱、空调、小家电等多条产品线",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "大消费",
   "concept": "",
   "name": "长虹美菱",
   "primary_source": "legacy",
   "sector": "白色家电/冷链物流/国企改革/高股息精选",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:08:51",
+  "category1": "大消费"
  },
  "000523": {
   "business_summary": "主营农副食品加工业",
@@ -3438,13 +3443,14 @@
   "business_summary": "建筑施工，功率半导体器件的设计、开发、制造和销售，数字能源业务，智慧城市建设、运营及相关服务业务以及厨柜制造等。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "半导体",
   "concept": "",
   "name": "高新发展",
   "primary_source": "legacy",
   "sector": "房屋建设Ⅱ/智慧政务/汽车芯片/数据要素",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:08:51",
+  "category1": "半导体"
  },
  "000629": {
   "business_summary": "主营冶钢原料",
@@ -10727,13 +10733,14 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "大消费",
   "concept": "",
   "name": "华帝股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:08:51",
+  "category1": "大消费"
  },
  "002036": {
   "business_summary": "高端镜头及模组领域的领军企业，全球ADAS镜头主力供应商",
@@ -17344,13 +17351,14 @@
   "business_summary": "主营零售业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "电力",
   "concept": "",
   "name": "鹏飞绿能",
   "primary_source": "legacy",
   "sector": "零售业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:09:44",
+  "category1": "电力"
  },
  "002357": {
   "business_summary": "主营道路运输业",
@@ -28366,13 +28374,14 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "大消费",
   "concept": "",
   "name": "小熊电器",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:08:51",
+  "category1": "大消费"
  },
  "002960": {
   "business_summary": "消防安全及智慧控制系统产品的研发、生产和销售。",
@@ -40672,13 +40681,14 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "电池",
   "concept": "",
   "name": "领湃科技",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:08:51",
+  "category1": "电池"
  },
  "300531": {
   "business_summary": "主营计算机设备",
@@ -46900,13 +46910,14 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "大消费",
   "concept": "",
   "name": "北鼎股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:08:51",
+  "category1": "大消费"
  },
  "300825": {
   "business_summary": "整车及整车平台全流程研发、新能源智能化平台开发、核心零部件研发制造。",
@@ -63533,13 +63544,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "AI应用",
+  "concept": "AI影视短剧",
   "name": "北巴传媒",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:08:51",
+  "category1": "AI应用",
+  "concept1": "AI影视短剧"
  },
  "600388": {
   "business_summary": "主营土壤修复",
@@ -70177,7 +70190,7 @@
   "primary_source": "legacy",
   "sector": "批发业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-16 15:09:44",
   "tag_source": "2026-10-26 全天涨停复盘（手动补漏）",
   "dataelement_verdict": "错标",
   "dataelement_audited_at": "2026-10-27",
@@ -70194,7 +70207,10 @@
     "数据要素_其他行业数据"
    ],
    "reason": "子公司上海有色金属交易中心曾将“有色金属现货指数查询”挂牌数据交易所，但公司风险公告明确该产品挂牌后未成交且目前暂失效，未贡献经营业绩；当前主业仍为金属和汽车贸易。"
-  }
+  },
+  "category1": "有色金属",
+  "category": "有色金属",
+  "concept": ""
  },
  "600824": {
   "business_summary": "主营零售业",
@@ -71781,13 +71797,14 @@
   "business_summary": "数智工程、勘察设计与试验检测、新材料及机电设备的生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "AI应用",
   "concept": "",
   "name": "北投科技",
   "primary_source": "legacy",
   "sector": "IT服务Ⅱ/鸿蒙概念/智慧政务/AI应用",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:09:44",
+  "category1": "AI应用"
  },
  "600938": {
   "business_summary": "原油和天然气的勘探、开发、生产及销售。",
@@ -76124,7 +76141,7 @@
   "primary_source": "legacy",
   "sector": "电信、广播电视和卫星传输服务",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-16 15:08:51",
   "concept_desc": {
    "数据要素_交易所": "实际控股、运营数据交易机构或依托交易机构提供上架、流通服务；少量参股、一般技术建设或第三方数据服务商不直接归为交易所运营标的。"
   },
@@ -76134,8 +76151,6 @@
   },
   "tag_evidence": "text",
   "tag_verdict": "相关",
-  "category1": "数据要素",
-  "concept1": "数据要素_交易所",
   "dataelement_audited_at": "2026-10-27",
   "dataelement_evidence": {
    "title": "吉视传媒2024年年度报告",
@@ -76143,7 +76158,13 @@
    "url": "https://file.finance.qq.com/finance/hs/pdf/2025/04/26/1223309308.PDF",
    "profile_source": "iFinD ifind_get_stock_info",
    "profile_asof": "2026-10-27"
-  }
+  },
+  "category1": "数据要素",
+  "concept1": "数据要素_交易所",
+  "category2": "AI应用",
+  "concept2": "AI影视短剧",
+  "category": "数据要素|AI应用",
+  "concept": "数据要素_交易所|AI影视短剧"
  },
  "601933": {
   "business_summary": "主营零售业",
@@ -88628,13 +88649,14 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
+  "category": "大消费",
   "concept": "",
   "name": "丸美生物",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-16 15:08:51",
+  "category1": "大消费"
  },
  "603985": {
   "business_summary": "主营算力租赁",

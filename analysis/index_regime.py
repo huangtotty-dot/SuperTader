@@ -685,9 +685,22 @@ def _ir_fetch_index_daily_tx(symbol: str, end_date: str, count: int, p: Dict[str
     symbol 为 sh000001 内部格式；返回 OHLCV df（date/open/high/low/close/volume，volume=手）。"""
     from core.market_data import get_provider
     try:
-        df = get_provider().index_daily(symbol, max(count, 100), end_date)
+        prov = get_provider()
+        df = prov.index_daily(symbol, max(count, 100), end_date)
         if df is None or df.empty:
             return None
+        # 2026-11-16（owner 报「尾盘市场温度不更新」）：facade.index_daily 只在
+        # `end_date is None` 时补当日 forming bar，而本引擎**总是**传 end_date ⇒ GM 正常时
+        # 拿到的最后一根停在上一交易日，regime 的 `date` 退回昨天 ⇒ E5 涨跌停池也按昨天取
+        # ⇒ e5_ths_cache / sentiment_daily 永远缺当天行（尾盘 14:30 快照写了旧日期）。
+        # 只在「要的就是今天」时补，历史回放/回测（end_date=过去）绝不动。
+        _today = _ir_now().strftime("%Y-%m-%d")
+        if str(end_date or "")[:10] == _today and hasattr(prov, "_maybe_append_index_forming"):
+            try:
+                df = prov._maybe_append_index_forming(df, symbol)
+                df = df[df["date"].astype(str) <= _today]
+            except Exception:
+                pass
         return df.sort_values("date").reset_index(drop=True)
     except Exception as e:
         _ir_log.info(f"[index_regime] 指数日线 provider 失败: {e}")

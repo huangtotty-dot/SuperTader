@@ -199,8 +199,11 @@ const _API_TIMEOUT_MS = 20000;
 // 用户看到「后端 load_abnormal_pool 超时 20000ms（投递层积压，该次结果已弃）」，
 // 而后端其实算完了、只是结果被弃 ⇒ 表永远空着。这两个是**整表**接口（不像报价那样
 // 10s 轮询），放宽到 45s/30s：最坏只是慢一拍，不会白算一次。
+// 2026-11-16：池子涨到 571 只 / 844 行后，整表冷算实测 30~50s（涨停阶段 22s + 标签里的
+// ma5_streak 9s + 建仓符合度 7.6s），45s 正好卡在临界上 ⇒ 重启 GUI 后第一次进「手动盘」
+// 必报「load_abnormal_pool 超时 45000ms」。放宽到 120s：重启后首次久一点，但不会白算一次。
 const _API_TIMEOUT_OVERRIDE = { recompute_pb: 300000, load_stock_chart: 45000,
-  load_abnormal_pool: 45000, load_shelter_pool: 30000 };
+  load_abnormal_pool: 120000, load_shelter_pool: 120000 };
 const _API_MAX_INFLIGHT = 6;
 let _apiInflight = 0;
 let _apiTimeoutCnt = 0;
@@ -3390,6 +3393,7 @@ function renderMa20Breadth(d) {
    数据来自 `load_market_sentiment`（只读 index_regime 的涨跌停缓存，零网络）。 */
 let sentInst = null, sentNode = null, sentSig = "";
 let sentTimer = null, sentInflight = false, sentData = null;
+let sentLiveTimer = null, sentLiveInflight = false, sentLive = null;
 let sentRange = 120;
 let sentDirty = false;        // 取数途中改了区间 ⇒ 这一拍的结果作废，回来立刻重取
 
@@ -3417,6 +3421,7 @@ async function loadMarketSentiment() {
       sentData = d;
       renderMarketSentiment(d);
       nextMs = 300000;
+      if (!sentLiveTimer) loadSentimentLive();   // 盘中实时读数：独立 60s 轮询（懒启动）
     } else {
       const meta = document.getElementById("sentMeta");
       if (meta) meta.innerHTML = `<span class="down">${esc((d && d.error) || "暂无数据")}</span>`;
@@ -3435,6 +3440,52 @@ async function loadMarketSentiment() {
   }
 }
 
+/* 盘中实时情绪读数（2026-11-16 owner「盘中情绪盘内无法实时更新」）：日频 series 是 14:30
+   尾盘快照，盘中不动；这条独立的 60s 轮询把「今日盘中（未定型）」的涨停/跌停/炸板数顶到
+   面板顶部，并由后端按**同一套权重**折算成今日情绪温度（`sent` / `sent_ma`）—— 面板大数字、
+   图末尾那一格都跟它走。收盘后/非交易时段后端返回 available:false，这里自动隐藏并退回
+   历史定型值。 */
+async function loadSentimentLive() {
+  if (sentLiveInflight) return;
+  const el = document.getElementById("sentLiveMeta");
+  if (!el) return;
+  sentLiveInflight = true;
+  try {
+    const d = await apiCall("load_sentiment_live");
+    if (d && d.available) {
+      sentLive = d;
+      el.style.display = "";
+      const bd = (d.sent_ma != null) ? sentBand(d.sent_ma) : null;
+      const _tag = d.intraday ? "📡 今日盘中（实时，未定型）" : "📡 今日收盘（已定型）";
+      let html = `<span style="color:#d29922;font-weight:600">${_tag}`
+        + ` ${esc(d.date || "")} ${esc(d.fetched_at || "")}</span> `
+        + `涨停 <b style="color:${MA365_UP}">${d.zt}</b> 家`
+        + ` · 跌停 <b style="color:${MA365_DOWN}">${d.dt}</b> 家`;
+      if (d.touch != null) html += ` · 触板 <b>${d.touch}</b>`;
+      if (d.zb_rate != null) html += ` · 炸板率 <b>${d.zb_rate}%</b>`;
+      if (bd) {
+        html += ` · 温度(5日均) <b style="color:${bd.color}">${d.sent_ma.toFixed(1)}`
+          + `（${bd.name}${d.zone_days ? `，已第 ${d.zone_days} 天` : ""}）</b>`
+          + `<span class="cell-dim">，当日原始 ${d.sent == null ? "—" : d.sent.toFixed(1)}</span>`;
+      }
+      el.innerHTML = html;
+    } else {
+      sentLive = null;
+      el.style.display = "none";
+      el.innerHTML = "";
+    }
+  } catch (e) {
+    sentLive = null;
+    el.style.display = "none";
+    el.innerHTML = "";
+  } finally {
+    sentLiveInflight = false;
+    if (sentData) renderMarketSentiment(sentData);   // 大数字/图末尾跟盘中读数一起翻新
+    if (sentLiveTimer) clearTimeout(sentLiveTimer);
+    sentLiveTimer = setTimeout(loadSentimentLive, 60000);
+  }
+}
+
 /* 情绪温度三区（0~100，2026-11-13 owner：「弱势区/强势区/平稳区用颜色块区分开」）。
    0~40 弱势 · 40~60 平稳 · 60~100 强势。只用于**读数**，不接任何判定/告警。 */
 const SENT_BANDS = [
@@ -3448,11 +3499,39 @@ function sentBand(v) {
   return SENT_BANDS.find(b => d < b.hi) || SENT_BANDS[SENT_BANDS.length - 1];
 }
 
+/* 把「今日盘中（未定型）」接在日频序列尾部（2026-11-16）。日频 series 是 14:30 尾盘快照
+   ⇒ 盘中最后一格永远是昨天。`sentLive` 有今天读数时补一格：`sent`/`sent_ma` 由后端按
+   同口径折算（今日分位 + 前 4 日分位做 5 日平滑），这里只负责**显示**；不落盘、不进跨越统计。 */
+function _sentSeriesWithLive(base) {
+  const lv = sentLive;
+  const last = base[base.length - 1] || {};
+  if (!(lv && lv.available && lv.date && String(lv.date) > String(last.date || ""))) return base;
+  return base.concat([{
+    date: String(lv.date), zt: lv.zt, dt: lv.dt,
+    net: (lv.zt || 0) - (lv.dt || 0), touch: lv.touch, zb_rate: lv.zb_rate,
+    seal_rate: (lv.zb_rate == null) ? null : +(100 - lv.zb_rate).toFixed(2),
+    sent: (lv.sent == null ? null : lv.sent),
+    sent_ma: (lv.sent_ma == null ? null : lv.sent_ma),
+    intraday: true,
+    provisional: !!lv.intraday,      // false = 收盘后读到的已定型数（只是日频档还没落）
+  }]);
+}
+
 function _sentMetaHtml(d) {
   const s = d.stats || {}, l = d.last || {}, parts = s.sent_parts || {};
   const _pct = v => (v === null || v === undefined) ? "—" : `${Math.round(v * 100)}%`;
   // 2026-11-13 owner：「指标通过算 5 日平均值进行平滑处理」⇒ 展示/分区一律用 `sent_ma`
-  const val = (l.sent_ma !== null && l.sent_ma !== undefined) ? l.sent_ma : l.sent;
+  // 2026-11-16：盘中若有今日读数（`sentLive`），大数字改用它 —— 否则面板盘中一直停在昨天。
+  // 2026-11-16：日频序列已经有今天（14:30 尾盘快照落盘成功）时，以**定型值**为准，
+  // 不再用盘中折算值去顶（两者口径差一个"今日分位是否含自身"）。
+  const lv = sentLive;
+  const _lvUsable = !!(lv && lv.available && lv.date
+    && (!d.end || String(lv.date) > String(d.end)));
+  const liveMa = (_lvUsable && lv.sent_ma != null) ? lv.sent_ma : null;
+  const liveRaw = (_lvUsable && lv.sent != null) ? lv.sent : null;
+  const partsLive = (liveMa != null && lv.parts) ? lv.parts : parts;
+  const val = (liveMa != null) ? liveMa
+    : ((l.sent_ma !== null && l.sent_ma !== undefined) ? l.sent_ma : l.sent);
   const b = sentBand(val);
   const big = (val === null || val === undefined) ? "—" : val.toFixed(1);
   // 弱势→强势 跨越的历史分布（图上的 ▲N日 就是这个口径）
@@ -3465,12 +3544,13 @@ function _sentMetaHtml(d) {
       <span style="font-size:26px;font-weight:700;line-height:1;color:${b.color}">${big}</span>
       <span style="font-size:13px;font-weight:600;color:${b.color}">${b.name}</span>
       <span class="cell-dim" style="font-size:11px">情绪温度 <b>5日均值</b>（&lt;40 弱势 / 40~60 平稳 / ≥60 强势）·
-        当日原始值 <b>${l.sent ?? "—"}</b> ·
-        分项(5日均)：触板分位 <b>${_pct(parts.touch)}</b> · 封板质量 <b>${_pct(parts.zb === null || parts.zb === undefined ? null : 1 - parts.zb)}</b> · 跌停分位 <b>${_pct(parts.dt)}</b>
+        当日原始值 <b>${(liveRaw != null ? liveRaw : l.sent) ?? "—"}</b> ·
+        分项(5日均)：触板分位 <b>${_pct(partsLive.touch)}</b> · 封板质量 <b>${_pct(partsLive.zb === null || partsLive.zb === undefined ? null : 1 - partsLive.zb)}</b> · 跌停分位 <b>${_pct(partsLive.dt)}</b>
+        ${liveMa != null ? `<span style="color:#d29922;font-weight:600">· 含今日盘中（${esc(lv.date)}，未定型）</span>` : ""}
       </span>
     </div>
     <div class="cell-dim" style="font-size:11px;margin-bottom:6px">
-      数据日 <b>${esc(d.end || "")}</b> · 样本 <b>${s.n_days || 0}</b> 个交易日
+      数据日 <b>${esc(d.end || "")}</b>${liveMa != null ? `（最后定型日；今日盘中见上方 📡 行与图末尾空心点）` : ""} · 样本 <b>${s.n_days || 0}</b> 个交易日
       <span title="同花顺涨停池只回 2025-07-08 以后；更早的历史用本地日线自算补（与同花顺重叠段相关 0.94），同日以同花顺为准">（同花顺 ${s.src_ths || 0} + 本地自算 ${s.src_local || 0}）</span> ·
       涨停 <b style="color:${MA365_UP}">${l.zt ?? "—"}</b> 家（60日分位 ${_pct(s.zt_p60)}）·
       跌停 <b style="color:${MA365_DOWN}">${l.dt ?? "—"}</b> 家 ·
@@ -3484,11 +3564,14 @@ function renderMarketSentiment(d) {
   const el = document.getElementById("sentChart");
   const meta = document.getElementById("sentMeta");
   if (!el) return;
-  const series = (d && d.series) || [];
-  if (!series.length) return;
+  const base = (d && d.series) || [];
+  if (!base.length) return;
   if (meta) meta.innerHTML = _sentMetaHtml(d);
+  const series = _sentSeriesWithLive(base);
+  const tail = series[series.length - 1] || {};
   const sig = `${d.days}|${series.length}|${series[0] && series[0].date}|${d.end}`
-    + `|${(d.last || {}).zt}|${(d.last || {}).sent_ma}`;
+    + `|${(d.last || {}).zt}|${(d.last || {}).sent_ma}`
+    + `|${tail.intraday ? `L:${tail.date}:${tail.sent_ma}:${tail.zt}:${tail.dt}` : ""}`;
   const _canvasOk = !!(el.querySelector && el.querySelector("canvas"));
   if (sentInst && sentNode === el && _canvasOk && sig === sentSig) return;
   if (sentInst && (sentNode !== el || !_canvasOk)) {
@@ -3552,8 +3635,11 @@ function renderMarketSentiment(d) {
         const bd = sentBand(x.sent_ma);
         const _tr = transByDate[x.date];
         const _raw = (x.sent == null) ? "—" : x.sent.toFixed(1);
-        return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}
-            <span style="color:${bd.color};margin-left:6px">情绪温度(5日均) ${x.sent_ma == null ? "—" : x.sent_ma.toFixed(1)}（${bd.name}）</span>
+        return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}`
+          + (x.intraday ? (x.provisional
+            ? ` <span style="color:#d29922">📡 盘中（未定型，非收盘口径）</span>`
+            : ` <span style="color:#d29922">📡 收盘（已定型）</span>`) : "")
+          + `<span style="color:${bd.color};margin-left:6px">情绪温度(5日均) ${x.sent_ma == null ? "—" : x.sent_ma.toFixed(1)}（${bd.name}）</span>
             <span style="color:#8b949e;margin-left:6px">当日 ${_raw}</span></div>`
           + (_tr ? `<div style="color:${SENT_BANDS[2].color}">▲ 弱势→强势：自 ${esc(_tr.from)} 起跨越 <b>${_tr.days}</b> 个交易日</div>` : "")
           + `涨停 <b style="color:${MA365_UP}">${x.zt}</b> 家 · 跌停 <b style="color:${MA365_DOWN}">${x.dt}</b> 家`
@@ -3600,6 +3686,16 @@ function renderMarketSentiment(d) {
                    formatter: (p) => `${p.value}日` },
           data: transPts,
         } : undefined },
+      /* 今日盘中（未定型）：空心点 + "盘中"，别让它看着像已收盘的一格 */
+      { name: "今日盘中", type: "scatter", yAxisIndex: 1, z: 7,
+        data: tail.intraday && tail.sent_ma != null
+          ? [[String(tail.date).slice(5), tail.sent_ma]] : [],
+        symbol: "circle", symbolSize: 10,
+        itemStyle: { color: "rgba(0,0,0,0)", borderColor: "#d29922", borderWidth: 2 },
+        label: { show: true, position: "top", distance: 5, fontSize: 9,
+                 fontWeight: "bold", color: "#d29922",
+                 formatter: tail.provisional === false ? "收盘" : "盘中" },
+        tooltip: { show: false } },
     ],
     // 线按区上色：弱势蓝 / 平稳灰 / 强势红（dimension 1 = y 值）
     visualMap: {
@@ -4571,7 +4667,13 @@ async function loadAbnormalPool(force) {
     const _lds = _abnRows.map(x => x.limit_date).filter(Boolean).sort();
     if (_di2 && _lds.length && !_lds.includes(_di2.value)) _di2.value = _lds[_lds.length - 1];
   } catch (e) {
-    box.innerHTML = `<div class="empty down">异常监控池加载失败：${esc((e && (e.message || e)) || "未知")}</div>`;
+    const _m = esc((e && (e.message || e)) || "未知");
+    box.innerHTML = `<div class="empty down">异常监控池加载失败：${_m}`
+      + (/超时/.test(_m) || /积压/.test(_m)
+        ? `<br><span class="cell-dim">池子很大（整表冷算 30~60s），下一轮会自动重试；`
+          + `后端算完的那次结果会被丢弃，但缓存已经热了，重试通常几秒就出。</span>`
+        : "")
+      + `</div>`;
   } finally { _abnInflight = false; }
 }
 
@@ -13425,7 +13527,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261115e", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261116d", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
