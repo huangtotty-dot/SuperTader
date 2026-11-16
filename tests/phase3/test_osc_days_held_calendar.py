@@ -119,6 +119,28 @@ class TestAdvanceDaysHeld(unittest.TestCase):
         ex._advance_days_held({"X": {}}, D12, trading_days=TDS_TO_12, log=lambda s: None)
 
 
+class TestCalendarWiringGuard(unittest.TestCase):
+    """㉘ 接线守卫（2026-11-16 生产首日教训）：hooks 交易日历曾引用
+    `rt.gm.ADJUST_NONE`，但 `_GmPrimitives` 类体只暴露 ADJUST_PREV ⇒ 生产 AttributeError
+    被 except 吞掉、静默退化为计数器（测试环境因 except 兜底而全绿，缺陷直到生产才暴露）。
+    钉住：hooks 的日历取数只许用 `_GmPrimitives` 类体里确实存在的常量。"""
+
+    def test_hooks_calendar_fetch_uses_exposed_constant(self):
+        import os
+        src = open(os.path.join(str(_ROOT), "execution", "auto",
+                                "oversold_gap_confirm", "hooks.py"),
+                   encoding="utf-8").read()
+        self.assertNotIn("rt.gm.ADJUST_NONE", src,
+                         "_GmPrimitives 未暴露 ADJUST_NONE，生产会 AttributeError 静默退化")
+
+    def test_gm_primitives_exposes_adjust_prev(self):
+        """日历取数依赖的常量必须在 _GmPrimitives 类体里（gm_main 源码断言）。"""
+        import os
+        src = open(os.path.join(str(_ROOT), "execution", "auto", "gm_main.py"),
+                   encoding="utf-8").read()
+        self.assertIn("ADJUST_PREV = ADJUST_PREV", src)
+
+
 class TestCalendarToSellPlanEndToEnd(unittest.TestCase):
     """红线全链路：日历校准后 build_sell_plan 必须在到期日触发 horizon_expired。"""
 

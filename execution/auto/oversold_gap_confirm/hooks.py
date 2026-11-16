@@ -1107,7 +1107,10 @@ def try_sell(rt, context, now, today) -> int:
         _td_df = rt.sdk_call("osc_trading_days", partial(
             rt.gm.history, symbol="SHSE.000001", frequency="1d",
             start_time=_td_start, end_time=_td_end,
-            fields="symbol,eob", adjust=rt.gm.ADJUST_NONE, df=True))
+            # `_GmPrimitives` 只暴露 ADJUST_PREV（ADJUST_NONE 不在类体，直接引用会
+            # AttributeError——2026-11-16 生产首日即因此退化为计数器）。日历只消费
+            # eob 日期，复权方式不影响日期序列，故用 ADJUST_PREV。
+            fields="symbol,eob", adjust=rt.gm.ADJUST_PREV, df=True))
         if _td_df is not None and len(_td_df):
             _trading_days = sorted({str(x)[:10] for x in _td_df["eob"]})
             if str(today) not in _trading_days:
