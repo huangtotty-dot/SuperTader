@@ -3450,7 +3450,11 @@ function setSentRange(days) {
 async function loadMarketSentiment() {
   if (sentInflight) { sentDirty = true; return; }
   const el = document.getElementById("sentChart");
-  if (!el) return;
+  if (!el) {                             // 元素暂时不在 DOM：链条不能死（同 loadSentimentLive）
+    if (sentTimer) clearTimeout(sentTimer);
+    sentTimer = setTimeout(loadMarketSentiment, 60000);
+    return;
+  }
   sentInflight = true;
   let nextMs = 300000;                  // 日频指标：5 分钟够用，别跟着 10s 轮询烧桥
   try {
@@ -3486,7 +3490,14 @@ async function loadMarketSentiment() {
 async function loadSentimentLive() {
   if (sentLiveInflight) return;
   const el = document.getElementById("sentLiveMeta");
-  if (!el) return;
+  if (!el) {
+    // 元素暂时不在 DOM 时**也要把链条接上**（2026-11-17）：原来这里直接 return，而
+    // `sentLiveTimer` 非空 ⇒ `loadMarketSentiment` 里的懒启动 `if (!sentLiveTimer)` 永不触发
+    // ⇒ 📡 实盘行整场消失，只能刷新页面才回来。
+    if (sentLiveTimer) clearTimeout(sentLiveTimer);
+    sentLiveTimer = setTimeout(loadSentimentLive, 60000);
+    return;
+  }
   sentLiveInflight = true;
   try {
     const d = await apiCall("load_sentiment_live");
@@ -3494,7 +3505,10 @@ async function loadSentimentLive() {
       sentLive = d;
       el.style.display = "";
       const bd = (d.sent_ma != null) ? sentBand(d.sent_ma) : null;
-      const _tag = d.intraday ? "📡 今日盘中（实时，未定型）" : "📡 今日收盘（已定型）";
+      // 2026-11-17：午休（后端 paused=true）不再隐藏整行 —— 上午收盘数在午休期间是定型的，
+      // 标签如实写"午休"，别让 owner 以为数字卡住了/接口挂了。
+      const _tag = d.paused ? "📡 今日午休（停在上午收盘读数）"
+        : (d.intraday ? "📡 今日盘中（实时，未定型）" : "📡 今日收盘（已定型）");
       let html = `<span style="color:#d29922;font-weight:600">${_tag}`
         + ` ${esc(d.date || "")} ${esc(d.fetched_at || "")}</span> `
         + `涨停 <b style="color:${MA365_UP}">${d.zt}</b> 家`
@@ -13572,7 +13586,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261117b", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261117c", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

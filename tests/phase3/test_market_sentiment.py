@@ -251,6 +251,38 @@ class TestMarketSentiment(unittest.TestCase):
         self.assertEqual(r["zt"], 32)
         self.assertEqual(r["dt"], 60)
 
+    def test_live_lunch_break_shows_today(self):
+        """午休（11:35~12:55）仍给当日读数，标 paused=True —— 不能整行消失。
+
+        2026-11-17 owner 再报「GUI 实盘更新再次消失」：11:35 一到 `_in_sess` 变 False，
+        原实现直接 available=False ⇒ 📡 行隐藏到 12:55。午休正是白天看盘时间，上午收盘的
+        涨停/跌停数在午休期间是定型的，必须照常显示（前端按 paused 标「午休」）。"""
+        import datetime as _dt
+        fake = {"zt": 41, "dt": 19, "touch": 48, "zb_rate": 14.58}
+        with mock.patch.object(gui, "_in_trading_session", return_value=False), \
+                mock.patch.object(gui, "_limit_counts_from_ths", return_value=fake), \
+                mock.patch.object(gui, "datetime") as _m:
+            _m.now.return_value = _dt.datetime(2026, 11, 17, 12, 4)
+            r = self.api.load_sentiment_live()
+        self.assertTrue(r["available"])
+        self.assertTrue(r["intraday"])
+        self.assertTrue(r["paused"])
+        self.assertEqual(r["zt"], 41)
+        self.assertEqual(r["dt"], 19)
+
+    def test_live_lunch_window_bounds(self):
+        """午休窗口只认 11:35~12:55：11:34 / 13:10 在 `_in_sess` 被关掉时不得放行
+        （真实世界这两刻属于交易时段，由 `_in_sess` 放行；这里专测 `_lunch` 边界）。"""
+        import datetime as _dt
+        fake = {"zt": 41, "dt": 19, "touch": 48, "zb_rate": 14.58}
+        for hh, mm in ((11, 34), (13, 10)):
+            with mock.patch.object(gui, "_in_trading_session", return_value=False), \
+                    mock.patch.object(gui, "_limit_counts_from_ths", return_value=fake), \
+                    mock.patch.object(gui, "datetime") as _m:
+                _m.now.return_value = _dt.datetime(2026, 11, 17, hh, mm)
+                r = self.api.load_sentiment_live()
+            self.assertFalse(r["available"], f"{hh}:{mm} 不该被午休窗口放行")
+
     def test_live_weekend_hidden(self):
         """周末（没有"今天的行情"）⇒ 收盘后口径也不放行。"""
         import datetime as _dt

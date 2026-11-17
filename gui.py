@@ -4845,9 +4845,11 @@ class Api:
     def load_sentiment_live(self):
         """盘中实时情绪读数（只读、独立于日频 series）。
 
-        返回 {available, intraday, date, zt, dt, touch, zb_rate, sent, sent_ma,
+        返回 {available, intraday, paused, date, zt, dt, touch, zb_rate, sent, sent_ma,
         zone, zone_days, fetched_at}；
-        非交易时段 / 网络失败 → {available: False}（前端隐藏盘中条）。
+        放行窗口 = 交易时段(09:15-11:35 / 12:55-15:05) ∪ 午休(11:35-12:55, paused=True)
+        ∪ 收盘后到当晚(15:05 之后)；其余（开盘前/周末/网络失败）→ {available: False}
+        （前端隐藏盘中条）。
 
         `sent` / `sent_ma` = 用**同一套权重**把今日盘中计数折算成情绪温度：
           · `sent`    = 当日原始温度（今日分位 vs 历史最近 60 行，**不含今日自身**）；
@@ -4856,15 +4858,21 @@ class Api:
         """
         now = datetime.now()
         today = now.strftime("%Y%m%d")
+        hm = now.strftime("%H:%M")
         _in_sess = _in_trading_session(now)
+        # 2026-11-17（owner 再报「实盘更新消失」）：**午休 11:35~12:55 也要给今日读数**。
+        # 原来只放行 `_in_sess` 与收盘后 ⇒ 11:35 一到 📡 整行就从面板消失、12:55 才回来；
+        # 午休恰好是 owner 白天看盘的时间。上午收盘的涨停/跌停数在午休期间是定型的
+        # （下午还会变 ⇒ 仍算"今日盘中"，前端标「午休」），绝不能整行隐藏。
+        _lunch = (now.weekday() < 5 and "11:35" < hm < "12:55")
         # 2026-11-16：收盘后（15:05~当晚）也算「今日读数」——同一接口这会儿给的是**已定型**
         # 的收盘数（实测 15:2x 仍返回 涨停32/跌停60/触板48）。原来 15:05 一到就 available:False，
         # 面板整天退回上一交易日，直到次日 14:30 才有当天行（owner 说的"尾盘不更新"就是这个）。
-        _after_close = (now.weekday() < 5 and now.strftime("%H:%M") > "15:05")
-        if not (_in_sess or _after_close):
+        _after_close = (now.weekday() < 5 and hm > "15:05")
+        if not (_in_sess or _lunch or _after_close):
             return _clean({"available": False, "intraday": False})
         mem = self._SENT_LIVE_MEM
-        _ttl = 60 if _in_sess else 600          # 收盘后数字不再变 ⇒ 少打网络
+        _ttl = 60 if _in_sess else 600          # 午休/收盘后数字不再变 ⇒ 少打网络
         fresh = (mem.get("date") == today and mem.get("ts")
                  and (now - mem.get("ts")).total_seconds() < _ttl)
         if not fresh:
@@ -4876,9 +4884,10 @@ class Api:
         else:
             val = mem.get("val")
         if not val:
-            return _clean({"available": False, "intraday": _in_sess,
+            return _clean({"available": False, "intraday": bool(_in_sess or _lunch),
                            "date": now.strftime("%Y-%m-%d")})
-        out = {"available": True, "intraday": bool(_in_sess),
+        out = {"available": True, "intraday": bool(_in_sess or _lunch),
+               "paused": bool(_lunch),          # 午休：数字停在上午收盘，前端据此换标签
                "date": now.strftime("%Y-%m-%d"),
                "zt": val.get("zt"), "dt": val.get("dt"),
                "touch": val.get("touch"), "zb_rate": val.get("zb_rate"),
