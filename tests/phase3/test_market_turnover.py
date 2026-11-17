@@ -219,44 +219,6 @@ class TestPrevTradingDaySameHm(unittest.TestCase):
             self.assertIn(k, src, f"兜底载荷缺 {k} ⇒ 浮窗在降级时又回到'全日配实时'")
 
 
-class TestWidgetBasePick(unittest.TestCase):
-    """浮窗挑分母（`scripts/turnover_widget.py::choose_base`，纯函数，离线）。"""
-
-    @classmethod
-    def setUpClass(cls):
-        _scripts = os.path.join(_ROOT, "scripts")
-        if _scripts not in sys.path:
-            sys.path.insert(0, _scripts)
-        import turnover_widget as tw
-        cls.tw = tw
-
-    def test_只认同期基准(self):
-        p = {"available": True, "basis": "全日", "amount_prev": 16088e8,
-             "amount_prev_same_hm": 500e8, "prev_trading_day": "2026-10-27", "hm": "10:35"}
-        pick = self.tw.choose_base(p, datetime(2026, 10, 28, 10, 35).timetuple())
-        self.assertAlmostEqual(pick["base"], 500e8, msg="必须用同期，不能用 amount_prev")
-        self.assertEqual(pick["day"], "2026-10-27")
-        self.assertEqual(pick["label"], "vs昨日同期")
-        self.assertTrue(pick["in_session"])
-
-    def test_无同期基准就不给对比(self):
-        p = {"available": True, "basis": "全日", "amount_prev": 16088e8,
-             "amount_prev_same_hm": None, "hm": "09:33"}
-        pick = self.tw.choose_base(p, datetime(2026, 10, 28, 9, 33).timetuple())
-        self.assertIsNone(pick["base"], "没有同期基准时不许退化成 amount_prev")
-        self.assertEqual(pick["hm"], "09:33")
-
-    def test_收盘后标签转全日(self):
-        p = {"amount_prev_same_hm": 1.6e12, "prev_trading_day": "2026-10-27", "hm": "15:00"}
-        pick = self.tw.choose_base(p, datetime(2026, 10, 28, 16, 0).timetuple())
-        self.assertEqual(pick["label"], "vs昨日全日")
-        self.assertFalse(pick["in_session"])
-
-    def test_无载荷不抛(self):
-        for p in (None, {}, {"amount_prev_same_hm": "x"}, {"amount_prev_same_hm": 0}):
-            self.assertIsNone(self.tw.choose_base(p, datetime(2026, 10, 28, 10, 0).timetuple())["base"])
-
-
 class TestBasisFullDay(unittest.TestCase):
     """T2：收盘后按全日。"""
 

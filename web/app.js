@@ -1539,17 +1539,36 @@ function renderTradeHistory(d) {
         : "";
     }
     if (curve.length >= 2) {
+      // 2026-11-17 owner：「累计收益趋势不容易看出来每个月的变化」⇒ 三件套：
+      //   ① 每月起点画灰色竖虚线 + 月份标签（markLine 垂直线）；
+      //   ② 右轴叠加「当月盈亏」半透明柱（每月首日 = 当天累计 − 上月末累计）；
+      //   ③ tooltip 增加「当月变动」一行。
+      // ⚠️ legend.data 与 series[].name 必须逐字相同（ECharts 按 name 匹配，对不上就静默丢图例）。
+      const tot = x => (x.cum_total ?? x.cum_realized);
+      const monthFirst = [];               // [{ i, label }] 每月第一个点的下标与“N月”标签
+      const monthDelta = new Array(curve.length).fill(null);   // 当月盈亏（仅每月首日有值）
+      curve.forEach((x, i) => {
+        const m = String(x.date || "").slice(0, 7);
+        const isFirst = i === 0 || String(curve[i - 1].date || "").slice(0, 7) !== m;
+        if (!isFirst) return;
+        monthFirst.push({ i, label: Number(m.slice(5)) + "月" });
+        const base = i === 0 ? 0 : tot(curve[i - 1]);
+        monthDelta[i] = Math.round((tot(x) - base) * 100) / 100;
+      });
       echRender("echThCumPct", {
         ...ECH_BASE,
         grid: { left: 56, right: 62, top: 34, bottom: 34 },
         // ⚠️ legend.data 与 series[].name 必须**逐字相同**（ECharts 按 name 匹配；
         //    对不上就静默丢掉该图例项，本图 2026-10-14 前就是这样丢了黄线的图例）。改一处必改另一处。
-        legend: { data: ["累计收益率(左·%)", "累计总盈亏(右·元)"], textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
+        legend: { data: ["累计收益率(左·%)", "累计总盈亏(右·元)", "当月盈亏(右·元)"],
+                  textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
         tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: p => {
           const r = curve[p[0].dataIndex];
+          const d = monthDelta[p[0].dataIndex];
           return `<b>${r.date}</b><br>累计收益: <b style="color:${pnlColor(r.pct_total ?? r.pct)}">`
             + `${((r.pct_total ?? r.pct) >= 0 ? "+" : "") + fmt(r.pct_total ?? r.pct, 2)}%</b>`
             + `<br>累计总盈亏: <b style="color:${pnlColor(r.cum_total)}">${f(r.cum_total)}</b>`
+            + (d == null ? "" : `<br>当月变动: <b style="color:${pnlColor(d)}">${f(d)}</b>`)
             + `<br><span style="color:#8b949e">已实现 ${f(r.cum_realized)} · 累计买入 ${fmt(r.cum_buy || 0, 0)}</span>`
             + (r.today_est ? '<br><span style="color:#8b949e">今日点：当天无成交，浮动按台账最新收盘价估</span>' : "");
         } },
@@ -1576,7 +1595,18 @@ function renderTradeHistory(d) {
           // 开色相：蓝=比例、黄=金额，两个口径别混读（详见上方注释块与「历史 bug」）。
           { name: "累计总盈亏(右·元)", type: "line", yAxisIndex: 1, smooth: true, symbol: "none",
             data: curve.map(x => x.cum_total ?? x.cum_realized), lineStyle: { color: "rgba(210,153,34,.8)", width: 1, type: "dashed" },
-            itemStyle: { color: "#d29922" } },
+            itemStyle: { color: "#d29922" },
+            // ① 每月起点竖虚线 + 「N月」标签（2026-11-17：月度可读性）。首月不画（贴着 Y 轴没意义）。
+            markLine: { silent: true, symbol: "none",
+              lineStyle: { color: "rgba(139,148,158,.35)", type: "dashed", width: 1 },
+              label: { show: true, position: "insideEndTop", color: "#8b949e", fontSize: 9,
+                       formatter: p => p.name },
+              data: monthFirst.slice(1).map(mf => ({ xAxis: mf.i, name: mf.label })) } },
+          // ② 当月盈亏柱：只在每月第一个交易日有值（其余 null 自动跳空），红赚绿亏、半透明别抢主线。
+          { name: "当月盈亏(右·元)", type: "bar", yAxisIndex: 1, barMaxWidth: 10,
+            data: curve.map((x, i) => monthDelta[i] == null ? null
+              : { value: monthDelta[i], itemStyle: { color: pnlColor(monthDelta[i]), opacity: 0.45 } }),
+            tooltip: { show: false } },
         ],
       });
     } else echClear("echThCumPct");
@@ -1710,13 +1740,21 @@ function renderTradeHistory(d) {
   if (!body) return;
   const tMap = {};
   v.tByStock.forEach(t => { tMap[`${t.account || ""}|${t.code}`] = t; });
+  // 2026-11-17 owner：「逐股盈亏需要使用柱状图进行显示」——表格「合计」列内嵌数据条
+  //（长度 = |合计盈亏| ÷ 全表最大|合计盈亏|，红赚绿绿亏同 pnlColor；上方 echThBar_* 仍是整图柱状）。
+  const maxAbsPnl = Math.max(1e-9, ...stocks.map(s => Math.abs(s.total_pnl || 0)));
+  const pnlBar = v => {
+    const w = Math.min(100, Math.abs(v || 0) / maxAbsPnl * 100);
+    return `<div class="h-bar-track" style="margin-top:2px;min-width:90px"><div class="h-bar-fill" `
+      + `style="width:${w.toFixed(1)}%;background:${pnlColor(v)}"></div></div>`;
+  };
   const rows = stocks.map(s => {
     const t = tMap[`${s.account || ""}|${s.code}`];
     return `<tr>
       <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span>${s.account ? ` <span class="cell-dim" style="font-size:10px">${esc(s.account)}</span>` : ""}</td>
       <td class="num ${clsOf(s.realized)}">${f(s.realized)}</td>
       <td class="num ${clsOf(s.unrealized || 0)}">${s.unrealized ? f(s.unrealized) : "—"}</td>
-      <td class="num ${clsOf(s.total_pnl || 0)}"><b>${f(s.total_pnl || 0)}</b></td>
+      <td class="num ${clsOf(s.total_pnl || 0)}" style="min-width:130px"><b>${f(s.total_pnl || 0)}</b>${pnlBar(s.total_pnl)}</td>
       <td class="num ${clsOf(s.mtd_reduction)}">${s.mtd_reduction == null ? "—" : f(s.mtd_reduction)}</td>
       <td class="num ${t ? clsOf(t.pnl) : ""}">${t ? f(t.pnl) : "—"}</td>
       <td class="num cell-dim">${t ? t.n_pairs : "—"}</td>
@@ -1731,7 +1769,7 @@ function renderTradeHistory(d) {
   }).join("");
   body.innerHTML = `<div class="card-title">逐股明细（已实现降序，共 ${stocks.length} 只）</div>
     <table><thead><tr><th>股票</th><th class="num">已实现</th><th class="num">浮动</th>
-    <th class="num">合计</th><th class="num" title="本月减亏额度 = 当前合计盈亏 − 上月末最后一个交易日的合计盈亏（已实现+浮动，同「合计」口径）。正=本月减亏/改善，负=本月增亏/恶化">本月减亏<br><span style="font-size:9px;opacity:.6">较上月末</span></th><th class="num">做T收益</th>
+    <th class="num" title="下方条长 = 盈亏幅度（相对全表最大|合计|）">合计</th><th class="num" title="本月减亏额度 = 当前合计盈亏 − 上月末最后一个交易日的合计盈亏（已实现+浮动，同「合计」口径）。正=本月减亏/改善，负=本月增亏/恶化">本月减亏<br><span style="font-size:9px;opacity:.6">较上月末</span></th><th class="num">做T收益</th>
     <th class="num">做T日</th><th class="num">收益率</th>
     <th class="num">买入额</th><th class="num">卖出额</th><th class="num">费用</th>
     <th class="num">笔数</th><th class="num">仍持有</th><th>区间</th></tr></thead>
@@ -11983,9 +12021,11 @@ function renderHunter(h) {
     const stocks = ss[category] || [];
     const d5Hits = stocks.filter(s => s.d5 > 0).length;
     const d6Hits = stocks.filter(s => s.d6 > 0).length;
-    // 细分按第一层级归并计数（半导体设备-测试设备 → 半导体设备），与下方展开分组一致
+    // 细分按第一层级归并计数（半导体设备-测试设备 → 半导体设备），与下方展开分组一致。
+    // 2026-11-17：带 industry_group 的个股按行业类别计数，与展开分组同口径。
     const _fl = new Set();
     for (const s of stocks) {
+      if (s.industry_group) { _fl.add(s.industry_group); continue; }
       for (const c of ((s.concepts && s.concepts.length) ? s.concepts : ["未分类"])) _fl.add(c.split("-")[0]);
     }
     const firstLevelCount = _fl.size;
@@ -12032,7 +12072,7 @@ function renderHunter(h) {
           if (!tv) return "";
           const tip = `标签相关度：${tv[0]}${tv[1] ? "｜" + tv[1] : ""}`;
           return `<span class="h-verdict v-${esc(tv[0])}" title="${esc(tip)}">${esc(tv[0])}</span>`;
-        })()} <button class="mini-btn" style="font-size:10px;padding:0 5px"
+        })()}${s.core_asset ? `<span class="h-core-asset" title="核心资产：同时入选「同花顺漂亮100」（中特估100 ∩ 漂亮100 交集标的，后端按 watchlist 的 category/sector 实时判定）">💎核心资产</span>` : ""} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
           title="加入建仓股池监控买点">+股池</button>${redMarkHtml(s.code)}${powerTypeBadge(s.power_type)}</td>
         <!-- 2026-10-22 owner：市值挪到名称右边（放在「价」旁边太靠右，注意不到） -->
@@ -12080,9 +12120,14 @@ function renderHunter(h) {
     const subGroups = {};
     const subSeen = {};  // gk -> Set(code)：同一子分组内 code 唯一（数据源同 code 多行/多概念 → 不重复）
     for (const s of allStocks) {
-      const cons = (s.concepts && s.concepts.length) ? s.concepts : ["未分类"];
+      // 2026-11-17 owner：「GUI显示的时候按照类别进行显示」——个股带 industry_group
+      // （行业类别，如 银行/建筑基建，由 tag_industry_group_20261117.py 写入 watchlist、
+      // 后端随个股行下发）时，直接用它做分组键：一股一组、不跨组重复；
+      // 没有该字段的板块回退原「概念细分」分组，行为不变。
+      const cons = s.industry_group ? [s.industry_group]
+        : ((s.concepts && s.concepts.length) ? s.concepts : ["未分类"]);
       for (const c of cons) {
-        const gk = normGk(c);
+        const gk = s.industry_group ? c : normGk(c);
         (subSeen[gk] = subSeen[gk] || new Set());
         if (subSeen[gk].has(s.code)) continue;
         subSeen[gk].add(s.code);
@@ -12138,15 +12183,15 @@ function renderHunter(h) {
         <span class="h-subgroup-name"${_gTip ? ` title="${esc(_gTip)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
         ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(_gTip)}">${esc(_gDesc)}</span>` : ""}
-        <button class="mini-btn h-note-btn" onclick="hunterToggleNote('${_noteId}', this)">▸ 说明 · 个股理由</button>
+        ${(_whyAll.length || _gDesc) ? `<button class="mini-btn h-note-btn" onclick="hunterToggleNote('${_noteId}', this)">▸ 说明 · 个股理由</button>` : ""}
       </td></tr>
-      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="14">
+      ${(_whyAll.length || _gDesc) ? `<tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="14">
         <div class="h-note-desc">${esc(_gDesc || "（该细分概念暂无解释）")}</div>
         <div class="h-note-hint cell-dim">本组 ${gs.length} 只，其中 ${_withWhy} 只有入选理由；再点一次按钮收起</div>
         <ul class="h-note-list">${_members.slice(0, 80).map(([n, r, v]) =>
           `<li><b>${esc(n)}</b>${v ? `<span class="h-verdict v-${esc(v)}">${esc(v)}</span>` : ""} — ${r ? esc(r) : '<span class="cell-dim">—</span>'}</li>`
         ).join("")}</ul>
-      </td></tr>`;
+      </td></tr>` : ""}`;
       return head + gs.map(hunterRow).join("");
     }).join("");
     const gTotal = groupKeys.length;
@@ -13527,7 +13572,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261116d", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261117b", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -14014,6 +14059,85 @@ async function openMultiWatch() {
   mwTick();
   if (mwTimer) clearInterval(mwTimer);
   mwTimer = setInterval(mwTick, MW_PERIOD_MS);
+  // 两市成交额小卡：10 秒一跳；关窗/关浮层时停
+  mwTurnTick();
+  if (mwTurnTimer) clearInterval(mwTurnTimer);
+  mwTurnTimer = setInterval(mwTurnTick, 10000);
+}
+
+/* ===== 多窗口看盘 · 标题栏「两市成交额」行内读数（2026-11-17 owner：
+   先做成浮卡「会遮挡」，再按 owner 画的框挪进标题栏中段）=====
+   口径沿用原桌面浮窗（浮窗已于 2026-11-17 删除）：
+     · 分子 = 腾讯指数实时快照三腿（10 秒级，**含正在走的那根 5min bar**）；
+     · 分母 = 上一交易日**同一时刻**累计 —— 后端下发 `prev_cum`（逐 5min 累计曲线），
+       由 `core/turnover_base.interp_prev_base` 按当前秒插值后随 `load_turnover_live` 返回。
+   ⚠️ 不能拿 `load_market_turnover` 的 `amount` 当分子：那是 5 分钟粒度，最多落后一根 bar，
+      与实时分子混用正是 2026-11-17 那次"-61 亿 vs -661 亿"的成因。 */
+let mwTurnTimer = null, mwTurnInflight = false;
+let mwTurnOn = (() => { try { return localStorage.getItem("mw_turn_on") !== "0"; } catch (e) { return true; } })();
+
+function _mwFmtYi(v) {
+  if (v === null || v === undefined || isNaN(v)) return "—";
+  return `${Math.round(v / 1e8).toLocaleString()}亿`;
+}
+function _mwFmtWan(v) {
+  if (v === null || v === undefined || isNaN(v)) return "—";
+  return v >= 1e12 ? `${(v / 1e12).toFixed(2)}万亿` : `${Math.round(v / 1e8).toLocaleString()}亿`;
+}
+
+function mwToggleTurn() {
+  mwTurnOn = !mwTurnOn;
+  try { localStorage.setItem("mw_turn_on", mwTurnOn ? "1" : "0"); } catch (e) { /* 忽略 */ }
+  mwTurnTick();
+}
+
+async function mwTurnTick() {
+  const el = document.getElementById("mwTurnCard");
+  if (!el) return;
+  if (!mwTurnOn) { el.style.display = "none"; return; }
+  el.style.display = "";
+  if (mwTurnInflight) return;
+  mwTurnInflight = true;
+  try {
+    const d = await apiCall("load_turnover_live");
+    const amt = document.getElementById("mwTurnAmt");
+    const pctEl = document.getElementById("mwTurnPct");
+    const dl = document.getElementById("mwTurnDelta");
+    const pj = document.getElementById("mwTurnProj");
+    const ft = document.getElementById("mwTurnFoot");
+    if (!d || !d.available) {
+      if (amt) amt.textContent = "—";
+      if (pctEl) { pctEl.textContent = (d && d.error) || "取数中…"; pctEl.style.color = "#8b949e"; }
+      if (dl) dl.textContent = "";
+      if (pj) pj.textContent = "";
+      if (ft) ft.textContent = "";
+      return;
+    }
+    if (amt) amt.textContent = _mwFmtYi(d.amount);
+    if (pctEl) {
+      if (d.pct == null) { pctEl.textContent = "—"; pctEl.style.color = "#8b949e"; }
+      else {
+        const up = d.pct >= 0;
+        pctEl.style.color = up ? MA365_UP : MA365_DOWN;
+        pctEl.textContent = `${up ? "+" : ""}${d.pct.toFixed(2)}%`;
+      }
+    }
+    if (dl) {
+      dl.textContent = (d.delta == null) ? ""
+        : `${d.label || ""}　增量 ${d.delta >= 0 ? "+" : ""}${Math.round(d.delta / 1e8).toLocaleString()}亿`;
+    }
+    if (pj) pj.textContent = d.projected ? `预计全天 ${_mwFmtWan(d.projected)}` : "";
+    if (ft) {
+      ft.textContent = `实时 ${esc(d.fetched_at || "")} · 基准 ${esc(d.prev_day || "—")} ${esc(d.hm || "")}`
+        + (d.src === "插值" ? "（插值）" : "")
+        + (d.bse_included ? " · 含北交所" : "");
+    }
+  } catch (e) {
+    const pctEl = document.getElementById("mwTurnPct");
+    if (pctEl) { pctEl.textContent = "读取失败"; pctEl.style.color = "#8b949e"; }
+  } finally {
+    mwTurnInflight = false;
+  }
 }
 
 /* ===== 独立原生窗口模式（2026-10-22 owner：多窗口看盘要能**独立于 GUI** 拖动）=====
@@ -14091,12 +14215,14 @@ async function openMultiWatchWindow() {
 function closeMultiWatch() {
   if (MW_WINDOW_MODE) {                 // 独立窗口里 × = 关窗口（不是隐藏浮层）
     if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
+    if (mwTurnTimer) { clearInterval(mwTurnTimer); mwTurnTimer = null; }
     try { window.pywebview.api.close_multi_window(); } catch (e) { /* 忽略 */ }
     return;
   }
   const win = document.getElementById("multiWatchWin");
   if (win) win.style.display = "none";
   if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
+  if (mwTurnTimer) { clearInterval(mwTurnTimer); mwTurnTimer = null; }
   if (mwRO) { try { mwRO.disconnect(); } catch (e) { /* 忽略 */ } mwRO = null; }
   mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
   mwInsts = [];

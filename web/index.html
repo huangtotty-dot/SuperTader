@@ -157,8 +157,9 @@
              所以会出现"蓝线贴近 0 而黄线明显为负"（那是尚未卖出的浮亏）。 -->
         <div class="cell-dim" style="font-size:11px;line-height:1.7;margin:-2px 0 6px">
           <b style="color:#8ad4ff">━ 累计收益率(左·%)</b> = 累计已实现 ÷ 累计买入成本　·
-          <b style="color:#d29922">┄ 累计总盈亏(右·元)</b> = 已实现 + 持仓浮盈浮亏（**含浮动**）
-          <span style="opacity:.75">—— 两条口径不同，别混读；悬停看当日明细</span>
+          <b style="color:#d29922">┄ 累计总盈亏(右·元)</b> = 已实现 + 持仓浮盈浮亏（**含浮动**）　·
+          <b>▌当月盈亏(右·元)</b> = 每月首个交易日相对上月末的增减（红=当月赚、绿=当月亏，画在每月第一个交易日）<br>
+          <span style="opacity:.75">灰色竖虚线 = 每月起点；悬停任意一天可看「当月变动」。三条口径不同，别混读</span>
         </div>
         <div id="echThCumPct" class="echart" style="height:340px"></div>
       </div>
@@ -793,7 +794,20 @@
 <div id="multiWatchWin" class="mw-win" style="display:none">
   <div class="mw-title" id="mwTitle">
     <span>🔲 多窗口看盘 <span class="cell-dim" id="mwSubTitle" style="font-size:11px;font-weight:400">5分 K · 每 4 秒刷新</span></span>
-    <span style="display:flex;gap:6px;align-items:center">
+    <!-- 2026-11-17 owner：「放到我画框的地方」—— 标题栏中段行内显示，**不再盖住 K 线**。
+         口径沿用原桌面浮窗（已删）：分子=腾讯指数实时快照三腿（10 秒级，含正在走的 5min bar）；
+         分母=上一交易日**同时刻**累计（后端 `prev_cum` 按秒插值）。 -->
+    <span id="mwTurnCard" class="mw-turn">
+      <span class="mw-turn-t">📊 两市成交额</span>
+      <b id="mwTurnAmt">—</b>
+      <span id="mwTurnPct"></span>
+      <span id="mwTurnDelta" class="mw-turn-dim"></span>
+      <span id="mwTurnProj" class="mw-turn-dim"></span>
+      <span id="mwTurnFoot" class="mw-turn-foot"></span>
+      <button class="mini-btn mw-turn-x" onclick="mwToggleTurn()"
+              title="收起（标题栏「💹 成交额」可再展开）">—</button>
+    </span>
+    <span style="display:flex;gap:6px;align-items:center;flex:none">
       <!-- 2026-10-26 owner：「需要有按钮我可以选择 3×3 / 3×2」。
            切换会重建格子（3×2 只画前 6 只、也只请求这 6 只），选择存 localStorage。 -->
       <!-- 2026-11-04 owner：窗口看盘可选 5/10/30/60 分钟 -->
@@ -818,6 +832,9 @@
       <!-- 2026-11-02 owner：多窗口也要显示密集成交区；与 K 线弹窗里的开关是同一状态 -->
       <button class="mini-btn" id="mwVpBtn" onclick="toggleVolumeProfile()"
               title="显示/隐藏每格的密集成交区（右侧横向直方图 + POC 点线；与 K 线弹窗里的「◫ 密集区」同一开关）">◫ 密集区</button>
+      <!-- 2026-11-17 owner：「将该显示框嵌入到多窗口看盘」—— 口径沿用原桌面浮窗（已删） -->
+      <button class="mini-btn" id="mwTurnBtn" onclick="mwToggleTurn()"
+              title="显示/隐藏「两市成交额」小卡（实时分子 + 昨日同期按秒插值）">💹 成交额</button>
       <button class="mini-btn" onclick="mwRefreshAll()" title="立即刷新一次">🔄</button>
       <button class="mini-btn" id="mwMinBtn" onclick="mwToggleMin()" title="最小化：只留标题栏（再点展开）">—</button>
       <button class="mini-btn" id="mwMaxBtn" onclick="mwToggleMax()" title="最大化 / 还原（也可双击标题栏）">🗖</button>
@@ -840,6 +857,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261116d"></script>
+<script src="app.js?v=20261117b"></script>
 </body>
 </html>

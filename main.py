@@ -32,9 +32,7 @@ from core.data_fetcher import (
     DAILY_CONTEXT_CACHE, MINUTE_FETCH_DETAIL, MINUTE_FETCH_STATUS,
     _now, cleanup_expired_minute_cache, load_holdings,
 )
-from core.gui_subprocess import (
-    close_gui, close_turnover_widget, launch_gui, launch_turnover_widget,
-)
+from core.gui_subprocess import close_gui, launch_gui
 from core.scan_timing import _log_scan_round
 from core.eod_tasks import _maybe_backfill_sentiment
 from core.price_alert_watch import _start_price_alert_watch
@@ -143,7 +141,6 @@ def _validate_pool_split_or_exit():
 if __name__ == "__main__":
     import atexit
     atexit.register(close_gui)
-    atexit.register(close_turnover_widget)
     # V8 预热(2026-09-08): akshare 的 py_mini_racer(V8) 首次初始化必须在主线程，否则后台扫描线程内
     # 首用（如 stock_zh_a_hist 兜底）会 FATAL 拖垮整进程——启动最先预热，见 core/v8guard.py
     try:
@@ -168,6 +165,5 @@ if __name__ == "__main__":
     else:
         _validate_pool_split_or_exit()
         launch_gui()
-        launch_turnover_widget()
         _start_price_alert_watch()      # 价格突破提醒（K线画线 → 飞书，10s 一拍）
         run_watch()

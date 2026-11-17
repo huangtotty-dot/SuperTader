@@ -341,6 +341,19 @@ body.mw-winmode #multiWatchWin {
   box-shadow: 0 14px 44px rgba(0,0,0,.6); overflow: hidden; resize: both; }
 /* 最大化：铺满（尺寸由 JS 按窗口算），此时禁用拖拽把手 —— 尺寸已固定 */
 .mw-win.mw-max { resize: none; }
+/* 两市成交额 · 标题栏行内读数（2026-11-17 owner：「会遮挡我，请安放到我画框的地方」）。
+   原来是绝对定位的浮卡，盖在九宫格右上角，挡住 K 线 ⇒ 改成**标题栏中段的一行**：
+   左标题、中间读数（吃掉剩余宽度，过长省略号）、右侧按钮组。口径沿用原桌面浮窗（已删）。 */
+.mw-turn { display: flex; align-items: center; gap: 9px;
+  flex: 1 1 auto; min-width: 0; margin: 0 10px; overflow: hidden; white-space: nowrap;
+  font-size: 11px; color: var(--text-dim); }
+.mw-turn-t { color: var(--text-dim); flex: none; }
+.mw-turn b { font-size: 14px; font-weight: 700; color: var(--text); flex: none; letter-spacing: .2px; }
+#mwTurnPct { font-size: 12px; font-weight: 700; flex: none; }
+.mw-turn-dim { color: var(--text-dim); flex: none; }
+.mw-turn-foot { color: var(--text-faint); font-size: 10px; flex: 0 1 auto;
+  overflow: hidden; text-overflow: ellipsis; }
+.mw-turn-x { flex: none; padding: 0 5px; line-height: 15px; }
 .mw-title { display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 6px 10px; background: #161b22;
   border-bottom: 1px solid #30363d; font-size: 13px; font-weight: 700;
@@ -717,6 +730,12 @@ body.mw-winmode #multiWatchWin {
 .h-verdict.v-错标 { color: #f85149; background: rgba(248,81,73,.16); }
 .h-verdict.v-已摘牌 { color: #8b949e; background: rgba(139,148,158,.10); font-weight: 500; }
 .h-verdict.v-未核 { color: #8b949e; background: rgba(139,148,158,.12); font-weight: 500; }
+
+/* 2026-11-17 owner：「是否属于核心资产进行标注」——同时入选「同花顺漂亮100」的标的
+   在股票名后挂 💎核心资产 小标。用紫色系，与「标签相关度」判词（绿/蓝/黄/红）区分开。 */
+.h-core-asset { display: inline-block; margin: 0 3px 0 4px; padding: 0 5px; border-radius: 8px;
+  font-size: 9.5px; line-height: 15px; font-weight: 600; vertical-align: 1px;
+  color: #bc8cff; background: rgba(188,140,255,.14); border: 1px solid rgba(188,140,255,.35); }
 
 /* 2026-10-24：猎手展开区顶部的「标签相关度」图例（颜色含义） */
 .h-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px;

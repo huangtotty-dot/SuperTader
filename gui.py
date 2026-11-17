@@ -618,6 +618,40 @@ def _limit_counts_from_ths(date, timeout=8.0, retries=1):
     return None
 
 
+_TX_INDEX_LEGS = ("sh000001", "sz399106", "bj899050")
+
+
+def _tx_index_amount():
+    """腾讯指数**实时快照**三腿成交额 → {code: 元}（字段 f[37]，单位万元）。
+
+    三腿 = 沪 上证指数 + 深 深证综指 + 北 北证50（口径沿用原桌面浮窗，浮窗已于 2026-11-17 删除）。
+
+    失败/缺腿 ⇒ 返回已取到的部分（调用方按 `len(legs)` 判完整度），绝不抛。
+    """
+    try:
+        import requests
+        r = requests.get("https://qt.gtimg.cn/q=" + ",".join(_TX_INDEX_LEGS),
+                         headers={"User-Agent": "Mozilla/5.0"}, timeout=3.0)
+        raw = r.content.decode("gbk", "ignore")
+    except Exception:
+        return {}
+    out = {}
+    for line in raw.split(";"):
+        line = line.strip()
+        if not line.startswith("v_") or '="' not in line:
+            continue
+        code = line.split("=", 1)[0][2:].strip()
+        body = line.split('="', 1)[1].rstrip('"')
+        f = body.split("~")
+        if len(f) < 38:
+            continue
+        try:
+            out[code] = float(f[37]) * 1e4        # 万元 → 元
+        except Exception:
+            continue
+    return out
+
+
 def _sent_roll_pct(vals, w=60, min_n=20):
     """滚动分位（**含当日**，窗口 w，最少 min_n 个有效样本）；不足 → None。
 
@@ -3935,6 +3969,48 @@ class Api:
                 return hit[1]
         return {"available": False, "warming": True}
 
+    def load_turnover_live(self):
+        """多窗口看盘的「两市成交额」小卡（2026-11-17 owner：把成交额读数嵌进看盘窗）。
+
+        口径沿用原桌面浮窗（浮窗已于 2026-11-17 删除），两件事分开取：
+          · 分子 = 腾讯指数实时快照三腿（10 秒级，**含正在走的那根 5min bar**）；
+          · 分母 = 上一交易日**同一时刻**累计 —— 用 `load_market_turnover()` 下发的
+            `prev_cum`（逐 5min 累计曲线）按当前秒插值（`core.turnover_base`）。
+        分母缺曲线时才退回 5min 边界值，并在 `src` 如实标注。
+
+        返回 {available, amount, base, delta, pct, projected, hm, day, prev_day, src,
+              label, bse_included, fetched_at}。
+        """
+        from core.turnover_base import interp_prev_base
+        pay = self.load_market_turnover() or {}
+        legs = _tx_index_amount()
+        live = sum(legs.get(c, 0.0) for c in _TX_INDEX_LEGS) if legs else 0.0
+        if not (live > 0):
+            return _clean({"available": False, "error": "腾讯指数快照不可用（三腿全缺）"})
+        now = datetime.now()
+        hm = now.strftime("%H:%M")
+        in_session = now.weekday() < 5 and "09:15" <= hm <= "15:00"
+        base, src = None, ""
+        if in_session:
+            base, src = interp_prev_base(pay.get("prev_cum"), now), "插值"
+        if not (isinstance(base, (int, float)) and base > 0):
+            base = pay.get("amount_prev_same_hm") if in_session else pay.get("amount_prev")
+            src = "5min边界" if in_session else "全日"
+        out = {"available": True, "amount": live, "hm": hm,
+               "day": pay.get("day"), "prev_day": pay.get("prev_trading_day"),
+               "bse_included": bool(legs.get("bj899050")),
+               "src": src,
+               "fetched_at": now.strftime("%H:%M:%S"),
+               "label": "vs昨日同期" if in_session else "vs昨日全日"}
+        if isinstance(base, (int, float)) and base > 0:
+            out.update({"base": float(base), "delta": live - float(base),
+                        "pct": (live / float(base) - 1.0) * 100.0})
+            # 预计全日：沿用卡片那条 U 型外推的比例（历史同时刻占全日比）
+            frac = pay.get("proj_frac")
+            if isinstance(frac, (int, float)) and 0 < frac <= 1:
+                out["projected"] = live / frac
+        return _clean(out)
+
     def _market_turnover_impl(self):
         now = _time_mod.time()
         hit = Api._turnover_cache.get("payload")
@@ -4230,11 +4306,30 @@ class Api:
                     _acc += float(_sub["amount"].sum())
             amount_prev_same_hm = _acc if _acc > 0 else None
 
+        # 2026-11-17：给成交额小卡一张**上一交易日的 5min 累计曲线**，让它按秒插值。
+        # 为什么不能再只给一个「≤hm 的累计」：5min bar 按**右端**打戳 ⇒ 那个点只到上一根边界
+        # （10:04 拿到的其实是"10:00 那根收完"），而浮窗分子是 10 秒级实时（**含正在走的这根**）。
+        # 实测 2026-11-17 10:05：分母 4,878.7 亿 vs 真实同期 5,355.9 亿（差一根 477 亿）
+        # ⇒ 浮窗显示 "-61 亿 / -1.24%"，真实是 "-538 亿 / -10.0%"（财联社 -12.2%）。
+        prev_cum = []
+        if prev_trading_day:
+            _by_hm: dict = {}
+            for _d in per_leg.values():
+                _sub = _d[_d["_day"] == prev_trading_day]
+                for _h, _a in zip(_sub["_hm"].tolist(), _sub["amount"].tolist()):
+                    _by_hm[_h] = _by_hm.get(_h, 0.0) + float(_a)
+            _run = 0.0
+            for _h in sorted(_by_hm):
+                _run += _by_hm[_h]
+                prev_cum.append([_h, round(_run, 2)])
+
         out = {
             "available": True,
             "amount": amount, "amount_prev": amount_prev,
             # 浮窗的「同期」分母（元）；开盘首 5 分钟昨日还没有任何 bar ⇒ None，宁可不给对比
             "amount_prev_same_hm": amount_prev_same_hm,
+            # 上一交易日逐 5min 的**累计**成交额 [[HH:MM, 元], …]（浮窗按秒插值用）
+            "prev_cum": prev_cum,
             "prev_trading_day": prev_trading_day,
             "hm": hm,
             # 2026-10-23 owner：「要显示增量多少资金」——绝对值（元），不是只有百分比。
@@ -9523,13 +9618,24 @@ class Api:
             # 2026-11-08 owner：「电力运营每支股一个标签：火电/核电/水电/储能相关？」
             # 发电方式写在 watchlist 的 `power_type`（tag_power_type_20261108.py），
             # 这里随个股行下发，前端在名字后面显示小徽章。
+            # 2026-11-17 owner：「GUI按类别分组显示 + 核心资产标注」——同一次 _wl_raw
+            # 读取顺带下发 industry_group（行业类别，写在 watchlist，见
+            # tag_industry_group_20261117.py）与 core_asset（核心资产=同时入选
+            # 「同花顺漂亮100」，category/sector 双字段判定，不落盘、实时算）。
             try:
                 _wl_raw = _load_json(HUNTER_DIR / "watchlist_concept.json", {}) or {}
                 for _ss in sector_stocks.values():
                     for _s in _ss:
-                        _t = str((_wl_raw.get(str(_s.get("code"))) or {}).get("power_type") or "")
+                        _info = _wl_raw.get(str(_s.get("code"))) or {}
+                        _t = str(_info.get("power_type") or "")
                         if _t:
                             _s["power_type"] = _t
+                        _g = str(_info.get("industry_group") or "").strip()
+                        if _g:
+                            _s["industry_group"] = _g
+                        if "漂亮100" in (str(_info.get("category") or "") + "|"
+                                         + str(_info.get("sector") or "")):
+                            _s["core_asset"] = True
             except Exception:
                 pass
 
@@ -12072,6 +12178,14 @@ class Api:
                                     "concepts": [c.strip() for c in str(concepts).split("|") if c.strip()],
                                     "score": 0, "d5": 0, "d6": 0,
                                     "d9": 0, "change_pct": 0, "limit_up": 0}
+                            # 2026-11-17：历史视图同样下发 行业类别分组 + 核心资产标注
+                            # （与 _load_hunter_impl 同口径）。
+                            _g = str(info.get("industry_group") or "").strip()
+                            if _g:
+                                _stk["industry_group"] = _g
+                            if "漂亮100" in (str(info.get("category") or "") + "|"
+                                             + str(info.get("sector") or "")):
+                                _stk["core_asset"] = True
                             if _role in ("龙头", "中军"):
                                 _stk["tier"] = _role
                                 _stk["tier_static"] = True
