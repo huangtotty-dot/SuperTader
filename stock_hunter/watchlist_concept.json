@@ -32,7 +32,8 @@
   "category1": "冰雪经济",
   "concept1": "旅游消费",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "房地产"
  },
  "000006": {
   "business_summary": "主营房地产业",
@@ -777,7 +778,8 @@
   "category2": "液冷",
   "concept2": "液冷服务器",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "通信"
  },
  "000065": {
   "business_summary": "专注于国际市场的国际工程承包商",
@@ -1253,7 +1255,8 @@
   "category2": "煤化工",
   "concept2": "煤化工",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "油气石化"
  },
  "000333": {
   "business_summary": "智能家居、工业技术、楼宇科技、机器人与自动化、新能源、健康医疗、智慧物流等业务。",
@@ -1267,7 +1270,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "家电家居"
  },
  "000338": {
   "business_summary": "主营汽车零部件",
@@ -1290,7 +1294,8 @@
   "category1": "电力",
   "concept1": "发电设备（整机与辅机）",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "汽车零部件"
  },
  "000400": {
   "business_summary": "为国民经济和社会发展提供能源电力高端技术装备，为清洁能源生产、传输、配送以及高效使用提供全面的技术、产品和服务支撑。",
@@ -2246,7 +2251,8 @@
   "category1": "中药",
   "concept1": "中药品牌",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "中药"
  },
  "000539": {
   "business_summary": "主营电力",
@@ -2861,7 +2867,8 @@
   "category1": "大消费",
   "concept1": "白酒",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "白酒"
  },
  "000570": {
   "business_summary": "主营乡村振兴",
@@ -3644,7 +3651,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "家电家居"
  },
  "000652": {
   "business_summary": "主营批发业",
@@ -4630,7 +4638,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "消费电子"
  },
  "000726": {
   "business_summary": "主营纺织业",
@@ -5202,7 +5211,8 @@
   "category1": "金融",
   "concept1": "券商",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "证券"
  },
  "000777": {
   "business_summary": "主营通用设备制造业",
@@ -5390,7 +5400,8 @@
   "category1": "电池",
   "concept1": "锂矿资源",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "锂矿资源"
  },
  "000795": {
   "business_summary": "主营非金属矿物制品业",
@@ -6190,7 +6201,8 @@
   "category1": "大消费",
   "concept1": "白酒",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "白酒"
  },
  "000859": {
   "business_summary": "高分子功能膜材料、光电新材料、聚酰亚胺材料、绿色环保木塑新材料、新能源汽车轻量化材料的研发、采购、生产、销售。",
@@ -8897,7 +8909,8 @@
   "updated_at": "2026-11-16 22:12:39",
   "category1": "央企",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "电力"
  },
  "001296": {
   "business_summary": "主营非金属矿物制品业",
@@ -10647,7 +10660,8 @@
   "category1": "AI应用",
   "concept1": "AI营销",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "传媒"
  },
  "002028": {
   "business_summary": "主营电网设备",
@@ -11160,7 +11174,8 @@
   "category1": "军工",
   "concept1": "军工电子与元器件",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "半导体"
  },
  "002050": {
   "business_summary": "制冷空调电器与汽车的零件部件组件的研发、生产与销售。",
@@ -12666,7 +12681,8 @@
   "category2": "光伏",
   "concept2": "硅料硅片",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "光伏"
  },
  "002130": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -14960,7 +14976,8 @@
   "category2": "超节点",
   "concept2": "昇腾应用软件伙伴",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "AI与软件"
  },
  "002232": {
   "business_summary": "主营软件和信息技术服务业",
@@ -15157,7 +15174,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "消费电子"
  },
  "002242": {
   "business_summary": "主营电气机械和器材制造业",
@@ -16434,7 +16452,8 @@
   "category1": "大农业",
   "concept1": "猪",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "农业"
  },
  "002312": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -17310,7 +17329,8 @@
   "category1": "低空经济",
   "concept1": "物流",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "交通运输"
  },
  "002353": {
   "business_summary": "高端装备制造、油气工程及技术服务、油气田开发、新能源及再生循环等。",
@@ -17772,7 +17792,8 @@
   "category1": "半导体",
   "concept1": "半导体设备-刻蚀|半导体设备-薄膜沉积|半导体设备-热处理与去胶|半导体设备-清洗|半导体设备-离子注入|半导体设备-涂胶显影|半导体设备-键合与焊接",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "半导体"
  },
  "002372": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -18982,7 +19003,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "AI与软件"
  },
  "002416": {
   "business_summary": "主营批发业",
@@ -19670,13 +19692,15 @@
   "business_summary": "主营电网设备",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "电力",
+  "concept": "智能电网",
   "name": "摩恩电气",
   "primary_source": "legacy",
   "sector": "电网设备/智能电网/风电/海工装备",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 16:31:27",
+  "category1": "电力",
+  "concept1": "智能电网"
  },
  "002452": {
   "business_summary": "主营电气机械和器材制造业",
@@ -19850,7 +19874,8 @@
   "category1": "电池",
   "concept1": "锂矿资源",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "锂矿资源"
  },
  "002461": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -20067,7 +20092,8 @@
   "category1": "电池",
   "concept1": "锂矿资源",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "锂矿资源"
  },
  "002467": {
   "business_summary": "主营互联网和相关服务",
@@ -20294,7 +20320,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "消费电子"
  },
  "002476": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -21273,7 +21300,7 @@
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 21:32:22",
+  "updated_at": "2026-11-17 16:31:27",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
@@ -21310,11 +21337,13 @@
    "verdict": "相关",
    "reason": "公司年报将军工列为独立业务板块，实际模式是为军工企业提供零部件配套，按订单定制或来料加工，依据图号、精度、材料和产品大小交付，说明已有真实军工客户和收入，并非煤矿机械可转军用的猜测；但披露未说明零部件对应何种武器平台，故只能使用通用零部件概念，不能擅自贴坦克或导弹标签。2025年军工产品系列收入0.1840亿元，占1.6316%，煤矿机械及综合服务10.8184亿元，占95.9168%，其他业务0.2765亿元，军工收入规模很小且煤机占绝对主导，因此列相关而非核心。旧“军工配套”方向可保留但需规范为军工配套-通用零部件，旧“边缘”也应依据独立军工分部上调为相关。"
   },
+  "category": "军工|机器人",
+  "concept": "材料与零部件|智能装备与机床",
+  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 材料与零部件",
   "category1": "军工",
   "concept1": "材料与零部件",
-  "category": "军工",
-  "concept": "材料与零部件",
-  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 材料与零部件"
+  "category2": "机器人",
+  "concept2": "智能装备与机床"
  },
  "002536": {
   "business_summary": "汽车领域热管理部件和民用领域热管理部件的制造、销售。",
@@ -22255,18 +22284,22 @@
   "business_summary": "化学试剂的研发、生产、销售，以及原料药及食品添加剂生产、销售，并从事部分化工原料贸易等业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "煤化工",
-  "concept": "煤化工",
+  "category": "煤化工|半导体",
+  "concept": "煤化工|半导体材料-光刻胶与配套试剂",
   "name": "西陇科学",
   "primary_source": "legacy",
   "sector": "电子化学品Ⅱ/光刻胶/消毒剂/氟化工概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 13:00:00",
+  "updated_at": "2026-11-17 16:31:27",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "煤化工": "西陇科学：化学试剂"
-  }
+  },
+  "category1": "煤化工",
+  "concept1": "煤化工",
+  "category2": "半导体",
+  "concept2": "半导体材料-光刻胶与配套试剂"
  },
  "002585": {
   "business_summary": "高性能功能性高分子材料研发制造。",
@@ -22406,7 +22439,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "汽车整车"
  },
  "002595": {
   "business_summary": "主营专用设备制造业",
@@ -24240,7 +24274,8 @@
   "category1": "电池",
   "concept1": "正极材料",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "锂电池"
  },
  "002712": {
   "business_summary": "主营商务服务业",
@@ -24332,7 +24367,8 @@
   "category1": "大农业",
   "concept1": "猪",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "农业"
  },
  "002715": {
   "business_summary": "主营汽车制造业",
@@ -25159,13 +25195,15 @@
   "business_summary": "多媒体视讯业务、人工智能业务和新能源充电桩业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "算力租赁",
+  "concept": "算力租赁",
   "name": "真视通",
   "primary_source": "legacy",
   "sector": "IT服务Ⅱ/虚拟数字人/在线教育/AIGC概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 16:30:41",
+  "category1": "算力租赁",
+  "concept1": "算力租赁"
  },
  "002772": {
   "business_summary": "主营农业",
@@ -25730,7 +25768,8 @@
   "category1": "电池",
   "concept1": "其他关键材料及设备",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "锂电池"
  },
  "002813": {
   "business_summary": "主营人工智能",
@@ -26522,13 +26561,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "消费电子",
+  "concept": "消费电子",
   "name": "捷荣技术",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 16:32:30",
+  "category1": "消费电子",
+  "concept1": "消费电子"
  },
  "002857": {
   "business_summary": "主营仪器仪表制造业",
@@ -27156,13 +27197,15 @@
   "business_summary": "主营商务服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "半导体分销与供应链",
   "name": "东方嘉盛",
   "primary_source": "legacy",
   "sector": "商务服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 16:31:27",
+  "category1": "半导体",
+  "concept1": "半导体分销与供应链"
  },
  "002890": {
   "business_summary": "主营专用设备制造业",
@@ -30526,7 +30569,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "锂电池"
  },
  "300015": {
   "business_summary": "主营卫生",
@@ -30540,7 +30584,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "医药医疗"
  },
  "300016": {
   "business_summary": "主营医药制造业",
@@ -31615,7 +31660,8 @@
   "category1": "金融",
   "concept1": "金融IT",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "证券"
  },
  "300061": {
   "business_summary": "主营商务服务业",
@@ -32680,7 +32726,8 @@
   "category1": "医药",
   "concept1": "已上市",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "医药医疗"
  },
  "300124": {
   "business_summary": "工业自动化产品领军企业，国内最大的低压变频器与伺服系统供应商",
@@ -32739,7 +32786,8 @@
   "category1": "机器人",
   "concept1": "电机电控与感知",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "机械装备"
  },
  "300125": {
   "business_summary": "",
@@ -35325,7 +35373,8 @@
   "category1": "电力",
   "concept1": "储能",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "光伏"
  },
  "300275": {
   "business_summary": "主营软件和信息技术服务业",
@@ -38757,7 +38806,8 @@
   "category2": "光伏",
   "concept2": "辅材与结构",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "消费电子"
  },
  "300434": {
   "business_summary": "主营医药制造业",
@@ -39097,7 +39147,8 @@
   "category2": "光伏",
   "concept2": "设备",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "锂电池"
  },
  "300451": {
   "business_summary": "主营软件和信息技术服务业",
@@ -45349,7 +45400,8 @@
   "category1": "电池",
   "concept1": "其他关键材料及设备",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "锂电池"
  },
  "300751": {
   "business_summary": "主营光伏设备",
@@ -45633,7 +45685,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "医药医疗"
  },
  "300761": {
   "business_summary": "主营畜牧业",
@@ -46215,7 +46268,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "半导体"
  },
  "300783": {
   "business_summary": "主营零售业",
@@ -48415,7 +48469,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "医药医疗"
  },
  "300897": {
   "business_summary": "为水务企业提供稳定、可靠的智慧水务技术、产品及服务。",
@@ -50040,7 +50095,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "食品饮料"
  },
  "301000": {
   "business_summary": "精密注塑件及配套精密注塑模具的研发、生产和销售。",
@@ -56173,17 +56229,21 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "超节点",
-  "concept": "APN伙伴",
+  "category": "超节点|算力租赁",
+  "concept": "APN伙伴|算力租赁",
   "name": "卡莱特",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 12:00:00",
+  "updated_at": "2026-11-17 16:30:41",
   "tag_verdict": "边缘",
   "concept_reason": {
    "APN伙伴": "卡莱特：LED 显示控制系统，APN 伙伴身份大于业务"
-  }
+  },
+  "category1": "超节点",
+  "concept1": "APN伙伴",
+  "category2": "算力租赁",
+  "concept2": "算力租赁"
  },
  "301392": {
   "business_summary": "主营通用设备制造业",
@@ -58969,7 +59029,8 @@
   "category2": "电力",
   "concept2": "电力运营",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "电力"
  },
  "600026": {
   "business_summary": "主营水上运输业",
@@ -59086,7 +59147,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "机械装备"
  },
  "600032": {
   "business_summary": "风电、光伏、水电、氢能、储能等可再生能源业务方向的投资、开发、建设、运营、管理。",
@@ -59265,7 +59327,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "房地产"
  },
  "600050": {
   "business_summary": "主营电信、广播电视和卫星传输服务",
@@ -59893,7 +59956,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "汽车整车"
  },
  "600105": {
   "business_summary": "光纤预制棒、通信光纤、特种光纤、通信光缆、光电复合缆、通信电缆、数据电缆",
@@ -60084,7 +60148,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "钢铁有色"
  },
  "600113": {
   "business_summary": "主营商务服务业",
@@ -61237,7 +61302,8 @@
   "category1": "煤化工",
   "concept1": "煤化工",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "煤炭"
  },
  "600189": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -62333,7 +62399,8 @@
   "category1": "创新药",
   "concept1": "创新药",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "医药医疗"
  },
  "600278": {
   "business_summary": "主营批发业",
@@ -62646,7 +62713,8 @@
   "category1": "煤化工",
   "concept1": "煤化工",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "油气石化"
  },
  "600310": {
   "business_summary": "发电、供电、电力投资开发、供水、交通建设及其基础设施开发等。",
@@ -63260,7 +63328,8 @@
   "category2": "煤化工",
   "concept2": "煤化工",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "油气石化"
  },
  "600348": {
   "business_summary": "主营煤炭开采和洗选业",
@@ -64140,7 +64209,8 @@
   "category2": "可控核聚变",
   "concept2": "电源",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "电网设备"
  },
  "600408": {
   "business_summary": "主营型钢及焦炭，山西煤焦化产业重点基地",
@@ -64551,7 +64621,8 @@
   "category1": "中药",
   "concept1": "百年老字号",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "中药"
  },
  "600438": {
   "business_summary": "主营电气机械和器材制造业",
@@ -64574,7 +64645,8 @@
   "category1": "光伏",
   "concept1": "硅料硅片",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "光伏"
  },
  "600444": {
   "business_summary": "主营其他",
@@ -65799,7 +65871,8 @@
   "category1": "大消费",
   "concept1": "白酒",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "白酒"
  },
  "600520": {
   "business_summary": "主营专用设备制造业",
@@ -66977,7 +67050,8 @@
   "category2": "云计算",
   "concept2": "SaaS-企业管理|PaaS-企业应用开发",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "AI与软件"
  },
  "600589": {
   "business_summary": "为客户提供全面、优质的数据中心及算力专业解决方案，助力各行业客户实现数字化转型需求。",
@@ -67276,7 +67350,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "食品饮料"
  },
  "600601": {
   "business_summary": "印制电路板（PCB）的研发设计、生产制造及销售。",
@@ -67633,7 +67708,7 @@
   "primary_source": "legacy",
   "sector": "家电零部件Ⅱ/光刻机/上海自贸区/上海国企改革",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-11-17 16:31:27",
   "semiconductor_audited_at": "2026-10-27",
   "semiconductor_evidence": {
    "title": "上海海立（集团）股份有限公司2025年年度报告",
@@ -67653,7 +67728,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司真实主业为冷暖关联解决方案及核心零部件、汽车零部件，具体产品是制冷转子式压缩机、制冷电机、铸件、汽车空调压缩机和新能源车热管理系统，不是光刻机、半导体工艺设备或设备专用零部件。2025年制冷设备收入134.6224亿元，占总收入204.9819亿元的65.68%；汽车零部件和贸易及房产租赁收入67.2501亿元，占32.81%，其他业务占1.52%。本次检索的2025年年报未出现半导体或光刻业务披露，也没有相关客户、订单和收入可核验。压缩机、电机等通用产品即使理论上可服务不同工业场景，也不能据此推导光刻机配套；股东或市场传闻同样不能替代上市公司真实业务。按通用业务和潜在用途不计入的规则，摘除旧“半导体设备”标签。"
-  }
+  },
+  "category": "半导体",
+  "concept": "半导体设备-其他专用设备",
+  "category1": "半导体",
+  "concept1": "半导体设备-其他专用设备"
  },
  "600620": {
   "business_summary": "主营综合",
@@ -68196,7 +68275,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "汽车零部件"
  },
  "600661": {
   "business_summary": "主营教育",
@@ -68646,7 +68726,8 @@
   "category1": "液冷",
   "concept1": "CDU柜",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "家电家居"
  },
  "600691": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -68856,7 +68937,8 @@
   "category1": "光伏",
   "concept1": "电池与组件",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "半导体"
  },
  "600704": {
   "business_summary": "主营批发业",
@@ -70366,7 +70448,8 @@
   "category1": "大消费",
   "concept1": "白酒",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "白酒"
  },
  "600810": {
   "business_summary": "主营化学纤维制造业",
@@ -71631,7 +71714,8 @@
   "category1": "大消费",
   "concept1": "大消费_常温奶",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "食品饮料"
  },
  "600888": {
   "business_summary": "铝电子新材料和铝及合金制品的研发、生产和销售。",
@@ -71733,7 +71817,8 @@
   "category1": "军工",
   "concept1": "航空装备",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "军工装备"
  },
  "600894": {
   "business_summary": "研发、设计、生产、安装、维修及保养电梯、自动扶梯、自动人行道等设备，设计和生产电梯电气零部件及相关电气产品、电梯导轨以及相关零配件，并提供物流配送等完整电梯产业链服务。",
@@ -73180,7 +73265,8 @@
   "category1": "光伏",
   "concept1": "电池与组件",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "光伏"
  },
  "601015": {
   "business_summary": "以煤炭资源高效综合利用为主，主营焦炭，兼营焦油、LNG、精煤等",
@@ -73614,7 +73700,8 @@
   "category1": "机器人",
   "concept1": "核心零部件-传动",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "机械装备"
  },
  "601101": {
   "business_summary": "主营煤炭开采和洗选业",
@@ -73950,7 +74037,8 @@
   "category1": "超节点",
   "concept1": "交换机",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "消费电子"
  },
  "601139": {
   "business_summary": "主营燃气生产和供应业",
@@ -74368,7 +74456,8 @@
   "category1": "煤炭",
   "concept1": "煤炭开采",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "煤炭"
  },
  "601226": {
   "business_summary": "主营专业技术服务业",
@@ -74487,7 +74576,8 @@
   "category1": "低空经济",
   "concept1": "制造链",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "汽车整车"
  },
  "601279": {
   "business_summary": "主营汽车制造业",
@@ -74750,7 +74840,8 @@
   "category2": "AI应用",
   "concept2": "AI大模型",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "AI与软件"
  },
  "601366": {
   "business_summary": "主营零售业",
@@ -75443,7 +75534,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "汽车整车"
  },
  "601636": {
   "business_summary": "浮法玻璃、节能建筑玻璃、光伏玻璃、电子玻璃、药用玻璃的制造与销售。",
@@ -77798,13 +77890,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "半导体设备-其他专用设备",
   "name": "全筑股份",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 16:31:27",
+  "category1": "半导体",
+  "concept1": "半导体设备-其他专用设备"
  },
  "603031": {
   "business_summary": "旗下“南孚牌”碱锰电池连续三十余年国内销量第一",
@@ -80444,7 +80538,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "家电家居"
  },
  "603196": {
   "business_summary": "主营纺织服装、服饰业",
@@ -80575,13 +80670,15 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "算力租赁",
+  "concept": "算力租赁",
   "name": "嘉环科技",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 16:30:41",
+  "category1": "算力租赁",
+  "concept1": "算力租赁"
  },
  "603207": {
   "business_summary": "主营医药制造业",
@@ -81448,7 +81545,8 @@
   "category1": "创新药",
   "concept1": "临床前CRO",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "医药医疗"
  },
  "603260": {
   "business_summary": "工业硅、有机硅及多晶硅等硅基新材料产品的研发、生产及销售。",
@@ -82050,7 +82148,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "食品饮料"
  },
  "603289": {
   "business_summary": "主营专用设备制造业",
@@ -82159,13 +82258,15 @@
   "business_summary": "主营仪器仪表制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "设备核心零部件",
   "name": "永新光学",
   "primary_source": "legacy",
   "sector": "仪器仪表制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 16:31:27",
+  "category1": "半导体",
+  "concept1": "设备核心零部件"
  },
  "603298": {
   "business_summary": "主营通用设备制造业",
@@ -83695,7 +83796,8 @@
   "category1": "医药",
   "concept1": "未上市",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "医药医疗"
  },
  "603393": {
   "business_summary": "主营燃气生产和供应业",
@@ -84281,7 +84383,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "半导体"
  },
  "603505": {
   "business_summary": "中国萤石行业拥有资源储量、开采及生产加工规模最大的企业",
@@ -87252,7 +87355,8 @@
   "category1": "电池",
   "concept1": "正极材料",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "锂电池"
  },
  "603800": {
   "business_summary": "电解铜箔高端生产装备制造业务、超精密真空镀膜设备制造业务、精密光学设备制造业务和油气钻采设备制造业务。",
@@ -87617,7 +87721,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "家电家居"
  },
  "603836": {
   "business_summary": "主营商务服务业",
@@ -89460,7 +89565,8 @@
   "category2": "可控核聚变",
   "concept2": "第一壁材料",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "钢铁有色"
  },
  "603995": {
   "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -92736,7 +92842,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "消费电子"
  },
  "688037": {
   "business_summary": "主营其他",
@@ -94368,7 +94475,8 @@
   "category2": "云计算",
   "concept2": "SaaS-办公协同",
   "category3": "同花顺漂亮100",
-  "concept3": "成分股"
+  "concept3": "成分股",
+  "industry_group": "AI与软件"
  },
  "688112": {
   "business_summary": "通用电子测试测量仪器的研发、生产和销售。",
@@ -96523,7 +96631,8 @@
   "category1": "光伏",
   "concept1": "电池与组件",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "光伏"
  },
  "688225": {
   "business_summary": "主营软件和信息技术服务业",
@@ -103397,7 +103506,8 @@
   "category1": "电力",
   "concept1": "储能",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "光伏"
  },
  "688600": {
   "business_summary": "主营专精特新",
@@ -106888,7 +106998,8 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-16 22:12:39",
   "category1": "同花顺漂亮100",
-  "concept1": "成分股"
+  "concept1": "成分股",
+  "industry_group": "半导体"
  },
  "689009": {
   "business_summary": "主营其他",
@@ -110353,12 +110464,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "半导体材料-光刻胶与配套试剂",
   "sector": "其他化学原料/基础化工/化学原料/安徽板块/光刻胶/专精特新/央国企改革/融资融券",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-11-17 16:31:27",
+  "category1": "半导体",
+  "concept1": "半导体材料-光刻胶与配套试剂"
  },
  "920491": {
   "name": "奥迪威",
@@ -112384,7 +112497,8 @@
   "category1": "半导体",
   "concept1": "芯片设计-功率半导体|晶圆制造与IDM",
   "category2": "同花顺漂亮100",
-  "concept2": "成分股"
+  "concept2": "成分股",
+  "industry_group": "半导体"
  },
  "688066": {
   "name": "航天宏图",
@@ -112505,5 +112619,6 @@
   "category1": "汽车",
   "concept1": "零部件",
   "updated_at": "2026-11-08 17:21:26"
- }
+ },
+ "updated_at": "2026-11-17 16:32:30"
 }
