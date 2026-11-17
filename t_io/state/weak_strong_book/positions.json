@@ -1,16 +1,6 @@
 {
-  "updated_at": "2026-11-17 10:00:00",
+  "updated_at": "2026-11-17 14:50:07",
   "open": {
-    "300534": {
-      "entry_date": "2026-11-10",
-      "entry_price": 11.2471,
-      "qty": 8200,
-      "dev20": -0.005353,
-      "gap": 0.11056751467710368,
-      "board": "医药",
-      "days_held": 4,
-      "last_check_date": "2026-11-16"
-    },
     "600629": {
       "entry_date": "2026-11-13",
       "entry_price": 15.5477,
@@ -18,8 +8,13 @@
       "dev20": -0.043571,
       "gap": 0.05050505050505061,
       "board": "地产",
-      "days_held": 1,
-      "last_check_date": "2026-11-16"
+      "days_held": 2,
+      "last_check_date": "2026-11-17",
+      "days_held_calendar_fixed": {
+        "from": 1,
+        "to": 2,
+        "date": "2026-11-17"
+      }
     },
     "688708": {
       "entry_date": "2026-11-13",
@@ -28,8 +23,13 @@
       "dev20": -0.009589,
       "gap": 0.037151702786377694,
       "board": "军工",
-      "days_held": 1,
-      "last_check_date": "2026-11-16"
+      "days_held": 2,
+      "last_check_date": "2026-11-17",
+      "days_held_calendar_fixed": {
+        "from": 1,
+        "to": 2,
+        "date": "2026-11-17"
+      }
     }
   },
   "closed": {
@@ -615,6 +615,27 @@
       "exit_qty": 900,
       "exit_reason": "horizon_expired",
       "exit_fee": 111.04533286439171,
+      "closed_by": "fill_event"
+    },
+    "300534": {
+      "entry_date": "2026-11-10",
+      "entry_price": 11.2471,
+      "qty": 8200,
+      "dev20": -0.005353,
+      "gap": 0.11056751467710368,
+      "board": "医药",
+      "days_held": 5,
+      "last_check_date": "2026-11-17",
+      "days_held_calendar_fixed": {
+        "from": 4,
+        "to": 5,
+        "date": "2026-11-17"
+      },
+      "exit_date": "2026-11-17",
+      "exit_price": 8.890000343322754,
+      "exit_qty": 8200,
+      "exit_reason": "horizon_expired",
+      "exit_fee": 88.2065846257807,
       "closed_by": "fill_event"
     }
   },
