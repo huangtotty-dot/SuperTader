@@ -5671,7 +5671,7 @@ function renderPB(pb) {
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${_scoreBg}${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
-          ${monitorBadge}${chBadge}${apBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
+          ${monitorBadge}${chBadge}${apBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold" title="${r.manual_added ? "手动加入的持仓票：按 2026-11-17 规则放行显示，可在这里看补仓/加仓信号" : "持仓票"}">持仓${r.held_qty ? " " + r.held_qty + "股" : ""}</span>` : ""}${errTxt}${blockLine}</td>
         <td style="text-align:center">${poolBadge}</td>
         <td class="num">${r.mktcap != null ? hunterMktcapHtml({ mktcap: r.mktcap }) : '<span class="cell-dim">—</span>'}</td>
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
@@ -11565,11 +11565,17 @@ async function addNewWatchlist() {
         `<div><b class="mono">${esc(code)}</b>${esc(nm)} 已写入建仓股池。</div>
          <div class="warn" style="margin-top:8px">但立即扫描失败：${esc(r.scan_error)}</div>
          <div class="cell-dim" style="margin-top:8px">该股需点「🔄 盘后重跑」后才会出现在下表。</div>`, true);
+    } else if (r.visible_in_manual === false) {
+      // 2026-11-17：后端如实回传"这行不会被显示"⇒ 必须弹窗讲清楚，别再只 toast 成功
+      showResultModal("已加入股池，但建仓表不显示",
+        `<div><b class="mono">${esc(code)}</b>${esc(nm)} 已写入建仓股池并完成扫描。</div>
+         <div class="warn" style="margin-top:8px">${esc(r.hidden_reason || "按当前规则该行不会出现在建仓信号扫描里")}</div>`, true);
     } else {
       let msg = `✓ ${code}${nm} 已加入并扫描 · ${PB_VERDICT_TXT[sc.verdict] || sc.verdict || "—"}`
         + `（${sc.composite_score != null ? sc.composite_score : "—"}分）`;
       const why = sc.block_reason || sc.reason;
       if (why) msg += `\n${sc.block_reason ? "卡点" : "说明"}：${why}`;
+      if (r.held_qty) msg += `\n已持仓 ${r.held_qty} 股 ⇒ 行上标「持仓」徽章（按 11-17 规则放行显示）`;
       if (r.scan_date && state.date && state.date !== localToday()) {
         msg += `\n已按今日(${r.scan_date})扫描；当前在看 ${state.date}，切回今日可见该行`;
       }
@@ -13586,7 +13592,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261117c", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261117d", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

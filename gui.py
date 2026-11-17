@@ -14737,8 +14737,12 @@ class Api:
         fp = STATE_DIR / "watchlist_buy.json"
         wl = _load_json(fp, {"stocks": {}, "total_capital": 300000, "max_per_stock_pct": 0.2})
         stocks = wl.setdefault("stocks", {})
+        # 2026-11-17 owner：「手动加的持仓票也要显示」⇒ 记下显式添加时刻，
+        # `_agg_position_builder._visible` 据此对持仓放行（其余持仓仍按 10-17 规则隐藏）。
+        _now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if code in stocks:
             stocks[code]["status"] = "monitoring"
+            stocks[code]["manual_added_at"] = _now
         else:
             # T-4(2026-09-02): 新建条目缺省 manual 会与 auto 池标的冲突（002409 教训）——
             # 若该码属 auto/both 池则照抄持仓池归属。
@@ -14746,7 +14750,8 @@ class Api:
             # → 该标的永远不进人工盘扫描（表现：建仓表一直"等待扫描"）。照抄原值即可
             # 满足启动守卫（守卫只拒 pool=="manual"）。
             _entry = {"name": name, "status": "monitoring", "composite_score": 0,
-                      "criteria_met": {}, "suggested_qty": 0, "in_holdings": False}
+                      "criteria_met": {}, "suggested_qty": 0, "in_holdings": False,
+                      "manual_added_at": _now}
             try:
                 from core.holdings_repo import get_entry
                 _h = get_entry(code)
@@ -14807,10 +14812,30 @@ class Api:
         except Exception as e:
             scan_error = str(e)[:200]
 
-        # 走到这里说明该股会被人工盘表显示（auto 池未持有的已在上面被拒；
-        # 持仓股即便 pool=auto 也被 _visible() 放行）
-        return {"ok": True, "code": code, "name": name, "scan_date": scan_date,
-                "visible_in_manual": True, "scan": scan, "scan_error": scan_error}
+        # 该股会不会出现在建仓表里 —— 与 `_agg_position_builder._visible` **同口径**。
+        # 2026-11-17 修：原实现无条件返回 True，而 10-17 的规则会把持仓票藏掉 ⇒
+        # 前端只报"已加入并扫描"、表里却没有行（002690 实报）。现在诚实回传，
+        # 前端据此把「为什么看不到」讲清楚。
+        _wl_now = (_load_json(STATE_DIR / "watchlist_buy.json", {}).get("stocks") or {})
+        _entry_now = _wl_now.get(code) or {}
+        held_qty, held_pool = 0, ""
+        try:
+            from core.holdings_repo import load_union as _load_union
+            _h = (_load_union() or {}).get(code) or {}
+            held_qty = int(_h.get("qty") or 0)
+            held_pool = str(_h.get("pool") or "")
+        except Exception:
+            pass
+        visible = (code in _wl_now) and (held_qty <= 0 or bool(_entry_now.get("manual_added_at")))
+        out = {"ok": True, "code": code, "name": name, "scan_date": scan_date,
+               "visible_in_manual": visible, "scan": scan, "scan_error": scan_error}
+        if held_qty > 0:
+            out["held_qty"] = held_qty
+            out["held_pool"] = held_pool
+        if not visible:
+            out["hidden_reason"] = (f"该股已持仓 {held_qty} 股（{held_pool or '人工盘'}），"
+                                    f"且不是手动添加 ⇒ 建仓表按规则不显示；请到「持仓体检」查看")
+        return out
 
     def remove_from_watchlist(self, code):
         """从 watchlist_buy.json 删除股票。"""
@@ -15735,28 +15760,45 @@ class Api:
         def _is_holding(code: str) -> bool:
             return bool((holdings.get(code) or {}).get("qty") or 0) or \
                 bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
-        # 建仓表可见性（**2026-10-17 owner 再次调整：持仓股一律不出现**）
+        # 建仓表可见性（**2026-10-17 owner：持仓股一律不出现**；**2026-11-17 例外：手动加的放行**）
         #
         # 沿革：2026-08-30 曾用 auto_pool.is_manual 隐藏 auto 标的 → 导致「添加成功却看不到」
-        #       （600584）；2026-09-20 改成「持仓股 + 股池里的都显示」。
-        # 现在 owner 要求：**已有底仓的票不该出现在"建仓候选"里** —— 它属于「持仓体检」，
-        # 列在这里会让人误以为还要再建一次（同一个代码同时出现在两张表里也确实矛盾）。
+        #       （600584）；2026-09-20 改成「持仓股 + 股池里的都显示」；
+        #       2026-10-17 改为**已有底仓的票不该出现在"建仓候选"** —— 属「持仓体检」，
+        #       列在这里会让人误以为还要再建一次。
+        #       2026-11-17 owner 报「002690 加了看不到」⇒ 显式「+ 添加」的持仓票**放行**
+        #       （判据 = watchlist_buy 条目的 `manual_added_at`），行上标「持仓N股」，
+        #       用来直接看补仓/加仓信号；自动纳入、没显式加过的持仓仍隐藏。
         # 手动盘 / 自动盘**任一** qty>0 都算持仓（自动盘目前是仿真，但口径一致）。
         _auto_hold = set()
+        _auto_qty = {}
         try:
             from core.holdings_repo import load_auto as _load_auto
-            _auto_hold = {str(c) for c, h in (_load_auto() or {}).items()
-                          if int((h or {}).get("qty") or 0) > 0}
+            for _c, _h in (_load_auto() or {}).items():
+                _q = int((_h or {}).get("qty") or 0)
+                if _q > 0:
+                    _auto_hold.add(str(_c))
+                    _auto_qty[str(_c)] = _q
         except Exception:
             _auto_hold = set()
+            _auto_qty = {}
 
         def _held(code: str) -> bool:
             c0 = str(code).split("_")[0]
             return _is_holding(code) or c0 in _auto_hold or str(code) in _auto_hold
 
+        def _explicit_added(code: str) -> bool:
+            """是否被「+ 添加」显式加进股池（2026-11-17 新字段 `manual_added_at`）。"""
+            return bool((wl_stocks.get(code) or {}).get("manual_added_at"))
+
         def _visible(code: str) -> bool:
-            # 必须还在股池里（watchlist_buy），且**不是持仓**
-            return (code in wl_stocks) and not _held(code)
+            # 必须还在股池里（watchlist_buy），且**不是持仓**；
+            # 2026-11-17 owner：「手动加的持仓票也显示」—— 显式添加过的持仓票放行
+            # （行上带「持仓N股」徽章），其余持仓仍按 10-17 规则隐藏，避免自动纳入的底仓
+            # 混进建仓候选。
+            if code not in wl_stocks:
+                return False
+            return (not _held(code)) or _explicit_added(code)
 
         for code, r in latest_by_code.items():
             if not _visible(code):
@@ -15787,7 +15829,15 @@ class Api:
                     _p = None
             row["score_prev"] = _p if isinstance(_p, (int, float)) and not isinstance(_p, bool) else None
             # fix 2026-08-20: in_holdings 实时对齐 holdings.json（qty>0 才算持仓，trace/watchlist 字段可能陈旧）
-            row["in_holdings"] = _is_holding(code)
+            # 2026-11-17：改用手动盘+自动盘同口径（_held）—— 显式添加的持仓票会出现在表里，
+            # 「持仓」徽章必须对自动盘持仓也成立，并带上股数（前端显示「持仓600股」）。
+            row["in_holdings"] = _held(code)
+            _hq = int((holdings.get(code) or holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
+            if _hq <= 0:
+                _hq = int(_auto_qty.get(str(code)) or _auto_qty.get(str(code).split("_")[0]) or 0)
+            if _hq > 0:
+                row["held_qty"] = _hq
+            row["manual_added"] = _explicit_added(code)
             # P3-2 池分管：pool 标注（优先 holdings 权威源，回退 watchlist，缺省 manual），供 GUI 池筛选
             row["pool"] = (holdings.get(code) or {}).get("pool") or \
                 (wl_stocks.get(code) or {}).get("pool") or "manual"
@@ -15803,9 +15853,11 @@ class Api:
             status = info.get("status")
             if status not in ("monitoring", "signal", "archived", None): continue
             # fix 2026-08-20: qty>0 才算持仓（已清仓的 holdings 记录不算）
-            in_hold = bool((holdings.get(code) or {}).get("qty") or 0) or \
-                bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
+            in_hold = _held(code)
             is_archived = status == "archived"
+            _hq = int((holdings.get(code) or holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
+            if _hq <= 0:
+                _hq = int(_auto_qty.get(str(code)) or _auto_qty.get(str(code).split("_")[0]) or 0)
             rows.append({
                 "code": code, "name": info.get("name", code),
                 "verdict": "archived" if is_archived else "pending",
@@ -15813,6 +15865,8 @@ class Api:
                 "conditions": {},
                 "suggested_qty": 0, "suggested_price": 0, "capital_required": 0,
                 "in_holdings": in_hold,
+                **({"held_qty": _hq} if _hq > 0 else {}),
+                "manual_added": _explicit_added(code),
                 "pool": (holdings.get(code) or {}).get("pool") or info.get("pool") or "manual",  # P3-2 池分管：GUI 池筛选（优先 holdings）
                 "scan_type": "已停用" if is_archived else (
                     "自动盘(不手动扫)" if info.get("pool") == "auto" else "等待扫描"),

@@ -38,11 +38,15 @@ class TestPbExcludesHoldings(unittest.TestCase):
         import core.holdings_repo as hr
         self._orig_auto = hr.load_auto
 
-        fake_manual = {"600001": {"name": "甲", "qty": 1000, "pool": "manual"}}
+        fake_manual = {"600001": {"name": "甲", "qty": 1000, "pool": "manual"},
+                       # 2026-11-17：手动「+ 添加」的持仓票（有 manual_added_at）⇒ 放行
+                       "600004": {"name": "丁", "qty": 300, "pool": "manual"}}
         fake_wl = {"stocks": {
             "600001": {"name": "甲", "status": "monitoring", "pool": "manual"},
             "600002": {"name": "乙", "status": "monitoring", "pool": "manual"},
             "600003": {"name": "丙", "status": "monitoring", "pool": "auto"},
+            "600004": {"name": "丁", "status": "monitoring", "pool": "manual",
+                       "manual_added_at": "2026-11-17 10:00:00"},
         }}
 
         def _lj(p, d=None):
@@ -68,6 +72,19 @@ class TestPbExcludesHoldings(unittest.TestCase):
         self.assertNotIn("600001", codes, "手动持仓股不该出现在建仓扫描里")
         self.assertNotIn("600003", codes, "自动盘持仓股也不该出现")
         self.assertIn("600002", codes, "无持仓的股池票应照常出现")
+
+    def test_manual_added_holding_is_visible(self):
+        """2026-11-17 owner：「手动加的持仓票也显示」（002690 实报）。
+
+        显式「+ 添加」过的持仓票放行，行上带 held_qty 供前端画「持仓N股」徽章；
+        没显式加过的持仓票（600001）仍按 10-17 规则隐藏。"""
+        rows = self.api._agg_position_builder("2026-01-01").get("rows") or []
+        hit = [r for r in rows if str(r.get("code", "")).split("_")[0] == "600004"]
+        self.assertTrue(hit, "手动添加的持仓票应出现在建仓扫描里")
+        r = hit[0]
+        self.assertTrue(r.get("in_holdings"))
+        self.assertEqual(r.get("held_qty"), 300)
+        self.assertTrue(r.get("manual_added"))
 
 
 if __name__ == "__main__":
