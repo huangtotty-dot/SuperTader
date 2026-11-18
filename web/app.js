@@ -9548,10 +9548,11 @@ function renderStockChart(applyZoom = true) {
   // 背离标注（2026-10-19 owner）：后端按周期算好顶/底背离事件，前端直接画在对应 K 线上。
   const showDiv = (document.getElementById("tgDiv") || {}).checked !== false;
   /* 日线均线参考线开关（2026-10-22 owner）：非日线周期上叠的 日线 MA5/10/20/30/60 五条
-     水平虚线，统一由工具栏「日线均线」控制，**默认打开**。
+     水平虚线，统一由工具栏「日线均线」控制。**2026-11-17 owner：默认关闭**（原来默认打开）。
      ⚠️ 别和 `maSeries`（当前周期自己的均线）混：分钟图上的 MA5 是"5 根 10min=50 分钟"，
      这里的"日线MA5"是 5 个交易日。 */
-  const showDailyMA = (document.getElementById("tgDailyMA") || {}).checked !== false;
+  const _dmaTgl = document.getElementById("tgDailyMA");
+  const showDailyMA = !!(_dmaTgl && _dmaTgl.checked);     // 缺元素/未勾选 ⇒ 不画（默认关）
   // 形态自动标注（2026-11-14）：K 线形态叠加（吞没/锤子/射击之星/十字星/孕线）
   const showPattern = (document.getElementById("tgPattern") || {}).checked !== false;
 
@@ -12296,12 +12297,27 @@ function renderHunter(h) {
           <span class="mono cell-dim" style="font-size:10px" title="近几日热度">${trendSpark(trends[category]||[], 'heat', '#d29922')}</span>
           <span class="h-heat-val ${heatCls}">热度 ${heatVal > 0 ? fmt(heatVal, 0) : "—"}</span>
         </div>
-        <div class="hunter-leads" title="${esc(r["前三强"]||'')}">${
+        <div class="hunter-leads" title="${esc((() => {
+          // 2026-11-17 owner：「在眉页部分写清楚原因」——研究定性(龙头/中军)的理由随名字悬停可见
+          const _st = stocks.filter(x => x.tier_static && (x.tier === "龙头" || x.tier === "中军"));
+          return _st.length ? _st.map(x => `${x.name}（${x.tier}）：${x.tier_reason || ""}`).join("\n")
+                            : (r["前三强"] || "");
+        })())}">${
           (() => { const _lds = stocks.filter(x => x.tier === "龙头");
                    return _lds.length
                      ? `<div style="margin-bottom:2px">${tierBadge("龙头")} <b>${_lds.map(x => esc(x.name)).join(" / ")}</b></div>`
                      : ""; })()
-        }${stocks.slice(0, 3).map(s =>
+        }${(() => {
+          // 眉页第二行：静态研究定性的 龙头/中军 名单（名字悬停看依据）
+          const _st = stocks.filter(x => x.tier_static && (x.tier === "龙头" || x.tier === "中军"));
+          if (!_st.length) return "";
+          const _grp = ["龙头", "中军"].map(t => {
+            const g = _st.filter(x => x.tier === t);
+            if (!g.length) return "";
+            return `${t} ${g.map(x => `<span title="${esc(x.tier_reason || "")}" style="cursor:help">${esc(x.name)}</span>`).join("、")}`;
+          }).filter(Boolean).join("；");
+          return `<div class="cell-dim" style="font-size:10px;line-height:1.5;margin-bottom:2px">◆ 研究定性：${_grp}</div>`;
+        })()}${stocks.slice(0, 3).map(s =>
           `<span class="cell-dim">${esc(s.name)}</span><button class="mini-btn" style="font-size:9px;padding:0 4px;margin:0 2px 0 1px"
             onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
             title="加入建仓股池监控买点">+股池</button>`).join(" ") || esc(r["前三强"] || "—")}</div>
@@ -13592,7 +13608,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261117d", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261117f", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
