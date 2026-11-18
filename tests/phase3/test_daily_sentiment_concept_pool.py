@@ -111,5 +111,36 @@ class TestConceptPoolColumns(unittest.TestCase):
         self.assertNotIn("codes", self.seen, "空池不许出网")
 
 
+class TestComputeDailySentimentConceptFallback(unittest.TestCase):
+    """概念段抛异常时，`compute_daily_sentiment` 仍须产出**键集完整**的日档（2026-11-18）。
+
+    实报：14:30 尾盘任务 `⚠️ push_daily_sentiment 后台异常（已吞掉）: 'sector_avgs'`
+    —— 降级字典只有 4 个键，而拼返回值时读 `concept["sector_avgs"]/["fetch_ok"]/["fetch_failed"]`
+    ⇒ KeyError ⇒ e5 缓存 / sentiment_daily.jsonl 当天行全缺（市场情绪面板停在上一交易日）。
+    钢钉：概念段任何异常都只能把概念字段降为 0，不许带崩整张日档。
+    """
+
+    def test_concept_exception_keeps_payload_complete(self):
+        market = {"mode": "hold", "mode_cn": "持有", "pos_factor": 1.0,
+                  "reason": "test", "heat_cn": "平稳"}
+        with mock.patch.object(ds, "_detect_index_regime",
+                               return_value=(None, 0.0, {"date": "2026-11-18",
+                                                         "regime": "range", "score": 0.0})), \
+             mock.patch.object(ds, "compute_concept_top3", side_effect=RuntimeError("boom")), \
+             mock.patch.object(ds, "load_sentiment_history", return_value=[]), \
+             mock.patch.object(ds, "fetch_board_index_pct_changes",
+                               return_value={"sh000001": None}), \
+             mock.patch.object(ds, "per_stock_decisions",
+                               return_value={"market": market, "per_stock": {}}), \
+             mock.patch.object(ds, "_holdings", return_value={}):
+            out = ds.compute_daily_sentiment(mode="tail", as_of="2026-11-18")
+        self.assertEqual(out["sector_avgs"], {})
+        self.assertEqual(out["pool_rows"], 0)
+        self.assertEqual(out["pool_codes"], 0)
+        self.assertEqual(out["fetch_ok"], 0)
+        self.assertEqual(out["fetch_failed_n"], 0)
+        self.assertEqual(out["top3_avg"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

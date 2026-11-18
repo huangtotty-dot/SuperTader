@@ -807,7 +807,11 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
         concept = compute_concept_top3(date_str, params=p)
     except Exception as e:
         _log.warning(f"⚠️  概念TOP3计算失败（降级为0，不影响落盘）: {type(e).__name__}: {str(e)[:100]}")
-        concept = {"top3_avg": 0.0, "top3_names": [], "pool_rows": 0, "pool_codes": 0}
+        # 2026-11-18 实报：降级字典缺 `sector_avgs`/`fetch_ok`/`fetch_failed` ⇒ 下面第 913 行
+        # 拼返回值时 KeyError('sector_avgs') ⇒ 整个 14:30 尾盘任务中断（e5 缓存/sentiment_daily
+        # 都没有当天行）。降级字典必须与 `compute_concept_top3` 的返回**同键集**。
+        concept = {"date": date_str, "sector_avgs": {}, "top3_avg": 0.0, "top3_names": [],
+                   "pool_rows": 0, "pool_codes": 0, "fetch_ok": 0, "fetch_failed": []}
     top3_avg = float(concept["top3_avg"])
     top3_names = list(concept["top3_names"])
 
@@ -910,11 +914,12 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
         "z_top3": z_top3,
         "z_top3_src": src_t,
         "top3_names": top3_names,
-        "sector_avgs": concept["sector_avgs"],
-        "pool_rows": concept["pool_rows"],
-        "pool_codes": concept["pool_codes"],
-        "fetch_ok": concept["fetch_ok"],
-        "fetch_failed_n": len(concept["fetch_failed"]),
+        # 一律走 .get：概念段是**可降级**的旁路，任何缺键都不许把整张日档带崩（2026-11-18）
+        "sector_avgs": concept.get("sector_avgs") or {},
+        "pool_rows": concept.get("pool_rows", 0),
+        "pool_codes": concept.get("pool_codes", 0),
+        "fetch_ok": concept.get("fetch_ok", 0),
+        "fetch_failed_n": len(concept.get("fetch_failed") or []),
         "k_day_type": k_day_type,
         "prev_k_down": prev_k_down,
         "overheat_streak": overheat_streak,
