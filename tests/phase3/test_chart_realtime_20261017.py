@@ -239,7 +239,15 @@ class TestChartRealtime(unittest.TestCase):
         orig = gui._fetch_min_bars_tencent
         gui._fetch_min_bars_tencent = _fake_tx
         try:
-            self._fake_quote()
+            # 2026-11-17：原来也用 `self._fake_quote()`（ts_date=今天）。收盘后（或盘中）
+            # 跑该用例时，`_patch_forming_minute_bar` 会拿"今天"的快照给假数据(_DAY2)
+            # 尾部补一根今日 15:00 根 ⇒ 48→49，用例被真实时钟带跑。
+            # 这里把快照日期钉回假数据日：补/修末根逻辑由上面的 daily 用例单独覆盖，
+            # 本用例只验「假 5min → 30min 序列」本身。
+            TP.TencentProvider.snapshot_auction = lambda self_, codes: {
+                "600000": {"price": 10.9, "pct": 3.5, "open": 10.6, "high": 11.0,
+                           "low": 10.5, "pre_close": 10.53, "vol_hand": 12345.0,
+                           "ts_date": _DAY2}}
             out = self.api._compute_chart_live("600000", "min30")
             self.assertTrue(out["available"], out.get("error"))
             self.assertEqual(len(out["series"]["dates"]), 48)
