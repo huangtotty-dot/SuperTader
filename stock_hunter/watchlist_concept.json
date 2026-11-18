@@ -1162,7 +1162,7 @@
   "primary_source": "legacy",
   "sector": "IT服务Ⅱ/ERP概念/智慧政务/华为鲲鹏",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-18 15:06:10",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'其他|龙头-华为生态龙头' → '其他'",
   "concept_desc": {
    "其他": "该板块里不好归类的边角标的（个股差异大，按个股看）",
@@ -1175,10 +1175,6 @@
   },
   "tag_evidence": "text",
   "tag_verdict": "相关",
-  "category1": "超节点",
-  "concept1": "其他",
-  "category2": "数据要素",
-  "concept2": "数据要素_数据治理",
   "dataelement_audited_at": "2026-10-27",
   "dataelement_evidence": {
    "title": "常山北明2025年年度报告",
@@ -1186,7 +1182,15 @@
    "url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=000158&id=12060253",
    "profile_source": "iFinD ifind_get_stock_info",
    "profile_asof": "2026-10-27"
-  }
+  },
+  "category1": "超节点",
+  "concept1": "其他",
+  "category2": "数据要素",
+  "concept2": "数据要素_数据治理",
+  "category3": "算力租赁",
+  "concept3": "算力租赁",
+  "category": "超节点|数据要素|算力租赁",
+  "concept": "其他|数据要素_数据治理|算力租赁"
  },
  "000159": {
   "business_summary": "主营光伏设备",
@@ -1549,7 +1553,7 @@
   "primary_source": "legacy",
   "sector": "农化制品/磷化工/化肥/煤化工概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'煤化工|尿素|龙头-尿素磷肥龙头' → '煤化工|尿素'",
   "concept_desc": {
    "尿素": "煤头尿素为主，看煤价与粮价"
@@ -1563,7 +1567,11 @@
   "category1": "煤化工",
   "concept1": "煤化工",
   "category2": "大农业",
-  "concept2": "尿素"
+  "concept2": "尿素",
+  "category3": "半导体",
+  "concept3": "光刻机",
+  "category": "煤化工|大农业|半导体",
+  "concept": "煤化工|尿素|光刻机"
  },
  "000423": {
   "business_summary": "主营中药Ⅱ",
@@ -5734,7 +5742,7 @@
   "primary_source": "legacy",
   "sector": "通信服务/算力租赁/国资云/东数西算(算力)",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 10:49:00",
+  "updated_at": "2026-11-18 15:06:10",
   "concept_desc": {
    "数据要素_数据存储": "IDC、云存储、存储阵列、容灾和备份等数据承载基础设施，按机柜、云资源、软硬件或项目收费；数据库软件单列为“数据库”，数据运营单列为“数据运营”。",
    "IDC与云基础设施": "以自营或运营数据中心提供机柜、托管、带宽和运维，是云计算的物理基础设施；不自动等同云主机等IaaS。"
@@ -5748,8 +5756,6 @@
   },
   "tag_evidence": "text",
   "tag_verdict": "核心",
-  "category2": "数据要素",
-  "concept2": "数据要素_数据存储",
   "dataelement_audited_at": "2026-10-27",
   "dataelement_evidence": {
    "title": "美利云2025年年度报告",
@@ -5758,8 +5764,6 @@
    "profile_source": "iFinD ifind_get_stock_info",
    "profile_asof": "2026-10-27"
   },
-  "category1": "云计算",
-  "concept1": "IDC与云基础设施",
   "cloud_verdicts": {
    "云计算": "核心"
   },
@@ -5787,7 +5791,15 @@
    ],
    "verdict": "核心",
    "reason": "公司已于2024年底停止造纸，现由誉成云创经营中卫数据中心，通过机柜、网络接入及运维合同向客户收费，属于真实IDC云基础设施服务，不能直接称为IaaS计算资源平台。2025年云业务收入3.24亿元，占总营收94.65%，E1、E3、C1已交付客户使用，云业务已是绝对主营和主要利润来源，因此将旧IaaS标签纠正为IDC与云基础设施，并由相关升级为核心。"
-  }
+  },
+  "category1": "云计算",
+  "concept1": "IDC与云基础设施",
+  "category2": "数据要素",
+  "concept2": "数据要素_数据存储",
+  "category3": "算力租赁",
+  "concept3": "算力租赁",
+  "category": "云计算|数据要素|算力租赁",
+  "concept": "IDC与云基础设施|数据要素_数据存储|算力租赁"
  },
  "000816": {
   "business_summary": "主营通用设备制造业",
@@ -6208,13 +6220,15 @@
   "business_summary": "高分子功能膜材料、光电新材料、聚酰亚胺材料、绿色环保木塑新材料、新能源汽车轻量化材料的研发、采购、生产、销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "国风新材",
   "primary_source": "legacy",
   "sector": "塑料/光刻胶/芯片概念/柔性屏(折叠屏)",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "000860": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -6526,13 +6540,15 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "算力租赁",
+  "concept": "算力租赁",
   "name": "中嘉博创",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-18 15:06:10",
+  "category1": "算力租赁",
+  "concept1": "算力租赁"
  },
  "000890": {
   "business_summary": "生产、销售多种用途、不同规格的钢丝产品；生活垃圾渗滤液处理设备的开发、生产以及",
@@ -10208,13 +10224,13 @@
   "business_summary": "智能制造装备及其关键器件的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "光伏",
-  "concept": "设备",
+  "category": "光伏|半导体",
+  "concept": "设备|光刻胶",
   "name": "大族激光",
   "primary_source": "legacy",
   "sector": "自动化设备/光纤概念/光刻机/PCB概念",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-17 18:57:11",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'太空光伏设备|中军-激光设备中军' → '太空光伏设备'",
   "concept_desc": {
    "太空光伏设备": "太空光伏产线设备（电池片/组件制造设备）"
@@ -10224,9 +10240,13 @@
   "concept_reason": {
    "设备": "大族激光：太空光伏设备（设备）"
   },
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 设备",
   "category1": "光伏",
   "concept1": "设备",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 设备"
+  "category2": "半导体",
+  "concept2": "光刻胶",
+  "role": "中军",
+  "role_reason": "板块内流通市值/成交额最大档之一；激光精密装备龙头，光刻链属激光退火/精密加工配套"
  },
  "002009": {
   "business_summary": "智能装备业务、具身智能业务以及锂电池循环业务。",
@@ -10944,18 +10964,22 @@
   "business_summary": "主营纺织业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "算力租赁",
-  "concept": "算力租赁",
+  "category": "算力租赁|大消费",
+  "concept": "算力租赁|大消费_服装",
   "name": "华孚时尚",
   "primary_source": "legacy",
   "sector": "纺织业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 14:00:00",
+  "updated_at": "2026-11-18 15:06:31",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "算力租赁": "华孚时尚：纱线+算力"
-  }
+  },
+  "category1": "算力租赁",
+  "concept1": "算力租赁",
+  "category2": "大消费",
+  "concept2": "大消费_服装"
  },
  "002043": {
   "business_summary": "主营木材加工和木、竹、藤、棕、草制品业",
@@ -14418,13 +14442,15 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "算力租赁",
+  "concept": "算力租赁",
   "name": "证通电子",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-18 15:06:10",
+  "category1": "算力租赁",
+  "concept1": "算力租赁"
  },
  "002199": {
   "business_summary": "石英晶体元器件、电子元器件的研发、生产和销售。主营石英晶体谐振器、振荡器。",
@@ -15738,7 +15764,7 @@
   "primary_source": "legacy",
   "sector": "通用设备/液冷服务器/特高压/数据中心(AIDC)",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-18 15:06:10",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
@@ -15749,7 +15775,11 @@
   "category1": "液冷",
   "concept1": "快换接头",
   "category2": "超节点",
-  "concept2": "液冷散热"
+  "concept2": "液冷散热",
+  "category3": "算力租赁",
+  "concept3": "算力租赁",
+  "category": "液冷|超节点|算力租赁",
+  "concept": "快换接头|液冷散热|算力租赁"
  },
  "002273": {
   "business_summary": "国内精密光学薄膜龙头，AR-HUD市占率国内居前",
@@ -18781,7 +18811,9 @@
    ],
    "verdict": "相关",
    "reason": "公司实际生产硅微粉等功能粉体，可用于覆铜板和电子封装树脂体系，具备真实PCB材料应用，但同一产品也服务半导体封装等下游，不能全部归入PCB。2025年硅微粉收入2.8824亿元，约占营业收入86.14亿元的3.35%；半导体化学材料21.1076亿元、光刻胶及配套19.5966亿元、电子特气4.1737亿元、LNG板材23.7044亿元构成其他主要混合收入，硅微粉虽单列金额，却未按覆铜板与封装用途进一步拆分。考虑直接材料真实、收入占比不高且下游混合，定级为相关。旧“硅微粉”可保留实质，但应规范为填料-硅微粉与功能粉体，并纠正以公司整体电子材料收入证明PCB核心地位的做法。"
-  }
+  },
+  "role": "中军",
+  "role_reason": "电子材料平台（前驱体/电子特气/面板光刻胶），总市值约400亿"
  },
  "002410": {
   "business_summary": "主营软件和信息技术服务业",
@@ -19783,13 +19815,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "百川股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "002456": {
   "business_summary": "光学摄像头模组、光学镜头、指纹识别模组、机器视觉深度相机、驾驶域、车身域、座舱域和智能门锁等相关产品的设计、研发、生产和销售。",
@@ -19909,7 +19943,7 @@
   "primary_source": "legacy",
   "sector": "元件/PCB概念/毫米波雷达/汽车电子",
   "sector_type": "legacy",
-  "updated_at": "2026-11-11 15:45:31",
+  "updated_at": "2026-11-18 15:06:10",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'AI服务器相关|中军-AI服务器PCB中军' → 'AI服务器相关'",
   "tag_evidence": "text",
   "tag_verdict": "核心",
@@ -19954,13 +19988,15 @@
    "verdict": "核心",
    "reason": "公司直接生产高多层、高速及HDI印制电路板，真实用于AI服务器、高性能计算、通用服务器和高速交换机路由器，具备明确产品与收入证据。2025年PCB收入181.43亿元，占营业收入约95.77%；其中企业通讯市场板146.5630亿元、汽车板30.4458亿元、工控及其他4.4243亿元。总经理工作报告进一步披露AI服务器及HPC相关收入30.06亿元、通用服务器25.40亿元、高速交换机及路由器81.69亿元，这些是企业通讯板内部的应用拆分，不能与企业通讯板收入重复相加，也不能把汽车板纳入算力。PCB主业占绝对主导，定级为核心。旧“AI服务器相关”过窄且笼统，应改按实际板型归高多层与服务器板并补充HDI。"
   },
+  "category": "PCB|超节点|算力租赁",
+  "concept": "PCB-高多层与服务器板|PCB-HDI与任意层互连|PCB|算力租赁",
+  "recap_20261111": "2026-11-11 15:45:31 复盘补充 → 超节点/PCB",
   "category1": "PCB",
   "concept1": "PCB-高多层与服务器板|PCB-HDI与任意层互连",
   "category2": "超节点",
   "concept2": "PCB",
-  "category": "PCB|超节点",
-  "concept": "PCB-高多层与服务器板|PCB-HDI与任意层互连|PCB",
-  "recap_20261111": "2026-11-11 15:45:31 复盘补充 → 超节点/PCB"
+  "category3": "算力租赁",
+  "concept3": "算力租赁"
  },
  "002465": {
   "business_summary": "无线通信设备、北斗导航产品、模拟仿真器、民航通导设备等产品的研发、生产、销售、工程建设和提供相关的技术服务，飞机零部件加工服务和通信技术服务。",
@@ -21540,7 +21576,9 @@
    ],
    "verdict": "相关",
    "reason": "公司真实半导体关联产品是光刻工艺用电子特种气体，相关光刻气已通过Cymer及GIGAPHOTON等认证，认证说明具备进入供应链的技术条件，但不等于形成大额半导体收入，更不代表公司生产光刻机。iFinD二〇二五年特种气体收入约零点一二九亿元，占营业收入百分之二点零六，传统二氧化碳和氢气业务各占约百分之三十四，主营仍以大宗及食品级等气体为主，不能把全部气体收入归入半导体。基于真实产品认证与供货方向保留电子特气标签，但因当前收入贡献很小定为相关，旧核心定级应下调；若旧标签还包含光刻设备、芯片制造或把特种气体全部视为半导体收入，也一并纠正。"
-  }
+  },
+  "role": "中军",
+  "role_reason": "电子特气/光刻气供应商，光刻气体国产替代标的"
  },
  "002550": {
   "business_summary": "主营医药制造业",
@@ -21848,13 +21886,15 @@
   "business_summary": "主营通用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "亚威股份",
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "002560": {
   "business_summary": "主营电网设备",
@@ -23288,13 +23328,17 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "万润股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机",
+  "role": "中军",
+  "role_reason": "光刻胶单体/OLED材料供应商，材料端龙头之一"
  },
  "002644": {
   "business_summary": "主营医药制造业",
@@ -23891,20 +23935,22 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-13 15:56:04",
+  "updated_at": "2026-11-18 15:06:10",
   "tag_removed_20261025": "半导体/算力芯片（实际主营：集装箱装卸设备）",
-  "category": "机器人|半导体",
-  "concept": "智能装备与机床|芯片设计-CPU/GPU/AI计算",
+  "category": "机器人|半导体|算力租赁",
+  "concept": "智能装备与机床|芯片设计-CPU/GPU/AI计算|算力租赁",
   "concept_reason": {
    "智能装备与机床": "华东重机：集装箱起重机/数控机床（2026-11-12 涨幅榜补充）",
    "芯片设计-CPU/GPU/AI计算": "华东重机：控股国产GPU公司；已有机器人（2026-11-13 涨停复盘补充）"
   },
   "top96_20261112": "2026-11-12 15:54:20 涨幅榜补充 → 机器人/智能装备与机床",
+  "recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 半导体/芯片设计-CPU/GPU/AI计算",
   "category1": "机器人",
   "concept1": "智能装备与机床",
   "category2": "半导体",
   "concept2": "芯片设计-CPU/GPU/AI计算",
-  "recap_20261113": "2026-11-13 15:56:04 涨停复盘补充 → 半导体/芯片设计-CPU/GPU/AI计算"
+  "category3": "算力租赁",
+  "concept3": "算力租赁"
  },
  "002686": {
   "business_summary": "主营通用设备制造业",
@@ -25166,18 +25212,22 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "化工",
-  "concept": "改性材料",
+  "category": "化工|半导体",
+  "concept": "改性材料|光刻机",
   "name": "国恩股份",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "改性材料": "主营：化工新材料；与本标签一致"
-  }
+  },
+  "category1": "化工",
+  "concept1": "改性材料",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "002769": {
   "business_summary": "主营商务服务业",
@@ -26394,18 +26444,22 @@
   "business_summary": "“锯切+电源”双主业，双金属带锯条销量国内第一，全球前三",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "超节点",
-  "concept": "电源",
+  "category": "超节点|算力租赁",
+  "concept": "电源|算力租赁",
   "name": "泰嘉股份",
   "primary_source": "legacy",
   "sector": "通用设备/数据中心(AIDC)/AI PC/商业航天",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 12:00:00",
+  "updated_at": "2026-11-18 15:06:10",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
   "concept_reason": {
    "电源": "泰嘉股份：锯切业务，与电源无关"
-  }
+  },
+  "category1": "超节点",
+  "concept1": "电源",
+  "category2": "算力租赁",
+  "concept2": "算力租赁"
  },
  "002845": {
   "business_summary": "CD、OLED显示模组、光学摄像头模组及半导体先进封测的研发、设计、生产和销售。",
@@ -27780,7 +27834,7 @@
   "primary_source": "legacy",
   "sector": "元件/PCB概念/富士康概念/先进封装",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-18 15:06:10",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -27791,10 +27845,6 @@
    "PCB-IC载板": "公司同时经营印制电路板、封装基板和电子装联，PCB包含数据中心、服务器及通信用高多层高速产品，封装基板属于IC载板，电子装联则提供PCBA和SMT相关制造服务，三项均为实际规模化业务。2025年PCB收入143.5927亿元、占60.72%，封装基板41.4779亿元、占17.54%，电子装联30.7496亿元，另有其他及其他业务收入，合计营业收入约236.4703亿元。三类产品必须分别核算，不能把普通PCB收入并入IC载板，也不能把电子装联当作裸板销售。PCB及直接相关服务占绝对主体，定级为核心。旧“AI服务器相关、ABF载板”混淆板型与用途，应改为高多层与服务器板、PCB-IC载板及PCB设计与SMT服务。",
    "PCB设计与SMT服务": "公司同时经营印制电路板、封装基板和电子装联，PCB包含数据中心、服务器及通信用高多层高速产品，封装基板属于IC载板，电子装联则提供PCBA和SMT相关制造服务，三项均为实际规模化业务。2025年PCB收入143.5927亿元、占60.72%，封装基板41.4779亿元、占17.54%，电子装联30.7496亿元，另有其他及其他业务收入，合计营业收入约236.4703亿元。三类产品必须分别核算，不能把普通PCB收入并入IC载板，也不能把电子装联当作裸板销售。PCB及直接相关服务占绝对主体，定级为核心。旧“AI服务器相关、ABF载板”混淆板型与用途，应改为高多层与服务器板、PCB-IC载板及PCB设计与SMT服务。"
   },
-  "category3": "超节点",
-  "concept3": "PCB",
-  "category1": "半导体",
-  "concept1": "IC载板",
   "concept_desc": {
    "IC载板": "IC封装基板、FC-BGA、BT载板及相关制造，普通PCB不自动计入。",
    "PCB-高多层与服务器板": "高多层、高速、服务器、交换机和AI算力设备用PCB，须有真实产品或客户证据。",
@@ -27829,12 +27879,6 @@
    "verdict": "核心",
    "reason": "公司真实半导体产品为封装基板，承担芯片与印制电路板之间的高密度互连和封装承载功能，属于IC载板制造，不是芯片封装测试服务，也不因生产PCB就全部成为半导体企业。iFinD二〇二五年封装基板收入四十一点四八亿元，占营业收入百分之十七点五四，PCB收入一百四十三点五九亿元，占百分之六十点七二，表明封装基板具有重要独立规模，但上市公司仍以混合产品结构为主。结合真实产品、收入体量及封装基板产业地位可列核心，不能把普通PCB收入并入半导体口径。旧标签若仅写PCB、误写封装测试或芯片设计，或把全部营收视为半导体，均应纠正为IC载板并保留两类产品边界。"
   },
-  "category2": "PCB",
-  "concept2": [
-   "PCB-高多层与服务器板",
-   "PCB-IC载板",
-   "PCB设计与SMT服务"
-  ],
   "pcb_verdicts": {
    "PCB": "核心"
   },
@@ -27870,7 +27914,17 @@
    ],
    "verdict": "核心",
    "reason": "公司同时经营印制电路板、封装基板和电子装联，PCB包含数据中心、服务器及通信用高多层高速产品，封装基板属于IC载板，电子装联则提供PCBA和SMT相关制造服务，三项均为实际规模化业务。2025年PCB收入143.5927亿元、占60.72%，封装基板41.4779亿元、占17.54%，电子装联30.7496亿元，另有其他及其他业务收入，合计营业收入约236.4703亿元。三类产品必须分别核算，不能把普通PCB收入并入IC载板，也不能把电子装联当作裸板销售。PCB及直接相关服务占绝对主体，定级为核心。旧“AI服务器相关、ABF载板”混淆板型与用途，应改为高多层与服务器板、PCB-IC载板及PCB设计与SMT服务。"
-  }
+  },
+  "category1": "半导体",
+  "concept1": "IC载板",
+  "category2": "PCB",
+  "concept2": "PCB-高多层与服务器板|PCB-IC载板|PCB设计与SMT服务",
+  "category3": "超节点",
+  "concept3": "PCB",
+  "category4": "算力租赁",
+  "concept4": "算力租赁",
+  "category": "半导体|PCB|超节点|算力租赁",
+  "concept": "IC载板|PCB-高多层与服务器板|PCB-IC载板|PCB设计与SMT服务|PCB|算力租赁"
  },
  "002917": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -28505,13 +28559,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "算力租赁",
+  "concept": "算力租赁",
   "name": "鸿合科技",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-18 15:06:10",
+  "category1": "算力租赁",
+  "concept1": "算力租赁"
  },
  "002956": {
   "business_summary": "主营食品制造业",
@@ -29705,18 +29761,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
-  "concept": "其他关键材料及设备",
+  "category": "电池|半导体",
+  "concept": "其他关键材料及设备|光刻机",
   "name": "联泓新科",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "其他关键材料及设备": "联泓新科：新能源材料（EVA/PP）"
-  }
+  },
+  "category1": "电池",
+  "concept1": "其他关键材料及设备",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "003023": {
   "business_summary": "主营三胎概念",
@@ -30217,13 +30277,15 @@
   "business_summary": "高端精密金属零部件的研发、生产和销售以及生产物流智能化方案的设计与优化和相关智能装备系统的研发、制造、集成和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "华亚智能",
   "primary_source": "legacy",
   "sector": "半导体/专精特新/高铁/光刻机",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:29:31"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "003816": {
   "business_summary": "建设、运营及管理核电站，销售该等核电站所发电力，组织开发核电站的设计及科研工作。",
@@ -31541,7 +31603,9 @@
    ],
    "verdict": "核心",
    "reason": "公司已形成CMP抛光垫、抛光液、清洗液，先进封装PI、临时键合胶以及ArF、KrF光刻胶等真实产品体系，均直接对应晶圆制造或先进封装材料环节。2025年半导体材料及芯片收入20.8607亿元，占总收入57.00%，传统打印复印通用耗材收入15.5895亿元，半导体板块已成为第一大收入来源，核心定级有规模和经营实质支撑。边界上，20.8607亿元同时包含半导体材料、芯片及部分显示材料，属于不可拆混合口径，不能全部归为CMP，也不能把打印耗材并入半导体。此次纠错把笼统旧“半导体材料”细分为CMP材料、光刻胶与配套试剂、封装材料三个白名单概念，不额外扩张到未单列验证的设备或芯片设计类别。"
-  }
+  },
+  "role": "中军",
+  "role_reason": "CMP抛光垫国产龙头，半导体光刻胶(KrF/ArF)在研布局，总市值约550亿"
  },
  "300055": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -31695,14 +31759,12 @@
   "primary_source": "legacy",
   "sector": "商务服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "AI营销": "公司互联网营销业务约占八成，另有油墨和林产化工等传统板块。品学·兼优AIGC工具矩阵和OpenUAD已实际服务宝马MINI、长安、雀巢、惠普及哈啰等客户，图片与视频批量生产进入客户项目，商业化落地真实；但年报未单列AI收入，现阶段主要是利用AI改造广告素材生产和营销交付流程，尚不足以证明AI成为独立核心主业，因此保留AI营销并由核心纠错为相关。"
   },
-  "category1": "AI应用",
-  "concept1": "AI营销",
   "concept_desc": {
    "AI营销": "以AIGC、智能体或营销大模型完成客户洞察、内容生成、投放和归因；普通广告代理、媒介采购或仅使用平台算法不直接纳入。"
   },
@@ -31733,7 +31795,13 @@
    ],
    "verdict": "相关",
    "reason": "公司互联网营销业务约占八成，另有油墨和林产化工等传统板块。品学·兼优AIGC工具矩阵和OpenUAD已实际服务宝马MINI、长安、雀巢、惠普及哈啰等客户，图片与视频批量生产进入客户项目，商业化落地真实；但年报未单列AI收入，现阶段主要是利用AI改造广告素材生产和营销交付流程，尚不足以证明AI成为独立核心主业，因此保留AI营销并由核心纠错为相关。"
-  }
+  },
+  "category1": "AI应用",
+  "concept1": "AI营销",
+  "category2": "半导体",
+  "concept2": "光刻机",
+  "category": "AI应用|半导体",
+  "concept": "AI营销|光刻机"
  },
  "300065": {
   "business_summary": "主营航海装备Ⅱ",
@@ -34013,13 +34081,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "高盟新材",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300201": {
   "business_summary": "特种车辆产品的研发、生产、销售和服务业务。",
@@ -34037,13 +34107,15 @@
   "business_summary": "主营仪器仪表制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "聚光科技",
   "primary_source": "legacy",
   "sector": "仪器仪表制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300204": {
   "business_summary": "主营医药制造业",
@@ -34188,13 +34260,15 @@
   "business_summary": "LED半导体封装和LED汽车照明。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "鸿利智汇",
   "primary_source": "legacy",
   "sector": "光学光电子/MicroLED概念/MiniLED/柔性屏(折叠屏)",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "300220": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -34611,7 +34685,9 @@
    ],
    "verdict": "核心",
    "reason": "公司真实半导体产品包括晶圆制造用电镀液、清洗液、刻蚀液、光刻胶及CMP相关材料，直接服务集成电路工艺，不是把普通电子涂料泛化为芯片材料。2025年半导体行业收入15.1685亿元，占总收入78.3220%；电子化学材料收入14.7860亿元，配套设备收入0.3425亿元，另有涂料收入4.1983亿元，半导体主业占比和绝对规模均支持核心定级。边界上，涂料业务明确排除；电子化学材料可能覆盖不同具体产品，不能把该分部全部重复归入光刻胶或CMP，设备收入也不与材料收入重复计算。此次纠错将笼统旧“半导体材料”规范为湿化学品、光刻胶与配套试剂、CMP材料三类，保留有产品依据的边界而不借混合分部放大单一品类收入。"
-  }
+  },
+  "role": "中军",
+  "role_reason": "ArF光刻胶+电镀液/清洗液平台，晶圆制造材料国产主力"
  },
  "300238": {
   "business_summary": "主营专用设备制造业",
@@ -35141,7 +35217,9 @@
    ],
    "verdict": "核心",
    "reason": "公司面向半导体提供高纯及超高纯应用材料、真空与气体传输系统及工艺组件，实质是半导体设备专用管路、阀门、真空和工艺零部件，并非承接一般洁净室建设。2025年泛半导体业务收入9.5582亿元，占总收入31.8851%，食品业务占58.9719%，医药业务占9.0128%；泛半导体接近十亿元且为重要增长板块，具备规模化产品和客户基础，维持核心定级。边界上，“泛半导体”可能同时包含平板显示等下游，属于不可完全拆成集成电路的口径，食品和医药收入更不得并入。此次纠错删除不准确的旧“半导体洁净室”，改挂“设备核心零部件”，既不误归为厂务工程，也不把全部洁净应用材料都视作半导体收入。"
-  }
+  },
+  "role": "中军",
+  "role_reason": "超高纯真空管路与洁净应用材料，供半导体设备与气体系统"
  },
  "300261": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -35758,7 +35836,7 @@
   "primary_source": "legacy",
   "sector": "专用设备/光刻机/新型工业化/工业母机",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-11-17 18:57:11",
   "semiconductor_audited_at": "2026-10-27",
   "semiconductor_evidence": {
    "title": "蓝英装备：2025年年度报告",
@@ -35778,7 +35856,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司2025年披露的主营是工业清洗系统及表面处理、智能装备制造，真实应用集中在医疗、机械电子、汽车、新能源、精密光学和高精纯部件等领域。工业清洗及表面处理收入11.7260亿元，占总收入97.5463%，但这一高占比只能证明通用清洗主业规模，年报未给出晶圆清洗设备、半导体制程客户、订单或半导体收入的可核验拆分，不能把高精纯或精密光学用途外推为半导体设备收入。边界上，工业清洗与晶圆去胶、湿法清洗在工艺、客户和验证体系上并不等同，即使技术存在潜在迁移可能，也不满足本分类真实产品和供货证据要求。此次纠错对旧“半导体设备”及原相关定级一并摘除，pairs置空，避免以光刻机或高精纯概念替代正式经营证据。"
-  }
+  },
+  "category1": "半导体",
+  "concept1": "光刻胶",
+  "category": "半导体",
+  "concept": "光刻胶"
  },
  "300294": {
   "business_summary": "主营医药制造业",
@@ -36488,13 +36570,15 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "算力租赁",
+  "concept": "算力租赁",
   "name": "旋极信息",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-11-18 15:06:10",
+  "category1": "算力租赁",
+  "concept1": "算力租赁"
  },
  "300327": {
   "business_summary": "芯片的设计研发及销售。",
@@ -36536,20 +36620,22 @@
   "business_summary": "微纳光学产品的设计、开发与制造服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "光通信",
-  "concept": "光芯片与光器件",
+  "category": "光通信|半导体",
+  "concept": "光芯片与光器件|光刻胶",
   "name": "苏大维格",
   "primary_source": "legacy",
   "sector": "光学光电子/光刻机/中芯国际概念/OLED",
   "sector_type": "legacy",
-  "updated_at": "2026-11-11 15:34:22",
+  "updated_at": "2026-11-17 18:57:11",
   "concept_reason": {
    "光芯片与光器件": "苏大维格：光通信材料-光学与晶体（光芯片与光器件）"
   },
   "top259_20261110": "2026-11-10 17:39:11 涨幅榜归类 → 光通信/光通信材料-光学与晶体",
+  "optic_reagg_20261111": "2026-11-11 15:34:22 光通信聚合 → 光芯片与光器件",
   "category1": "光通信",
   "concept1": "光芯片与光器件",
-  "optic_reagg_20261111": "2026-11-11 15:34:22 光通信聚合 → 光芯片与光器件"
+  "category2": "半导体",
+  "concept2": "光刻胶"
  },
  "300332": {
   "business_summary": "主营燃气生产和供应业",
@@ -36823,7 +36909,9 @@
   "concept2": "电池与组件",
   "category": "半导体|光伏",
   "concept": "半导体材料-电子特气与湿化学品|半导体材料-光刻胶与配套试剂|半导体材料-其他关键材料|电池与组件",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 电池与组件"
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 电池与组件",
+  "role": "龙头",
+  "role_reason": "国内唯一28nm ArF光刻胶规模量产（良率约99.7%），通过中芯国际/长江存储等头部晶圆厂认证"
  },
  "300347": {
   "business_summary": "主营研究和试验发展",
@@ -37886,7 +37974,7 @@
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-11 15:34:22",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -37925,11 +38013,13 @@
    "verdict": "核心",
    "reason": "公司的紫外固化光纤涂覆材料用于光纤制造过程中的涂覆与保护，是直接影响光纤机械性能和长期可靠性的关键材料，与光通信产业存在明确且直接的产品关系，不能因公司同时经营显示材料而弱化为泛材料概念。2025年紫外固化光纤涂覆材料收入6.9918亿元，总收入32.2565亿元，占比21.67%，独立披露的收入和较高占比支持核心定级。边界是显示材料、半导体材料及有机合成材料均不能混入光通信，光纤涂覆材料也不能被包装成光模块封装胶的全部市场或延伸出光芯片业务。此次纠错将旧“相关、光材料”提升为核心，并改成白名单中的光通信材料封装与胶材，纠正概念过宽和定级偏低，同时保留其他三大材料板块不可归属的限制。"
   },
+  "category": "光通信|半导体",
+  "concept": "光连接与配套|光刻机",
+  "optic_reagg_20261111": "2026-11-11 15:34:22 光通信聚合 → 光连接与配套",
   "category1": "光通信",
   "concept1": "光连接与配套",
-  "category": "光通信",
-  "concept": "光连接与配套",
-  "optic_reagg_20261111": "2026-11-11 15:34:22 光通信聚合 → 光连接与配套"
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "300399": {
   "business_summary": "主营软件和信息技术服务业",
@@ -38262,13 +38352,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "迦南科技",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300413": {
   "business_summary": "主营互联网和相关服务",
@@ -38329,13 +38421,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "中光防雷",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-24 11:21:37"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "300415": {
   "business_summary": "主营专用设备制造业",
@@ -38686,13 +38780,17 @@
   "business_summary": "电子材料领域各类光刻胶专用电子化学品和绿色光固化材料的研发、生产和销售及相关贸易业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "强力新材",
   "primary_source": "legacy",
   "sector": "电子化学品Ⅱ/光刻胶/芯片概念/先进封装",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机",
+  "role": "中军",
+  "role_reason": "光刻胶专用光引发剂全球主要供应商，并向单体/树脂延伸"
  },
  "300432": {
   "business_summary": "汽车发动机零部件、新能源汽车智能电控和新能源锂电正极材料的研发、生产和销售。",
@@ -39044,13 +39142,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "航天智造",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300447": {
   "business_summary": "军用光电线缆及组件、光电元器件、FC光纤网络通信系统、光电集成设备等系列产品的研发、生产和销售。",
@@ -39352,13 +39452,15 @@
   "business_summary": "主营半导体",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "赛微电子",
   "primary_source": "legacy",
   "sector": "半导体/光刻机/共封装光学(CPO)/先进封装",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:24:46"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "300457": {
   "business_summary": "主营电池",
@@ -40265,18 +40367,22 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
-  "concept": "电解液",
+  "category": "电池|半导体",
+  "concept": "电解液|光刻机",
   "name": "富祥股份",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
   "concept_reason": {
    "电解液": "富祥股份：原料药为主"
-  }
+  },
+  "category1": "电池",
+  "concept1": "电解液",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "300498": {
   "business_summary": "主营畜牧业",
@@ -40772,13 +40878,11 @@
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "相关",
   "concept_reason": {
    "树脂-环氧与碳氢": "公司电子级碳氢树脂已形成小批量供货，正式公告明确主要应用于M6至M8级高速覆铜板，具有真实PCB材料收入；但针对M9或更高等级产品仍处研发储备，尚未落地量产，旧标签必须纠正。2025年公司合并营业收入7.18482亿元，电子级碳氢树脂收入325.97万元、约占0.45%，出货仅7.3吨，设计产能利用率3.3%；着色剂5.7158亿元、特种添加剂1.0904亿元等仍是主要混合业务，树脂类宽口径也不能全部视为电子级碳氢树脂。基于真实销售但占比极低、仍处市场开拓期，定级为相关。旧“碳氢树脂M9”把研发能力误写成量产产品，应改为不加M9限定的树脂-环氧与碳氢，并保留低占比边界。"
   },
-  "category1": "PCB",
-  "concept1": "树脂-环氧与碳氢",
   "concept_desc": {
    "树脂-环氧与碳氢": "PCB和覆铜板用环氧树脂、碳氢树脂及配套固化体系。"
   },
@@ -40810,7 +40914,13 @@
    ],
    "verdict": "相关",
    "reason": "公司电子级碳氢树脂已形成小批量供货，正式公告明确主要应用于M6至M8级高速覆铜板，具有真实PCB材料收入；但针对M9或更高等级产品仍处研发储备，尚未落地量产，旧标签必须纠正。2025年公司合并营业收入7.18482亿元，电子级碳氢树脂收入325.97万元、约占0.45%，出货仅7.3吨，设计产能利用率3.3%；着色剂5.7158亿元、特种添加剂1.0904亿元等仍是主要混合业务，树脂类宽口径也不能全部视为电子级碳氢树脂。基于真实销售但占比极低、仍处市场开拓期，定级为相关。旧“碳氢树脂M9”把研发能力误写成量产产品，应改为不加M9限定的树脂-环氧与碳氢，并保留低占比边界。"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "树脂-环氧与碳氢",
+  "category2": "半导体",
+  "concept2": "光刻机",
+  "category": "PCB|半导体",
+  "concept": "树脂-环氧与碳氢|光刻机"
  },
  "300523": {
   "business_summary": "主营软件和信息技术服务业",
@@ -40970,13 +41080,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "达威股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300536": {
   "business_summary": "主营土木工程建筑业",
@@ -40994,31 +41106,35 @@
   "business_summary": "光刻胶、涂料等光固化领域电子化学品的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "广信材料",
   "primary_source": "legacy",
   "sector": "电子化学品Ⅱ/光刻胶/PCB概念/5G",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300538": {
   "business_summary": "主营批发业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "化工",
-  "concept": "塑料制品",
+  "category": "化工|半导体",
+  "concept": "塑料制品|光刻机",
   "name": "同益股份",
   "primary_source": "legacy",
   "sector": "批发业",
   "sector_type": "legacy",
-  "updated_at": "2026-11-11 15:16:10",
-  "category1": "化工",
-  "concept1": "塑料制品",
+  "updated_at": "2026-11-17 18:57:11",
   "concept_reason": {
    "塑料制品": "同益股份：工程塑料分销（2026-11-11 涨幅榜归类）"
   },
-  "top320_20261111": "2026-11-11 15:16:10 涨幅榜归类 → 化工/塑料制品"
+  "top320_20261111": "2026-11-11 15:16:10 涨幅榜归类 → 化工/塑料制品",
+  "category1": "化工",
+  "concept1": "塑料制品",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "300539": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -41796,7 +41912,9 @@
    ],
    "verdict": "相关",
    "reason": "公司真实产品包括PCB、显示和半导体光刻胶，其中g/i线半导体光刻胶已形成销售，KrF产品仍处验证推进阶段，具备半导体材料经营实质但规模尚小。2025年显示用与半导体光刻胶合并收入0.3812亿元，占总收入3.57%；PCB光刻胶收入9.9259亿元，占92.87%，因此维持相关而非核心。边界上，0.3812亿元是显示和半导体两类产品不可拆口径，不能全部算作半导体收入，占绝对主体的PCB光刻胶也不能因为同属感光材料就并入半导体；尚未完成验证的KrF不得按成熟量产品类放大判断。此次纠错将旧笼统“半导体材料”精确为“半导体材料-光刻胶与配套试剂”，保留相关并纠正以PCB主业支撑半导体核心程度的潜在误读。"
-  }
+  },
+  "role": "龙头",
+  "role_reason": "PCB光刻胶国产龙头，并向显示/半导体光刻胶延伸"
  },
  "300577": {
   "business_summary": "主营皮革、毛皮、羽毛及其制品和制鞋业",
@@ -43542,7 +43660,9 @@
    ],
    "verdict": "核心",
    "reason": "公司真实半导体产品包括超净高纯化学品和光刻胶，同时经营锂电材料、工业化学品及能源业务，需按下游用途区分而不能笼统套用电子化学品概念。2025年半导体行业收入10.5966亿元，占总收入65.8248%；高纯化学品收入9.2867亿元，光刻胶收入2.2337亿元，锂电粘结剂收入2.2342亿元，半导体板块占比和绝对规模均支持核心定级。边界上，高纯化学品和光刻胶产品口径可能覆盖显示等其他电子下游，不可把产品分部金额全部重复归入集成电路；锂电粘结剂及工业化学品明确排除在半导体之外。此次纠错将旧“半导体材料”细分为“电子特气与湿化学品”和“光刻胶与配套试剂”，保留核心并避免跨行业收入混算。"
-  }
+  },
+  "role": "龙头",
+  "role_reason": "子公司瑞红G/I线国内约30%份额，KrF已量产、ArF小批量送样，全品类布局"
  },
  "300656": {
   "business_summary": "AiDC设备的研发、生产和销售业务，以及功率半导体晶圆代工、设计和分销业务。",
@@ -43817,7 +43937,9 @@
    ],
    "verdict": "核心",
    "reason": "公司真实产品是超高纯铝、钛、钽、铜等金属溅射靶材以及半导体设备精密零部件，分别服务晶圆制造PVD材料和装备核心部件环节，客户与量产经营基础明确。2025年超高纯靶材收入28.4993亿元，约占总收入46.0410亿元的61.90%；精密零部件收入10.8388亿元，约占23.54%，两项合计约85.44%，主业规模和集中度充分支持核心定级。边界上，靶材与零部件属于不同产业环节，不能把两项收入重复归为半导体材料，也不能因零部件用于设备就把公司改标为整机设备商。此次纠错将旧笼统“半导体材料”拆为“半导体材料-靶材与蒸镀材料”和“设备核心零部件”，保留核心并补回原标签遗漏的十亿元级零部件业务。"
-  }
+  },
+  "role": "中军",
+  "role_reason": "超高纯溅射靶材+半导体精密零部件，总市值约400亿，材料与零部件双卡位"
  },
  "300667": {
   "business_summary": "主营仪器仪表制造业",
@@ -44569,13 +44691,15 @@
   "business_summary": "主营非金属矿物制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "岱勒新材",
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300701": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -44892,13 +45016,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "怡达股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300722": {
   "business_summary": "主营其他制造业",
@@ -45610,13 +45736,11 @@
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "相关",
   "concept_reason": {
    "PCB股权与产业投资": "公司自身2025年主营为高性能有机颜料、染料和材料单体，染颜料收入12.3772亿元、约占营业收入82.78%，中间体及材料单体收入2.3998亿元、约占16.05%，均不能直接列为苊烯树脂或PCB收入。年报显示公司以权益法持有辽宁美彩新材料有限公司31.50%股权，正式互动确认参股企业辉虹科技的EX电子材料可用于M9级高端覆铜板，真实关系是参股产业链而非上市公司自身已有规模化苊烯主营。公司没有单列PCB营业收入，亦不能把全部精细化工收入混入该概念，因此定为相关；旧“苊烯树脂”容易被理解为自产产品，现纠正为PCB股权与产业投资，并明确产品、收入和经营主体边界。"
   },
-  "category1": "PCB",
-  "concept1": "PCB股权与产业投资",
   "concept_desc": {
    "PCB股权与产业投资": "实际持有PCB企业股权或基金份额，须与自身经营区分。"
   },
@@ -45648,7 +45772,13 @@
    ],
    "verdict": "相关",
    "reason": "公司自身2025年主营为高性能有机颜料、染料和材料单体，染颜料收入12.3772亿元、约占营业收入82.78%，中间体及材料单体收入2.3998亿元、约占16.05%，均不能直接列为苊烯树脂或PCB收入。年报显示公司以权益法持有辽宁美彩新材料有限公司31.50%股权，正式互动确认参股企业辉虹科技的EX电子材料可用于M9级高端覆铜板，真实关系是参股产业链而非上市公司自身已有规模化苊烯主营。公司没有单列PCB营业收入，亦不能把全部精细化工收入混入该概念，因此定为相关；旧“苊烯树脂”容易被理解为自产产品，现纠正为PCB股权与产业投资，并明确产品、收入和经营主体边界。"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "PCB股权与产业投资",
+  "category2": "半导体",
+  "concept2": "光刻机",
+  "category": "PCB|半导体",
+  "concept": "PCB股权与产业投资|光刻机"
  },
  "300759": {
   "business_summary": "主营研究和试验发展",
@@ -46596,13 +46726,15 @@
   "business_summary": "主营专业技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "钢研纳克",
   "primary_source": "legacy",
   "sector": "专业技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300798": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -46636,17 +46768,21 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
-  "concept": "电解液",
+  "category": "电池|半导体",
+  "concept": "电解液|光刻机",
   "name": "泰和科技",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "边缘",
   "concept_reason": {
    "电解液": "泰和科技：水处理药剂为主，锂电添加剂为延伸"
-  }
+  },
+  "category1": "电池",
+  "concept1": "电解液",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "300802": {
   "business_summary": "机器视觉设备、控制线缆组件、控制单元及设备的研发、生产和销售。",
@@ -46711,13 +46847,15 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "斯迪克",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300807": {
   "business_summary": "主营计算机设备",
@@ -46774,7 +46912,7 @@
   "primary_source": "legacy",
   "sector": "通用设备/工业母机/人形机器人",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 19:00:21",
+  "updated_at": "2026-11-17 18:57:11",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'丝杠设备|龙头-丝杠磨床设备' → '丝杠设备'",
   "role": "龙头",
   "role_reason": "丝杠磨床'卖铲人'：国内轧辊磨床市占第一（全球前三），P0级丝杠磨床打破海外垄断，2025年3月获福立旺100台订单约1.8亿元（2025年东吴/浙商/华创研报）",
@@ -46817,12 +46955,14 @@
    "reason": "公司主营高端磨削装备，机器人关联产品为精密内外螺纹磨床，直接用于行星滚柱丝杠等零件的螺纹加工，本身是制造设备而非丝杠；已与福立旺签订100台设备订单，具有明确商业订单和交付基础，但属于新拓展的上游设备业务，占公司整体业务仍有限，故保留相关。"
   },
   "tag_evidence": "text",
-  "category": "机器人",
-  "concept": "智能装备与机床",
+  "category": "机器人|半导体",
+  "concept": "智能装备与机床|光刻胶",
   "robot_reagg_20261109": "2026-11-09 18:53:14 机器人聚合 → 设备与集成",
+  "robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床",
   "category1": "机器人",
   "concept1": "智能装备与机床",
-  "robot_rename_20261109": "2026-11-09 19:00:21 设备与集成 → 智能装备与机床"
+  "category2": "半导体",
+  "concept2": "光刻胶"
  },
  "300810": {
   "business_summary": "主营软件和信息技术服务业",
@@ -48633,13 +48773,15 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "宝丽迪",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:29:31"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "300906": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -49956,13 +50098,13 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "液冷|可控核聚变|超节点",
-  "concept": "浸没式液冷|热管理/制冷|液冷散热",
+  "category": "液冷|可控核聚变|超节点|半导体",
+  "concept": "浸没式液冷|热管理/制冷|液冷散热|光刻胶",
   "name": "同飞股份",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-11-11 15:45:31",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -49970,13 +50112,15 @@
    "热管理/制冷": "同飞股份：工业温控（浸没式液冷）",
    "液冷散热": "同飞股份：复盘·AI硬件：液冷/温控（2026-11-11 复盘补充）"
   },
+  "recap_20261111": "2026-11-11 15:45:31 复盘补充 → 超节点/液冷散热",
   "category1": "液冷",
   "concept1": "浸没式液冷",
   "category2": "可控核聚变",
   "concept2": "热管理/制冷",
   "category3": "超节点",
   "concept3": "液冷散热",
-  "recap_20261111": "2026-11-11 15:45:31 复盘补充 → 超节点/液冷散热"
+  "category4": "半导体",
+  "concept4": "光刻胶"
  },
  "300991": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -49986,7 +50130,7 @@
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-18 15:06:10",
   "exclude_note_2026_10_20": "剔除：连接器主业，存储互连仅占收入23%（连接器在超节点槽）",
   "tag_evidence": "text",
   "tag_verdict": "核心",
@@ -49994,7 +50138,11 @@
    "连接器": "主营：数据存储互连产品及组件、消费电子互连产品及组件、高速数据通讯产品及组件、新能源精密连接器及结构件；与本标签一致"
   },
   "category1": "超节点",
-  "concept1": "连接器"
+  "concept1": "连接器",
+  "category2": "算力租赁",
+  "concept2": "算力租赁",
+  "category": "超节点|算力租赁",
+  "concept": "连接器|算力租赁"
  },
  "300992": {
   "business_summary": "主营通用设备制造业",
@@ -50746,13 +50894,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "双乐股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "301037": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -51650,13 +51800,15 @@
   "business_summary": "集成电路制造、设计、提供从EDA软件、测试芯片设计服务、电性测试设备到数据分析等一系列产品与服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "广立微",
   "primary_source": "legacy",
   "sector": "软件开发/光刻机/共封装光学(CPO)/存储芯片",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "301096": {
   "business_summary": "主营研究和试验发展",
@@ -52131,7 +52283,7 @@
   "primary_source": "legacy",
   "sector": "专用设备/液冷服务器/华为海思概念股/富士康概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
@@ -52142,7 +52294,11 @@
   "category1": "液冷",
   "concept1": "快换接头",
   "category2": "超节点",
-  "concept2": "液冷散热"
+  "concept2": "液冷散热",
+  "category3": "半导体",
+  "concept3": "光刻胶",
+  "category": "液冷|超节点|半导体",
+  "concept": "快换接头|液冷散热|光刻胶"
  },
  "301129": {
   "business_summary": "主营仪器仪表制造业",
@@ -54115,13 +54271,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "华融化学",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "301257": {
   "business_summary": "主营研究和试验发展",
@@ -56446,18 +56604,22 @@
   "business_summary": "精密光学元件与组件的研发、生产和销售，提供各类光学设备、光学设计以及光学检测的整体解决方案。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "消费电子",
-  "concept": "光学显示",
+  "category": "消费电子|半导体",
+  "concept": "光学显示|光刻胶",
   "name": "波长光电",
   "primary_source": "legacy",
   "sector": "光学光电子/光刻机/PCB概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "光学显示": "主营：光学元件系列；与本标签一致"
-  }
+  },
+  "category1": "消费电子",
+  "concept1": "光学显示",
+  "category2": "半导体",
+  "concept2": "光刻胶"
  },
  "301428": {
   "business_summary": "为金融机构、电信运营商、互联网公司、高速公路集团等拥有众多C端用户的大型企业客户提供用户增值和拓展服务。",
@@ -57745,13 +57907,15 @@
   "business_summary": "三维锡膏印刷检测设备（3D SPI）、三维自动光学检测设备（3D AOI）",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机|光刻胶",
   "name": "思泰克",
   "primary_source": "legacy",
   "sector": "自动化设备/PCB概念/富士康概念/5G",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机|光刻胶"
  },
  "301571": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -58056,13 +58220,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "理奇智能",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "301600": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -58171,13 +58337,17 @@
   "business_summary": "先进陶瓷材料零部件的研发、制造、销售、服务以及泛半导体设备表面处理服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "珂玛科技",
   "primary_source": "legacy",
   "sector": "半导体/存储芯片/光刻机/第三代半导体",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶",
+  "role": "中军",
+  "role_reason": "先进陶瓷零部件细分龙头，供刻蚀/光刻设备的陶瓷结构件"
  },
  "301613": {
   "business_summary": "主营其他",
@@ -63102,13 +63272,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "大消费",
+  "concept": "大消费_小家电",
   "name": "澳柯玛",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-18 15:06:31",
+  "category1": "大消费",
+  "concept1": "大消费_小家电"
  },
  "600338": {
   "business_summary": "有色金属矿山采掘、选矿和冶炼。",
@@ -63389,7 +63561,7 @@
   "primary_source": "legacy",
   "sector": "其他电子Ⅱ/第三代半导体/光刻机/先进封装",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 21:32:22",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -63435,11 +63607,13 @@
    "verdict": "核心",
    "reason": "公司军工业务具有明确产品载体：航空航天飞行器精密结构件直接用于飞行器机体或设备结构配套，智能嵌入式计算机用于装备机载计算与控制场景，均不是以普通真空灭弧室的潜在军用价值来贴标。输入2025年分部明确列出军工行业收入3.9414亿元、占24.1073%，毛利率37.0512%；其中精密结构件2.4361亿元、嵌入式计算机1.5053亿元，两项合计恰与军工行业收入对应。军工已形成数亿元收入和重要利润来源，虽电力设备收入8.7345亿元、占53.4239%仍为最大板块，仍符合重要收入的核心标准。旧“军工电子”只覆盖计算机而漏掉结构件，需按产品实质拆分细化。"
   },
+  "category": "军工|半导体",
+  "concept": "航空装备|光刻胶",
+  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 航空装备",
   "category1": "军工",
   "concept1": "航空装备",
-  "category": "军工",
-  "concept": "航空装备",
-  "mil_reagg_20261109": "2026-11-09 21:32:22 军工聚合 → 航空装备"
+  "category2": "半导体",
+  "concept2": "光刻胶"
  },
  "600354": {
   "business_summary": "主营农、林、牧、渔专业及辅助性活动",
@@ -64176,14 +64350,18 @@
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-11-18 15:06:10",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "高压直流电源HVDC": "动力源：通信/数据中心电源"
   },
   "category1": "电力",
-  "concept1": "高压直流电源HVDC"
+  "concept1": "高压直流电源HVDC",
+  "category2": "算力租赁",
+  "concept2": "算力租赁",
+  "category": "电力|算力租赁",
+  "concept": "高压直流电源HVDC|算力租赁"
  },
  "600406": {
   "business_summary": "电网智能、数能融合、能源低碳、轨道交通及工业自动化设备的研发、设计、制造、销售、工程服务与总承包业务。",
@@ -66954,13 +67132,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "新华医疗",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "600588": {
   "business_summary": "主营软件和信息技术服务业",
@@ -70838,18 +71018,22 @@
   "business_summary": "主营黑色家电",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "超节点",
-  "concept": "昇腾部件伙伴",
+  "category": "超节点|大消费",
+  "concept": "昇腾部件伙伴|大消费_小家电",
   "name": "四川长虹",
   "primary_source": "legacy",
   "sector": "黑色家电/华为欧拉/跨境支付(CIPS)/智能医疗",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 12:00:00",
+  "updated_at": "2026-11-18 15:06:31",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "昇腾部件伙伴": "四川长虹：家电/ICT，昇腾部件伙伴"
-  }
+  },
+  "category1": "超节点",
+  "concept1": "昇腾部件伙伴",
+  "category2": "大消费",
+  "concept2": "大消费_小家电"
  },
  "600841": {
   "business_summary": "主营其他",
@@ -70954,17 +71138,21 @@
   "business_summary": "数字化产品、行业数字化和数字新基建。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "超节点",
-  "concept": "其他",
+  "category": "超节点|半导体",
+  "concept": "其他|光刻胶",
   "name": "电科数字",
   "primary_source": "legacy",
   "sector": "IT服务Ⅱ/华为盘古/华为昇腾/华为鲲鹏",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 12:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "相关",
   "concept_reason": {
    "其他": "电科数字：数字化产品/信创集成，算力基础设施承接方"
-  }
+  },
+  "category1": "超节点",
+  "concept1": "其他",
+  "category2": "半导体",
+  "concept2": "光刻胶"
  },
  "600851": {
   "business_summary": "主营医药制造业",
@@ -71913,7 +72101,9 @@
   "concept1": "半导体股权与产业投资",
   "category2": "商业航天",
   "concept2": "航天材料与配套",
-  "space_reagg_20261109": "2026-11-09 18:31:20 商业航天聚合：航天材料与配套"
+  "space_reagg_20261109": "2026-11-09 18:31:20 商业航天聚合：航天材料与配套",
+  "role": "龙头",
+  "role_reason": "持有上海微电子(SMEE，国产唯一DUV整机厂)约10.78%股权——板块的整机影子/情绪龙头，核心是资本映射，自身经营为园区开发"
  },
  "600897": {
   "business_summary": "航空运输地面服务及其他相关业务的交通运输行业服务。",
@@ -74303,17 +74493,13 @@
   "primary_source": "legacy",
   "sector": "塑料/PET铜箔/PCB概念/苹果概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "核心",
   "concept_reason": {
    "其他": "东材科技：绝缘与环氧材料，可用于磁体绝缘",
    "碳氢树脂M9": "东材科技：绝缘与环氧材料，可用于磁体绝缘",
    "树脂-环氧与碳氢": "公司真实PCB上游产品包括双马来酰亚胺、活性酯、碳氢、聚苯醚及环氧等高速电子树脂，用于高速通信基板和覆铜板，不是把绝缘材料或磁体绝缘用途跨概念推导为PCB。2025年电子材料收入15.5444亿元、约占营业收入30.00%，其中高速电子材料收入5.91亿元、约占11.41%，同比增长125.07%；光学膜材料14.2346亿元、新能源材料12.9466亿元、电工绝缘材料4.8086亿元均有独立口径，不能并入PCB树脂。电子材料分部也并非全部为PCB专用，因此采用已披露的高速电子材料规模而非笼统归因。高速树脂已形成数亿元实际销售和清晰产品体系，由旧“相关”上调为核心；旧“环氧树脂”扩展为准确的环氧与碳氢树脂类别。"
   },
-  "category2": "可控核聚变",
-  "concept2": "其他",
-  "category1": "PCB",
-  "concept1": "树脂-环氧与碳氢",
   "concept_desc": {
    "树脂-环氧与碳氢": "PCB和覆铜板用环氧树脂、碳氢树脂及配套固化体系。"
   },
@@ -74345,7 +74531,15 @@
    ],
    "verdict": "核心",
    "reason": "公司真实PCB上游产品包括双马来酰亚胺、活性酯、碳氢、聚苯醚及环氧等高速电子树脂，用于高速通信基板和覆铜板，不是把绝缘材料或磁体绝缘用途跨概念推导为PCB。2025年电子材料收入15.5444亿元、约占营业收入30.00%，其中高速电子材料收入5.91亿元、约占11.41%，同比增长125.07%；光学膜材料14.2346亿元、新能源材料12.9466亿元、电工绝缘材料4.8086亿元均有独立口径，不能并入PCB树脂。电子材料分部也并非全部为PCB专用，因此采用已披露的高速电子材料规模而非笼统归因。高速树脂已形成数亿元实际销售和清晰产品体系，由旧“相关”上调为核心；旧“环氧树脂”扩展为准确的环氧与碳氢树脂类别。"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "树脂-环氧与碳氢",
+  "category2": "可控核聚变",
+  "concept2": "其他",
+  "category3": "半导体",
+  "concept3": "光刻机",
+  "category": "PCB|可控核聚变|半导体",
+  "concept": "树脂-环氧与碳氢|其他|光刻机"
  },
  "601211": {
   "business_summary": "财富管理业务、投资银行业务、机构与交易业务、投资管理业务和国际业务。",
@@ -77419,13 +77613,15 @@
   "business_summary": "全球第二大能为影像传感芯片提供WLCSP量产服务的专业封测服务商",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "晶方科技",
   "primary_source": "legacy",
   "sector": "半导体/先进封装/光刻机/光刻胶",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:24:46"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "603006": {
   "business_summary": "主营其他",
@@ -78644,7 +78840,9 @@
    ],
    "verdict": "核心",
    "reason": "公司真实产品是超净高纯试剂和光刻胶配套试剂等湿电子化学品，直接用于半导体、显示面板和太阳能电池的清洗、蚀刻、显影及剥离等工艺；公司并非仅因“光刻胶”题材而拥有半导体材料业务。2025年半导体芯片下游收入7.1081亿元，占总收入约12.3384亿元的57.6093%，已超过半数；显示面板收入4.5528亿元、太阳能0.4412亿元应分开。按产品看，超净高纯试剂7.7512亿元、光刻胶配套试剂4.3508亿元，两者是跨下游混合口径，不能全部算作半导体收入。半导体下游规模与占比均支持核心定级。旧“半导体材料”过宽，按产品实质纠正为“电子特气与湿化学品”和“光刻胶与配套试剂”，不额外宣称公司生产独立光刻胶成品。"
-  }
+  },
+  "role": "中军",
+  "role_reason": "光刻胶配套试剂（显影液/剥离液）与湿电子化学品平台"
  },
  "603079": {
   "business_summary": "主营食品制造业",
@@ -79448,18 +79646,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "化工",
-  "concept": "催化剂",
+  "category": "化工|半导体",
+  "concept": "催化剂|光刻机",
   "name": "肯特催化",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "催化剂": "主营：季铵（鏻）化合物产品研发、生产和销售；与本标签一致"
-  }
+  },
+  "category1": "化工",
+  "concept1": "催化剂",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "603121": {
   "business_summary": "主营汽车制造业",
@@ -79574,18 +79776,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "化工",
-  "concept": "基础化工",
+  "category": "化工|半导体",
+  "concept": "基础化工|光刻机",
   "name": "常青科技",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "基础化工": "主营：高分子新材料特种单体的研发、生产和销售、高分子专用助剂的研发、生产和销售；与本标签一致"
-  }
+  },
+  "category1": "化工",
+  "concept1": "基础化工",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "603126": {
   "business_summary": "主营专业技术服务业",
@@ -79865,13 +80071,13 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "有机硅",
-  "concept": "功能性硅烷",
+  "category": "有机硅|半导体",
+  "concept": "功能性硅烷|光刻机",
   "name": "新亚强",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 14:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "concept_desc": {
    "功能性硅烷": "硅烷偶联剂，橡胶/复材/半导体的界面处理剂"
   },
@@ -79879,7 +80085,11 @@
   "tag_verdict": "核心",
   "concept_reason": {
    "功能性硅烷": "新亚强：有机硅功能性助剂"
-  }
+  },
+  "category1": "有机硅",
+  "concept1": "功能性硅烷",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "603156": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -82266,7 +82476,9 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-17 16:31:27",
   "category1": "半导体",
-  "concept1": "设备核心零部件"
+  "concept1": "设备核心零部件",
+  "role": "中军",
+  "role_reason": "光学板块营收体量最大（2025年9.65亿），但光刻相关（镀膜/微透镜）占营收<1%，属第二曲线"
  },
  "603298": {
   "business_summary": "主营通用设备制造业",
@@ -82437,14 +82649,20 @@
   "primary_source": "legacy",
   "sector": "汽车零部件/共封装光学(CPO)/芯片概念/光刻胶",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 17:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_removed_20261025": "半导体/半导体材料（实际主营：汽车安全气囊布）",
-  "category": "汽车",
-  "concept": "零部件",
+  "category": "汽车|半导体",
+  "concept": "零部件|光刻机",
   "tag_verdict": "核心",
   "concept_reason": {
    "零部件": "华懋科技：汽车安全气囊布"
-  }
+  },
+  "category1": "汽车",
+  "concept1": "零部件",
+  "category2": "半导体",
+  "concept2": "光刻机",
+  "role": "龙头",
+  "role_reason": "参股徐州博康约26%（单体-树脂-成品胶全链、光刻胶单体全球主要供应商）——光刻胶属于其参股映射，主业为汽车安全部件"
  },
  "603307": {
   "business_summary": "主营纺织业",
@@ -83355,13 +83573,15 @@
   "business_summary": "异噻唑啉酮类工业杀菌剂原药剂的研发、生产和销售，在此基础上生产、销售工业杀菌剂复配产品。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "百傲化学",
   "primary_source": "legacy",
   "sector": "农化制品/存储芯片/机器人概念/芯片概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "603363": {
   "business_summary": "主营农副食品加工业",
@@ -85691,7 +85911,9 @@
    ],
    "verdict": "相关",
    "reason": "公司真实半导体相关产品包括光刻胶、电子级溶剂与EBR等配套试剂，以及CMP抛光垫等材料，已形成电子材料业务，而非仅凭橡胶化学品向晶圆厂作潜在用途推演。2025年营业收入34.2881亿元，其中电子材料行业收入9.8562亿元、占28.75%，自产电子材料收入9.2153亿元、占26.88%，橡胶助剂收入23.2041亿元、占67.67%；电子材料还包含显示等其他下游，自产与行业口径存在包含关系，均不能全部视为半导体光刻胶或CMP收入，具体半导体品类收入亦未完全独立拆分。由于材料业务真实但橡胶助剂仍占主导，维持相关而非核心；旧泛“半导体材料”细化纠正为“半导体材料-光刻胶与配套试剂”和“半导体材料-CMP材料”，不将其他电子材料混入。"
-  }
+  },
+  "role": "龙头",
+  "role_reason": "控股北京科华（KrF国内市占约40%+、半导体光刻胶收入国内第一、ArF已实现销售），另控股面板胶北旭电子"
  },
  "603655": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -86997,7 +87219,7 @@
   "primary_source": "legacy",
   "sector": "元件/共封装光学(CPO)/光刻机/6G概念",
   "sector_type": "legacy",
-  "updated_at": "2026-11-11 15:34:22",
+  "updated_at": "2026-11-17 18:57:11",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'石英晶振|龙头-晶振龙头' → '石英晶振'",
   "tag_evidence": "text",
   "tag_verdict": "相关",
@@ -87036,11 +87258,13 @@
    "verdict": "相关",
    "reason": "公司生产石英晶体谐振器和振荡器，年报明确其超高频产品已面向光模块等场景稳定量产，80MHz、96MHz、100MHz、156.25MHz、212.5MHz及312.5MHz以上产品已批量供货，并围绕光通信和服务器开展国产替代配套，属于经过实际应用核验的频率器件，而非仅凭晶振通用性联想。2025年晶体谐振器收入9.0684亿元、占96.0900%，但该产品同时服务汽车、物联网、工业控制、网络通信等众多终端，无法拆出光模块专用收入，也不能把全部谐振器收入算作光通信。光通信是多个下游之一且占比未披露，故维持相关；旧“石英晶振”细化为时钟晶振与频率器件，CPO行业标签不等于公司具有CPO产品。"
   },
+  "category": "光通信|半导体",
+  "concept": "光连接与配套|光刻胶",
+  "optic_reagg_20261111": "2026-11-11 15:34:22 光通信聚合 → 光连接与配套",
   "category1": "光通信",
   "concept1": "光连接与配套",
-  "category": "光通信",
-  "concept": "光连接与配套",
-  "optic_reagg_20261111": "2026-11-11 15:34:22 光通信聚合 → 光连接与配套"
+  "category2": "半导体",
+  "concept2": "光刻胶"
  },
  "603739": {
   "business_summary": "主营食品制造业",
@@ -87170,17 +87394,19 @@
   "primary_source": "legacy",
   "sector": "光学光电子/MicroLED概念/MiniLED/共封装光学(CPO)",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "边缘",
   "concept_reason": {
    "太阳翼结构": "沃格光电：显示业务，太空光伏辅材为延伸",
    "辅材与结构": "沃格光电：太空光伏辅材（辅材与结构）"
   },
+  "category": "光伏|半导体",
+  "concept": "辅材与结构|光刻胶",
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 辅材与结构",
   "category1": "光伏",
   "concept1": "辅材与结构",
-  "category": "光伏",
-  "concept": "辅材与结构",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 辅材与结构"
+  "category2": "半导体",
+  "concept2": "光刻胶"
  },
  "603776": {
   "business_summary": "主营公共自行车及共享出行，兼营氢能业务，在两轮氢能领域掌握了一系列核心技术",
@@ -87362,23 +87588,19 @@
   "business_summary": "电解铜箔高端生产装备制造业务、超精密真空镀膜设备制造业务、精密光学设备制造业务和油气钻采设备制造业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "category1": "电池",
-  "concept": "",
-  "concept1": "其他关键材料及设备",
+  "category": "电池|PCB|半导体",
+  "concept": "其他关键材料及设备|PCB设备-曝光与成像|光刻胶",
   "name": "洪田股份",
   "primary_source": "legacy",
   "sector": "专用设备/PET铜箔/PCB概念/光刻机",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "其他关键材料及设备": "洪田股份：电解铜箔设备",
    "PCB设备-曝光与成像": "年报明确列出HL-P12、HL-P8线路LDI等精密光学设备，其中HL-P12用于高阶HDI、FPC和SLP的线路曝光，HL-P8用于IC载板及MSAP工艺，并披露解析精度、对位和涨缩功能，证明PCB曝光设备是真实在售产品，不是仅凭光刻概念推测的潜在用途。iFinD二〇二五年电解铜箔设备收入五点七六亿元、约占总收入百分之五十三点三六，油气类商品锻件四点二九亿元、约占百分之三十九点八〇，LDI未单独披露收入，故不能把铜箔装备或全部专用设备收入算作PCB曝光收入。基于真实产品但规模与收入占比未拆分，定为相关。旧“曝光”理由却写电解铜箔设备，属于证据错配，现纠正为线路LDI。"
   },
-  "category2": "PCB",
-  "concept2": "PCB设备-曝光与成像",
   "concept_desc": {
    "PCB设备-曝光与成像": "PCB直接成像、曝光、激光直写和光制程设备。"
   },
@@ -87409,7 +87631,13 @@
    ],
    "verdict": "相关",
    "reason": "年报明确列出HL-P12、HL-P8线路LDI等精密光学设备，其中HL-P12用于高阶HDI、FPC和SLP的线路曝光，HL-P8用于IC载板及MSAP工艺，并披露解析精度、对位和涨缩功能，证明PCB曝光设备是真实在售产品，不是仅凭光刻概念推测的潜在用途。iFinD二〇二五年电解铜箔设备收入五点七六亿元、约占总收入百分之五十三点三六，油气类商品锻件四点二九亿元、约占百分之三十九点八〇，LDI未单独披露收入，故不能把铜箔装备或全部专用设备收入算作PCB曝光收入。基于真实产品但规模与收入占比未拆分，定为相关。旧“曝光”理由却写电解铜箔设备，属于证据错配，现纠正为线路LDI。"
-  }
+  },
+  "category1": "电池",
+  "concept1": "其他关键材料及设备",
+  "category2": "PCB",
+  "concept2": "PCB设备-曝光与成像",
+  "category3": "半导体",
+  "concept3": "光刻胶"
  },
  "603801": {
   "business_summary": "主营家具制造业",
@@ -87667,18 +87895,22 @@
   "business_summary": "有机颜料的生产及销售。国内有机颜料行业综合竞争力领先的龙头企业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "化工",
-  "concept": "涂料颜料",
+  "category": "化工|半导体",
+  "concept": "涂料颜料|光刻机",
   "name": "百合花",
   "primary_source": "legacy",
   "sector": "化学制品/光刻胶/PEEK材料/钠离子电池",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 13:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "涂料颜料": "百合花：有机颜料"
-  }
+  },
+  "category1": "化工",
+  "concept1": "涂料颜料",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "603826": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -88829,7 +89061,9 @@
    "verdict": "相关",
    "reason": "公司真实产品是显影液、蚀刻液、剥离液等超净高纯功能湿电子化学品，既用于显示面板，也可用于半导体及其他电子制造环节。年报进一步明确先进半导体材料包括光刻胶配套高纯显影液，半导体用显影液和稀释液已在功率器件企业稳定量供，因此除电子特气与湿化学品外，还应补充半导体材料-光刻胶与配套试剂。2025年营业收入6.258488亿元，其中显示面板行业收入5.662538亿元，占90.48%，半导体及其他行业收入0.584051亿元，占9.33%；后者仍混合其他行业，不能全部视为半导体专属收入。半导体业务真实但占比较低，维持相关，不恢复核心；新增概念只对应已披露的光刻胶配套试剂，不把显示面板材料收入并入半导体。",
    "borderline_review": "2026-10-27二次复核修正"
-  }
+  },
+  "role": "中军",
+  "role_reason": "显影液（光刻胶配套湿电子化学品）国产龙头"
  },
  "603933": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -91700,7 +91934,7 @@
   "primary_source": "legacy",
   "sector": "塑料/超级电容/PCB概念/先进封装",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-17 18:57:11",
   "cleanup_note_2026_10_19_all": "去掉分层标签：'环氧树脂|碳氢树脂M9|中军-树脂平台中军' → '环氧树脂|碳氢树脂M9'",
   "tag_evidence": "text",
   "tag_verdict": "相关",
@@ -91708,8 +91942,6 @@
    "碳氢树脂M9": "圣泉集团：树脂/新材料",
    "树脂-环氧与碳氢": "公司真实电子材料包括高频高速覆铜板用PPO、OPE、碳氢树脂及特种环氧等，年报明确这些产品用于服务器、高速通信和AI算力设备的覆铜板体系，具有真实PCB上游材料属性，不是把全部酚醛或呋喃树脂泛化为PCB。iFinD二〇二五年先进电子材料和电池材料收入十六点六〇亿元，约占总收入百分之十五点一八，合成树脂类收入五十六点六一亿元；前者还混合半导体封装、光刻胶、光学及电池材料，后者还含铸造等广泛用途，两个口径均不能全算PCB。PCB树脂已有产业化和收入基础但缺少独立拆分，故列相关而非核心。旧“环氧树脂”和“碳氢树脂M9”统一纠正为树脂-环氧与碳氢，并保留混合下游边界。"
   },
-  "category1": "PCB",
-  "concept1": "树脂-环氧与碳氢",
   "concept_desc": {
    "树脂-环氧与碳氢": "PCB和覆铜板用环氧树脂、碳氢树脂及配套固化体系。"
   },
@@ -91740,7 +91972,13 @@
    ],
    "verdict": "相关",
    "reason": "公司真实电子材料包括高频高速覆铜板用PPO、OPE、碳氢树脂及特种环氧等，年报明确这些产品用于服务器、高速通信和AI算力设备的覆铜板体系，具有真实PCB上游材料属性，不是把全部酚醛或呋喃树脂泛化为PCB。iFinD二〇二五年先进电子材料和电池材料收入十六点六〇亿元，约占总收入百分之十五点一八，合成树脂类收入五十六点六一亿元；前者还混合半导体封装、光刻胶、光学及电池材料，后者还含铸造等广泛用途，两个口径均不能全算PCB。PCB树脂已有产业化和收入基础但缺少独立拆分，故列相关而非核心。旧“环氧树脂”和“碳氢树脂M9”统一纠正为树脂-环氧与碳氢，并保留混合下游边界。"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "树脂-环氧与碳氢",
+  "category2": "半导体",
+  "concept2": "光刻机",
+  "category": "PCB|半导体",
+  "concept": "树脂-环氧与碳氢|光刻机"
  },
  "605598": {
   "business_summary": "主营土木工程建筑业",
@@ -92077,13 +92315,15 @@
   "business_summary": "特种及民用光学镜头、光电系统、光学元组件等产品科研生产。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "福光股份",
   "primary_source": "legacy",
   "sector": "光学光电子/光刻机/MicroLED概念/机器视觉",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "688011": {
   "business_summary": "主营军工电子Ⅱ",
@@ -92411,7 +92651,9 @@
    ],
    "verdict": "核心",
    "reason": "公司真实产品是化学机械抛光液和功能性湿电子化学品，前者覆盖不同材料层的晶圆平坦化工艺，后者包括清洗液、刻蚀后清洗及光刻胶去除等配套材料，均为直接进入集成电路制造的关键耗材，不是一般化工品的潜在用途。2025年营业收入25.0422亿元，其中集成电路行业收入24.9870亿元、占99.78%；CMP抛光液收入20.3980亿元、占81.45%，功能性湿电子化学品收入4.5286亿元、占18.09%。两类产品口径清晰但不可相互重复计算，也不能把抛光液泛称为全部湿化学品。集成电路材料收入接近全部营收且主力产品规模化，维持核心；旧泛“半导体材料”细化纠正为“半导体材料-CMP材料”和“半导体材料-电子特气与湿化学品”。"
-  }
+  },
+  "role": "中军",
+  "role_reason": "CMP抛光液+光刻胶去除剂（显影后配套），流通市值板块第一档"
  },
  "688020": {
   "business_summary": "高端电子材料的研发、生产及销售。",
@@ -92901,7 +93143,9 @@
    ],
    "verdict": "核心",
    "reason": "公司真实产品包括前道涂胶显影机、清洗机以及后道先进封装湿法设备，涂胶显影设备服务光刻工序，清洗和湿法机台服务晶圆及封装处理，均属于半导体专用工艺装备，而不是仅提供厂务系统或通用自动化。2025年营业收入19.4849亿元，其中半导体设备行业收入19.2633亿元、占98.86%，电子工艺装备收入18.7870亿元、占96.42%；电子工艺装备还包含不同工序与前后道产品，年报未将全部收入按具体机台独立拆分，因此不能把该口径全部算成涂胶显影或全部算成清洗。半导体装备已占绝对主营并规模销售，维持核心；旧“半导体设备-前道”既笼统又遗漏后道湿法边界，现纠正为“半导体设备-涂胶显影”和“半导体设备-清洗”。"
-  }
+  },
+  "role": "龙头",
+  "role_reason": "涂胶显影设备(track)国产唯一量产，光刻前道工序的国产整机独苗"
  },
  "688038": {
   "business_summary": "主营软件和信息技术服务业",
@@ -93238,13 +93482,15 @@
   "business_summary": "实验分析仪器研发、生产和销售、提供洁净环保型实验室解决方案以及实验室耗材和相关服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "莱伯泰科",
   "primary_source": "legacy",
   "sector": "通用设备/食品安全/核污染防治/光刻胶",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688057": {
   "business_summary": "主营生态保护和环境治理业",
@@ -93612,13 +93858,15 @@
   "business_summary": "半导体声光学、半导体微纳电路（主要为MEMS）、半导体封测、精密光学、微纳光学及智慧终端等的研发、制造和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "美迪凯",
   "primary_source": "legacy",
   "sector": "光学光电子/MicroLED概念/光刻机/第三代半导体",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:24:46"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "688080": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -93988,13 +94236,15 @@
   "business_summary": "主营其他电子Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "世华科技",
   "primary_source": "legacy",
   "sector": "其他电子Ⅱ/苹果概念/消费电子概念/OLED",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688095": {
   "business_summary": "主营其他",
@@ -94789,13 +95039,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "安达智能",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688126": {
   "business_summary": "半导体硅片及其他高端半导体材料的研发、生产与销售。",
@@ -94851,13 +95103,15 @@
   "business_summary": "主营光学光电子",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "蓝特光学",
   "primary_source": "legacy",
   "sector": "光学光电子/共封装光学(CPO)/光刻机/同花顺果指数",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "688128": {
   "business_summary": "主营其他",
@@ -95131,17 +95385,23 @@
   "business_summary": "电子特种气体及三氟甲磺酸系列产品的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
-  "concept": "电解液",
+  "category": "电池|半导体",
+  "concept": "电解液|光刻胶",
   "name": "中船特气",
   "primary_source": "legacy",
   "sector": "电子化学品Ⅱ/光刻机/中船系/中芯国际概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "边缘",
   "concept_reason": {
    "电解液": "中船特气：电子特气为主，与电解液只是氟化学同源"
-  }
+  },
+  "category1": "电池",
+  "concept1": "电解液",
+  "category2": "半导体",
+  "concept2": "光刻胶",
+  "role": "中军",
+  "role_reason": "电子特气龙头（含光刻气），大体量平台型"
  },
  "688147": {
   "business_summary": "先进微、纳米级薄膜沉积设备的研发、生产和销售，向半导体和泛半导体客户提供先进薄膜沉积设备和技术服务。",
@@ -95365,13 +95625,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "松井股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688158": {
   "business_summary": "主营互联网和相关服务",
@@ -95616,13 +95878,15 @@
   "business_summary": "光子行业上游的激光光源和原材料，光学元器件，光子产业链中游的光子应用模块、模组",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "炬光科技",
   "primary_source": "legacy",
   "sector": "半导体/光纤概念/共封装光学(CPO)/光刻机",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "688168": {
   "business_summary": "主营软件和信息技术服务业",
@@ -95832,13 +96096,15 @@
   "business_summary": "主营研究和试验发展",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "阿拉丁",
   "primary_source": "legacy",
   "sector": "研究和试验发展",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688180": {
   "business_summary": "主营医药制造业",
@@ -95856,13 +96122,15 @@
   "business_summary": "主营光学光电子",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "八亿时空",
   "primary_source": "legacy",
   "sector": "光学光电子/光刻胶/OLED/先进封装",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688182": {
   "business_summary": "主营通信设备",
@@ -96113,13 +96381,15 @@
   "business_summary": "光电元器件与光电模块研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "腾景科技",
   "primary_source": "legacy",
   "sector": "光学光电子/共封装光学(CPO)/光纤概念/光刻机",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "688196": {
   "business_summary": "主营废弃资源综合利用业",
@@ -96161,13 +96431,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机|光刻胶",
   "name": "久日新材",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机|光刻胶"
  },
  "688200": {
   "business_summary": "主营半导体",
@@ -97588,7 +97860,9 @@
    "verdict": "相关",
    "reason": "公司真实产品包括高纯电子特气、稀混光刻气、氟碳类和其他混配气，同时经营普通工业气体、气体设备与工程；特种气体也服务医疗、化工等多个下游，不能将其全部算作半导体收入。2025年特种气体收入9.23617亿元、占营业收入65.1008%，其中光刻及其他混合气体3.12074亿元、约占总收入22.00%；普通工业气体占20.3978%，设备及工程占11.0547%，其他业务占3.4466%。半导体材料已有真实规模供货，但混合气体和多元下游边界明显，因此由核心降为相关更稳妥。综合上述收入结构，旧“半导体材料”过宽，现纠正为“半导体材料-电子特气与湿化学品”，不把普通工业气体纳入概念依据。",
    "borderline_review": "2026-10-27二次复核修正"
-  }
+  },
+  "role": "中军",
+  "role_reason": "光刻气(ArF/KrF准分子激光混合气)国产先行者，进入国际设备厂认证体系"
  },
  "688269": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -98335,13 +98609,15 @@
   "business_summary": "精密光学镜头产品的研发、生产及销售并提供相关技术开发服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻胶",
   "name": "中润光学",
   "primary_source": "legacy",
   "sector": "光学光电子/光刻机/专精特新/机器视觉",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻胶"
  },
  "688308": {
   "business_summary": "数控刀具产品和硬质合金制品的研发、生产和销售。",
@@ -98576,13 +98852,15 @@
   "business_summary": "主营互联网和相关服务",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "算力租赁",
+  "concept": "算力租赁",
   "name": "青云科技-U",
   "primary_source": "legacy",
   "sector": "互联网和相关服务",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-18 15:06:10",
+  "category1": "算力租赁",
+  "concept1": "算力租赁"
  },
  "688317": {
   "business_summary": "主营医药制造业",
@@ -99907,21 +100185,23 @@
   "business_summary": "OLED关键功能材料（含有机发光材料及配套功能材料）与蒸发源设备的研发、生产及销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "光伏",
-  "concept": "设备",
+  "category": "光伏|半导体",
+  "concept": "设备|光刻机",
   "name": "奥来德",
   "primary_source": "legacy",
   "sector": "电子化学品Ⅱ/OLED/柔性屏(折叠屏)/AI眼镜",
   "sector_type": "legacy",
-  "updated_at": "2026-11-09 18:43:42",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
   "concept_reason": {
    "设备": "奥来德：太空光伏设备（设备）"
   },
+  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 设备",
   "category1": "光伏",
   "concept1": "设备",
-  "pv_reagg_20261109": "2026-11-09 18:43:42 光伏聚合 → 设备"
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "688379": {
   "business_summary": "主营共封装光学",
@@ -100637,7 +100917,9 @@
   "sector_type": "legacy",
   "updated_at": "2026-11-04 15:56:49",
   "category1": "半导体",
-  "concept1": "设备核心零部件"
+  "concept1": "设备核心零部件",
+  "role": "中军",
+  "role_reason": "国内领先的半导体设备精密零部件企业（腔体/金属结构件，可量产7nm制程设备零部件）"
  },
  "688410": {
   "business_summary": "主营医疗器械概念",
@@ -101509,13 +101791,17 @@
   "business_summary": "精密光学器件、光学镜头和光学系统的研发、设计、制造及销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机|光刻胶",
   "name": "茂莱光学",
   "primary_source": "legacy",
   "sector": "光学光电子/光刻机/光刻胶/芯片概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机|光刻胶",
+  "role": "龙头",
+  "role_reason": "DUV投影物镜/棱镜/匀光模组的国产核心供货方（多份产业链梳理列为SMEE物镜组主要国产供应商），光学环节辨识度第一"
  },
  "688503": {
   "business_summary": "研发、生产及销售应用于太阳能光伏、显示/照明与半导体等领域高性能导电浆料。",
@@ -101525,7 +101811,7 @@
   "primary_source": "legacy",
   "sector": "光伏设备/BC电池/光刻胶/OLED",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-11-17 18:57:11",
   "semiconductor_audited_at": "2026-10-27",
   "semiconductor_evidence": {
    "title": "聚和材料：2025年年度报告",
@@ -101545,7 +101831,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司2025年的真实规模化收入仍来自光伏导电银浆，主要产品为TOPCon、HJT、X-BC等太阳能电池用浆料，不能因经营范围出现“半导体材料”或后来布局空白掩膜版，就把既有收入改写为半导体收入。2025年正面银浆收入144.2219亿元，约占总收入145.9270亿元的98.83%；电子专用材料行业收入145.1504亿元同样是包含光伏浆料的宽口径，并非半导体材料收入。年报虽讨论空白掩膜版国产替代，但未披露其2025年形成可识别规模收入，属于新业务培育和潜在用途边界，不能与成熟主业等量齐观。因此本次摘除旧“半导体材料”标签，不保留任何半导体概念。"
-  }
+  },
+  "category1": "半导体",
+  "concept1": "光刻机",
+  "category": "半导体",
+  "concept": "光刻机"
  },
  "688505": {
   "business_summary": "主营医药制造业",
@@ -102474,17 +102764,23 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
-  "concept": "电解液",
+  "category": "电池|半导体",
+  "concept": "电解液|光刻机",
   "name": "瑞联新材",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "边缘",
   "concept_reason": {
    "电解液": "瑞联新材：显示材料/医药为主，锂电添加剂占比低"
-  }
+  },
+  "category1": "电池",
+  "concept1": "电解液",
+  "category2": "半导体",
+  "concept2": "光刻机",
+  "role": "中军",
+  "role_reason": "光刻胶单体与OLED前端材料，单体环节核心供应商"
  },
  "688551": {
   "business_summary": "测试电源、氢能、功率半导体三大业务板块。",
@@ -102981,13 +103277,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "杭华股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688573": {
   "business_summary": "主营专用设备制造业",
@@ -103537,17 +103835,21 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
-  "concept": "电解液",
+  "category": "电池|半导体",
+  "concept": "电解液|光刻机",
   "name": "康鹏科技",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_verdict": "相关",
   "concept_reason": {
    "电解液": "康鹏科技：含氟精细化学品，锂电电解液添加剂"
-  }
+  },
+  "category1": "电池",
+  "concept1": "电解液",
+  "category2": "半导体",
+  "concept2": "光刻机"
  },
  "688603": {
   "business_summary": "国内领先的PCB专用功能性湿电子化学品供应商，沉铜电镀专用化学品国内市占率领先",
@@ -104890,13 +105192,15 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "聚石化学",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688670": {
   "business_summary": "主营医药制造业",
@@ -105764,14 +106068,12 @@
   "primary_source": "legacy",
   "sector": "半导体/国家大基金持股/存储芯片/中芯国际概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "PCB化学品-电镀与湿制程": "公司真实产品为电镀液、配套试剂、光刻胶及配套材料，年报披露电镀液产品矩阵覆盖传统封装、先进封装、晶圆制造，也包括玻璃基板、IC载板和HDI应用，因此存在真实PCB及类载板湿制程关联，不能因公司名称含半导体就完全摘除。iFinD二〇二五年半导体行业收入五点四八亿元，占营业收入百分之九十二点四三，其他行业仅百分之四点四二，其他业务百分之三略强；电镀液及配套试剂二点八八亿元还混合封装、晶圆和HDI等下游，PCB收入没有单独披露。基于真实应用但低占比且无法拆分，由旧核心下调为相关。旧泛“电子化学品”现收窄为PCB化学品-电镀与湿制程，并排除半导体主业收入。"
   },
-  "category1": "PCB",
-  "concept1": "PCB化学品-电镀与湿制程",
   "concept_desc": {
    "PCB化学品-电镀与湿制程": "PCB电镀、沉铜、蚀刻、显影和湿制程专用化学品。"
   },
@@ -105802,7 +106104,13 @@
    ],
    "verdict": "相关",
    "reason": "公司真实产品为电镀液、配套试剂、光刻胶及配套材料，年报披露电镀液产品矩阵覆盖传统封装、先进封装、晶圆制造，也包括玻璃基板、IC载板和HDI应用，因此存在真实PCB及类载板湿制程关联，不能因公司名称含半导体就完全摘除。iFinD二〇二五年半导体行业收入五点四八亿元，占营业收入百分之九十二点四三，其他行业仅百分之四点四二，其他业务百分之三略强；电镀液及配套试剂二点八八亿元还混合封装、晶圆和HDI等下游，PCB收入没有单独披露。基于真实应用但低占比且无法拆分，由旧核心下调为相关。旧泛“电子化学品”现收窄为PCB化学品-电镀与湿制程，并排除半导体主业收入。"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "PCB化学品-电镀与湿制程",
+  "category2": "半导体",
+  "concept2": "光刻机",
+  "category": "PCB|半导体",
+  "concept": "PCB化学品-电镀与湿制程|光刻机"
  },
  "688721": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -105896,13 +106204,15 @@
   "business_summary": "主营半导体",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "恒坤新材",
   "primary_source": "legacy",
   "sector": "半导体/科创次新股/存储芯片/光刻胶",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688728": {
   "business_summary": "主营半导体",
@@ -106077,13 +106387,15 @@
   "business_summary": "主营半导体第三方检测分析，在失效分析及材料分析领域国内市占率居前",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "name": "胜科纳米",
   "primary_source": "legacy",
   "sector": "专业服务/先进封装/存储芯片/共封装光学(CPO)",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "688758": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -108024,12 +108336,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "sector": "其他化学制品/基础化工/化学制品/浙江板块/光刻胶/专精特新/有机硅概念/半导体概念/央国企改革/融资融券",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "920016": {
   "name": "中草香料",
@@ -108798,12 +109112,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "sector": "其他通用设备/机械设备/通用设备/江苏板块/光刻胶/动力电池回收/钠离子电池/固态电池/MLCC/氟化工概念/石墨烯/融资融券/光伏概念/锂电池概念/次新股",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "920118": {
   "name": "太湖远大",
@@ -109364,12 +109680,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "光刻机",
   "sector": "电池化学品/电力设备/电池/湖北板块/光刻胶/2026中报预增/新能源车/国产芯片/PCB/融资融券/光伏概念/锂电池概念/新材料/次新股",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-11-17 18:57:11",
+  "category1": "半导体",
+  "concept1": "光刻机"
  },
  "920195": {
   "name": "三祥科技",
@@ -110968,17 +111286,21 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "汽车",
-  "concept": "零部件",
+  "category": "汽车|半导体",
+  "concept": "零部件|光刻胶",
   "sector": "汽车零部件/汽车/车身附件及饰件/浙江板块/人形机器人/低空经济/飞行汽车(eVTOL)/小米汽车/机器人概念/IGBT概念/专精特新/华为汽车/半导体概念/国产芯片/特斯拉概念/融资融券/军工",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-17 18:57:11",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "零部件": "主营：精密零部件的研发、生产及销售；与本标签一致"
-  }
+  },
+  "category1": "汽车",
+  "concept1": "零部件",
+  "category2": "半导体",
+  "concept2": "光刻胶"
  },
  "920693": {
   "name": "阿为特",
@@ -112620,5 +112942,5 @@
   "concept1": "零部件",
   "updated_at": "2026-11-08 17:21:26"
  },
- "updated_at": "2026-11-17 16:32:30"
+ "updated_at": "2026-11-18 15:06:32"
 }
