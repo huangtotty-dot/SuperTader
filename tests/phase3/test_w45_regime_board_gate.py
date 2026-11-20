@@ -184,17 +184,19 @@ class TestRealCacheFormingReplay(unittest.TestCase):
         # daily_repair / 通达信校准重写时会漂移（不是生产缺陷，是数据内容变了）。
         # regime/score/effective_date 仍钉死 —— 它们从同一份输入算出，若这三者也变才是真坏。
         # 哈希漂移时按本文件 docstring 的方式重跑 `build_real_cache_forming_replay` 重基线即可。
-        # 2026-11-17 重基线：daily_repair / 通达信校准重写了历史行 ⇒ input_version 漂移
+        # 2026-11-20 第三次重基线：**运行中的 GUI/main 会重写指数日线缓存**（end_date=None 的
+        #   取数会落盘、GM 掉线时东财兜底也会落盘）⇒ 这条哈希会随进程活动漂移。regime/score/
+        #   effective_date 三个真判据始终未变（本次也一致），只是输入 CSV 被重写。
         # （regime/score/effective_date 未变，按测试头注释的口径重跑 builder 更新哈希即可）。
         expected = {
             ("2026-11-05", "morning"): ("uni_up", -7.643999999999998, "2026-11-04",
-                                        "f79a2606f5facb64c733a3ddc90cace47509ce7d5d8a2193058bad2d4505f1a1"),
+                                        "a23485685f0fc3df03bad6fa4eca7fbcc1627951ebecf60a6b4bb477c877db86"),
             ("2026-11-05", "eod"): ("uni_up", 25.515272727272727, "2026-11-05",
-                                    "f79a2606f5facb64c733a3ddc90cace47509ce7d5d8a2193058bad2d4505f1a1"),
+                                    "a23485685f0fc3df03bad6fa4eca7fbcc1627951ebecf60a6b4bb477c877db86"),
             ("2026-11-06", "morning"): ("uni_up", 25.515272727272727, "2026-11-05",
-                                        "939f54ca6e880bc948b7a34d4cec9330be5a2aa78d23726bfb7283258074cf76"),
+                                        "08d263acf9600185db3646027735a26dced58c36a38213d5ced49d6279604b33"),
             ("2026-11-06", "eod"): ("uni_down", -7.643999999999998, "2026-11-06",
-                                    "939f54ca6e880bc948b7a34d4cec9330be5a2aa78d23726bfb7283258074cf76"),
+                                    "08d263acf9600185db3646027735a26dced58c36a38213d5ced49d6279604b33"),
         }
         for (day, mode), (regime, score, effective, version) in expected.items():
             with self.subTest(day=day, mode=mode):
