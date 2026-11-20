@@ -1,57 +1,6 @@
 {
-  "updated_at": "2026-11-18 14:50:01",
-  "open": {
-    "600629": {
-      "entry_date": "2026-11-13",
-      "entry_price": 15.5477,
-      "qty": 6400,
-      "dev20": -0.043571,
-      "gap": 0.05050505050505061,
-      "board": "地产",
-      "days_held": 3,
-      "last_check_date": "2026-11-18",
-      "days_held_calendar_fixed": {
-        "from": 2,
-        "to": 3,
-        "date": "2026-11-18"
-      }
-    },
-    "688708": {
-      "entry_date": "2026-11-13",
-      "entry_price": 36.7948,
-      "qty": 2500,
-      "dev20": -0.009589,
-      "gap": 0.037151702786377694,
-      "board": "军工",
-      "days_held": 3,
-      "last_check_date": "2026-11-18",
-      "days_held_calendar_fixed": {
-        "from": 2,
-        "to": 3,
-        "date": "2026-11-18"
-      }
-    },
-    "001219": {
-      "entry_date": "2026-11-18",
-      "entry_price": 17.6552,
-      "qty": 5600,
-      "dev20": -0.120058,
-      "gap": 0.04807121661721059,
-      "board": "大消费",
-      "days_held": 0,
-      "last_check_date": null
-    },
-    "688195": {
-      "entry_date": "2026-11-18",
-      "entry_price": 88.5,
-      "qty": 900,
-      "dev20": -0.20578,
-      "gap": 0.04752334791346491,
-      "board": "半导体",
-      "days_held": 0,
-      "last_check_date": null
-    }
-  },
+  "updated_at": "2026-11-20 14:50:06",
+  "open": {},
   "closed": {
     "301373": {
       "entry_date": "2026-10-14",
@@ -656,6 +605,96 @@
       "exit_qty": 8200,
       "exit_reason": "horizon_expired",
       "exit_fee": 88.2065846257807,
+      "closed_by": "fill_event"
+    },
+    "688195": {
+      "entry_date": "2026-11-18",
+      "entry_price": 88.5,
+      "qty": 900,
+      "dev20": -0.20578,
+      "gap": 0.04752334791346491,
+      "board": "半导体",
+      "days_held": 0,
+      "last_check_date": null,
+      "exit_date": "2026-11-19",
+      "exit_price": 88.87511138916015,
+      "exit_qty": 900,
+      "exit_reason": "pop_sell",
+      "exit_fee": 96.78499764071228,
+      "closed_by": "fill_event"
+    },
+    "001219": {
+      "entry_date": "2026-11-18",
+      "entry_price": 17.6552,
+      "qty": 5600,
+      "dev20": -0.120058,
+      "gap": 0.04807121661721059,
+      "board": "大消费",
+      "days_held": 0,
+      "last_check_date": null,
+      "exit_date": "2026-11-19",
+      "exit_price": 18.510000228881836,
+      "exit_qty": 5600,
+      "exit_reason": "pop_sell",
+      "exit_fee": 125.42376328471096,
+      "closed_by": "fill_event"
+    },
+    "002119": {
+      "entry_date": "2026-11-19",
+      "entry_price": 18.9,
+      "qty": 200,
+      "dev20": -0.027917,
+      "gap": 0.02217414818820984,
+      "board": "半导体",
+      "days_held": 0,
+      "last_check_date": null,
+      "exit_date": "2026-11-20",
+      "exit_price": 19.25,
+      "exit_qty": 200,
+      "exit_reason": "pop_sell",
+      "exit_fee": 5.0,
+      "closed_by": "fill_event"
+    },
+    "688708": {
+      "entry_date": "2026-11-13",
+      "entry_price": 36.7948,
+      "qty": 2500,
+      "dev20": -0.009589,
+      "gap": 0.037151702786377694,
+      "board": "军工",
+      "days_held": 5,
+      "last_check_date": "2026-11-20",
+      "days_held_calendar_fixed": {
+        "from": 4,
+        "to": 5,
+        "date": "2026-11-20"
+      },
+      "exit_date": "2026-11-20",
+      "exit_price": 29.883383862304687,
+      "exit_qty": 2500,
+      "exit_reason": "horizon_expired",
+      "exit_fee": 90.39723743308673,
+      "closed_by": "fill_event"
+    },
+    "600629": {
+      "entry_date": "2026-11-13",
+      "entry_price": 15.5477,
+      "qty": 6400,
+      "dev20": -0.043571,
+      "gap": 0.05050505050505061,
+      "board": "地产",
+      "days_held": 5,
+      "last_check_date": "2026-11-20",
+      "days_held_calendar_fixed": {
+        "from": 4,
+        "to": 5,
+        "date": "2026-11-20"
+      },
+      "exit_date": "2026-11-20",
+      "exit_price": 12.78609362244606,
+      "exit_qty": 6400,
+      "exit_reason": "horizon_expired",
+      "exit_fee": 99.01551038097287,
       "closed_by": "fill_event"
     }
   },
