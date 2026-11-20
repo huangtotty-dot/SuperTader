@@ -515,7 +515,13 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
     if hb is None:
         notes.append(f"无heartbeat_{date}.jsonl(仿真口径主数据源缺失)→equity/account_ret/alpha置null,不硬算")
     else:
-        positions = hb.get("positions") or {}
+        _raw_pos = hb.get("positions", None)
+        # 2026-11-20 修复：区分「positions 字段缺失」（数据源故障→置null）与
+        # 「positions={}」（全仓现金的合法空仓态→市值=0，equity=cash 正常计算）。
+        # 旧实现用 `or {}` 把两种情况混在一起，全平仓日（如 2026-11-20 两票到期+pop 清空）
+        # 会被误判为数据缺失，α/β 当日开天窗。
+        pos_field_missing = _raw_pos is None
+        positions = _raw_pos or {}
         raw_cash = hb.get("cash")
         cash = float(raw_cash) if isinstance(raw_cash, (int, float)) else None
         # 收盘后拒单/撤单解冻回补（细节见 _reject_unfreeze_cash docstring）：
@@ -532,8 +538,11 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
         _overlay, _ev_name = _apply_fill_overlay(date, positions)
         if _overlay:
             notes.append(f"fill回报覆盖heartbeat台账({_ev_name}):{','.join(_overlay)}")
-        if not positions:
-            notes.append("heartbeat末行positions为空→equity/account_ret/alpha置null,杜绝现金流静默错误")
+        if pos_field_missing:
+            notes.append("heartbeat末行无positions字段(数据源故障)→equity/account_ret/alpha置null,杜绝现金流静默错误")
+        elif not positions:
+            market_value = 0.0
+            notes.append("positions={}→合法空仓态(全仓现金)，市值=0，equity=cash")
         else:
             mv, n, missing, via_n = 0.0, 0, [], {}
             hb_codes = set()
