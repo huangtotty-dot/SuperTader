@@ -556,6 +556,23 @@ class MarketDataFacade:
             except Exception as e:
                 self._note_gm_down("index_daily", index, e)
         df = self._tx.index_daily(index, days, end_date)
+        if df is None or df.empty:
+            # 2026-11-18：腾讯 fqkline（ifzq / web.ifzq 两主机）被 WAF 统一回 501，而 GM 终端
+            # 会间歇性 1001 掉线 ⇒ 两个源同时不可得（实报「成交量图：指数日线不可得(sh000001)」、
+            # K 线当日 forming 根也失效）。东财 push2his 指数日线仍可用且**带真实成交额**。
+            try:
+                from .em_index import index_daily_em
+                _em = index_daily_em(index, days, end_date)
+                if _em is not None and not _em.empty:
+                    if end_date is None:
+                        try:
+                            from .tencent_provider import save_index_daily_cache
+                            save_index_daily_cache(index, _em)
+                        except Exception:
+                            pass
+                    return self._mark(_em, "eastmoney")
+            except Exception:
+                pass
         return self._mark(df, df.attrs.get("source", "tencent"))
 
     def _pre_close_of(self, symbol: str, today: str):
