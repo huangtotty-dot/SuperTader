@@ -111,40 +111,40 @@ class TestChartMA5Style(unittest.TestCase):
     def test_ma5_still_rendered_as_normal_ma(self):
         # 均线本身还在（别把整条 MA5 也删了）
         self.assertIn("const maSeries = period.ma.map((maArr, i) => {", _JS)
-        # 2026-11：加第 7 条 MA365 年线（_isYear）后颜色/线型改三元，MA5 仍走 1px 细线分支
-        self.assertIn("const _color = _isYear ? MA365_COLOR : MA_COLORS[i];", _JS)
+        # 2026-11-20：233=年线（青色虚线）、610=长线（金色点线），其余走 MA_COLORS 的 1px 细线
+        self.assertIn("const _isYear = MA_PERIODS[i] === 233;", _JS)
+        self.assertIn("const _isLong = MA_PERIODS[i] === 610;", _JS)
+        self.assertIn("const _color = _isYear ? MA365_COLOR : (_isLong ? MA_LONG_COLOR : MA_COLORS[i]);", _JS)
         self.assertIn("{ width: 1, color: _color }", _JS)
 
     def test_legend_color_matches_line(self):
         self.assertIn("itemStyle: { color: _color }", _JS)
 
     def test_period_vars_declared_before_use(self):
-        """防 TDZ：`_isIntradayPeriod` 必须先于 `dailyMa5Line` 声明
+        """防 TDZ：`_isIntradayPeriod` 必须先于日线均线块声明
         （2026-10-20 实盘报错 Cannot access '_isIntradayPeriod' before initialization）。"""
         body = _JS.split("function renderStockChart(", 1)[1]
         body = body.split("\nfunction ", 1)[0]
         self.assertLess(body.index("const _isIntradayPeriod"),
-                        body.index("const dailyMa5Line"),
-                        "_isIntradayPeriod 必须声明在 dailyMa5Line 之前")
+                        body.index("const _DMA_DEFS"),
+                        "_isIntradayPeriod 必须声明在日线均线(_DMA_DEFS)之前")
 
     def test_intraday_daily_ma5_reference_line(self):
         """分钟图额外画「日线MA5」蓝虚线，避免把 5 根 10min 的 MA5 误当 5 日线。"""
         self.assertIn("const _isIntradayPeriod", _JS)
-        self.assertIn("const dailyMa5Line", _JS)
-        self.assertIn("日线MA5 ${fmt(_dma5, 2)}", _JS)
+        self.assertIn("const dailyMaLines", _JS)
+        self.assertIn("日线MA${o.p}", _JS)          # 标签由 _DMA_DEFS 的斐波那契周期生成
         self.assertIn('color: "#58a6ff"', _JS)
-        self.assertIn("...(dailyMa5Line ? [dailyMa5Line] : [])", _JS)
+        self.assertIn("...dailyMaLines,", _JS)
         # 金线撤销后，口径说明改成直接讲 MA5 的根数含义（不再有"金线"前缀）
         self.assertIn("MA5(${_pcnHint})=5 根该周期K", _JS)
         self.assertNotIn("金线=MA5", _JS)
 
-    def test_intraday_daily_ma10_reference_line(self):
-        """2026-10-20 owner：「10分钟周期内也显示10日均线」——紫色虚线参考线。"""
-        self.assertIn("const dailyMa10Line", _JS)
-        self.assertIn("日线MA10 ${fmt(_dma10, 2)}", _JS)
-        self.assertIn('color: "#bc8cff"', _JS)
-        self.assertIn("...(dailyMa10Line ? [dailyMa10Line] : [])", _JS)
-        self.assertIn("紫虚线=日线MA10", _JS)
+    def test_intraday_daily_ma13_reference_line(self):
+        """2026-11-20 owner：日线均线改斐波那契 —— 紫虚线 = 日线MA13（原 MA10）。"""
+        self.assertIn("const dailyMaLines", _JS)
+        self.assertIn('{ i: 1, p: 13, color: "#bc8cff"', _JS)
+        self.assertIn("紫虚线=日线MA13", _JS)
 
 
 if __name__ == "__main__":

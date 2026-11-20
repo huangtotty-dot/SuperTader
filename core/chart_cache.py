@@ -334,7 +334,9 @@ def save_payload(code, payload, daily_rows) -> bool:
             # schema<3 的旧档里 688 的分钟量能大 100 倍，必须重建一次。
             # 4 = min5/min10 分钟档已加深到近 3 个月（约 3200/1600 根，见 gui.MIN_BARS_CHART）；
             # schema<4 的旧档 5/10 分只有 320 根 ⇒ 切到这两个 Tab 时按需重建一次。
-            "schema": 4,
+            # 5（2026-11-20）= 均线改斐波那契 5/13/21/34/55/89/233/610（原 5/10/20/30/60/180/365）
+            # ⇒ schema<5 的旧档 ma 数组只有 7 条且是旧周期，必须重建一次。
+            "schema": 5,
             "version": payload.get("version"),
             "last_daily_date": last_row_date(daily_rows),
             # 2026-10-25：当天**未收盘**时落的 payload 记为 provisional，

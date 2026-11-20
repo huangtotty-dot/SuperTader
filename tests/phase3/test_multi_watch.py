@@ -150,11 +150,11 @@ class TestWebViewNoThrottle:
             assert flag in py, flag
 
 
-class TestDma30_60:
-    """2026-11-05 owner：「多窗口里如果上方有 30 日线/60 日线也要显示，前提是离得很近，
-    不要影响现在的显示比例」。"""
+class TestDmaFib:
+    """2026-11-20 owner：多窗口的日线均线改斐波那契 5/13/21/34/55（原 5/10/20/30/60）。
+    「离得近才画」的规则沿用（2026-11-05）。"""
 
-    def test_后端均线包包含30和60(self, monkeypatch):
+    def test_后端均线包包含斐波那契(self, monkeypatch):
         import pandas as pd
         import core.chart_cache as cc
         api = gui.Api.__new__(gui.Api)
@@ -163,16 +163,16 @@ class TestDma30_60:
         df = pd.DataFrame({"date": dates, "close": [10.0 + i * 0.01 for i in range(100)]})
         monkeypatch.setattr(cc, "load_daily_display", lambda c: df)
         d = api._daily_ma_bundle("600000", 11.0)
-        for k in ("ma5", "ma10", "ma20", "ma30", "ma60"):
+        for k in ("ma5", "ma13", "ma21", "ma34", "ma55"):
             assert k in d, k
         # 口径 = (前 n-1 个完成日收盘 + 现价)/n
         basis = [10.0 + i * 0.01 for i in range(100)]
-        assert d["ma30"] == pytest.approx(round((sum(basis[-29:]) + 11.0) / 30, 3))
+        assert d["ma34"] == pytest.approx(round((sum(basis[-33:]) + 11.0) / 34, 3))
 
     def test_前端只在价格区间内画(self):
-        assert '"ma30"' in _JS and '"ma60"' in _JS
+        assert '"ma34"' in _JS and '"ma55"' in _JS
         assert "dma[d.key]" in _JS, "五条日线按 key 统一取"
-        assert "_near(d.y)" in _JS, "MA30/60 只在可见价格区间内才画"
+        assert "_near(d.y)" in _JS, "MA34/55 只在可见价格区间内才画"
         assert "y >= _lo * 0.995 && y <= _hi * 1.005" in _JS
         # 右列标签（与左侧 MA5/10/20 分开，贴近时不叠）
         assert 'pos: "insideEndTop"' in _JS and 'pos: "insideEndBottom"' in _JS
@@ -264,7 +264,7 @@ class TestFrontend:
         # （2026-11-02：密集成交区改成右侧直方图 custom series，不再进 markArea）
         assert "markArea: (gaps.length || _mwBoxes2.length)" in _JS
         # 日线均线三条（颜色与单图的「日线MA5/10/20」一致）
-        assert '"日MA5"' in _JS and '"日MA10"' in _JS and '"日MA20"' in _JS
+        assert '"日MA5"' in _JS and '"日MA13"' in _JS and '"日MA21"' in _JS
         assert "markLine: (_lines.length || _vpLine || _ma5Line)" in _JS
         assert '"#58a6ff"' in _JS and '"#bc8cff"' in _JS and '"#2dd4bf"' in _JS
 
@@ -294,7 +294,8 @@ class TestLightweightFrame:
         根因：六宫格原复用**单图实时尾**，而单图现在建在「3 个月深档」（近 3000 根）上，
         实测 ~1s/只；6 只并发全卡在 GIL 上 ⇒ 一帧几十秒，等于不动。
         现在改走 `_mw_frame`：只取 m5 尾 120 根 + MA5 + 成交额，
-        **不碰** MACD/RSI/BOLL/黄金分割（细胞只有 1/6 屏宽，用不着）。
+        **不碰** BOLL/黄金分割（细胞只有 1/6 屏宽，用不着）。
+        （2026-10-21 起帧内另带 MACD；2026-11-20 起再带 RSI 6/12/24。）
         """
         import inspect
         src = inspect.getsource(gui.Api._mw_compute)
@@ -395,9 +396,9 @@ class TestCrosshair:
 
     def test_crosshair_and_linked_grids(self):
         assert 'axisPointer: { type: "cross"' in _JS
-        # 同一格的三窗共享竖线（K线/成交额/MACD 对齐）；
-        # 2026-11-02：显式列 0/1/2 —— 隐藏轴 3 是密集区直方图专用，不参与联动
-        assert "axisPointer: { link: [{ xAxisIndex: [0, 1, 2] }]" in _JS
+        # 同一格的四个真实子图共享竖线（K线/成交额/MACD/RSI 对齐）；
+        # 2026-11-20：显式列 0/1/2/3 —— 隐藏轴 4 是密集区直方图专用，不参与联动
+        assert "axisPointer: { link: [{ xAxisIndex: [0, 1, 2, 3] }]" in _JS
 
     def test_tooltip_shows_bar_details(self):
         assert 'trigger: "axis"' in _JS
@@ -525,13 +526,15 @@ class TestVolumePaneLegibility:
 
     def _grid(self):
         i = _JS.index("grid: [{ left: 40, right: _mwVpRight, top: 3, height:")
-        return _JS[i:i + 260]
+        return _JS[i:i + 420]
 
     def test_成交额窗变高主图仍占大头(self):
+        """2026-11-20 起四窗（K/量/MACD/RSI）：40% / 16% / 13% / 14%。"""
         g = self._grid()
-        assert 'height: "44%"' in g
-        assert 'top: "49%", height: "20%"' in g
-        assert 'top: "71%", height: "18%"' in g
+        assert 'height: "40%"' in g
+        assert 'top: "45%", height: "16%"' in g
+        assert 'top: "63%", height: "13%"' in g
+        assert 'top: "78%", height: "14%"' in g
 
     def test_y轴显示最大刻度且按单位格式化(self):
         i = _JS.index("scale: false, gridIndex: 1, splitNumber: 1")
@@ -549,7 +552,7 @@ class TestVolumePaneLegibility:
     def test_最新一根读数角标(self):
         assert 'text: `${amtYi ? "额" : "量"}' in _JS
         i = _JS.index("graphic: (() => {")
-        assert 'top: "49.4%"' in _JS[i:i + 700]
+        assert 'top: "45.4%"' in _JS[i:i + 700]
 
 
 class TestLayout2x2:
@@ -650,4 +653,61 @@ class TestDailyMaFallback:
         monkeypatch.setattr(cc, "load_daily_display", lambda c: None)   # 模拟 display 闸返回 None
         monkeypatch.setattr(gui, "_daily_rows_before_today", lambda c: rows)
         d = api._daily_ma_bundle("600584")
-        assert d and d["ma5"] > 0 and d["ma60"] > 0
+        assert d and d["ma5"] > 0 and d["ma55"] > 0
+
+
+class TestMwRsi:
+    """2026-11-20 owner：「多窗口看盘中提供 RSI，分别 6/12/24」。"""
+
+    def test_frame_carries_rsi_6_12_24(self, monkeypatch):
+        import pandas as pd
+        n = 340
+        import math as _m
+        base = [10.0 + 0.3 * _m.sin(i / 3.0) + i * 0.002 for i in range(n)]
+        df = pd.DataFrame({
+            "time": pd.date_range("2026-11-01 09:30", periods=n, freq="5min").astype(str),
+            "open": base, "high": [x + 0.05 for x in base],
+            "low": [x - 0.05 for x in base], "close": base,
+            "volume": [1000.0] * n,
+        })
+        api = gui.Api.__new__(gui.Api)
+        monkeypatch.setattr(gui, "_fetch_min_bars_tencent", lambda c, f: df)
+        monkeypatch.setattr(gui.Api, "_fetch_live_quote", lambda self, c: {})
+        fr = api._mw_compute("600000", "min5")
+        assert fr, "帧不该为空"
+        assert set(fr.get("rsi") or {}) == {"rsi6", "rsi12", "rsi24"}
+        assert len(fr["rsi"]["rsi24"]) == len(fr["dates"]) <= 120
+        vals = [x for x in fr["rsi"]["rsi6"] if x is not None]
+        assert vals and all(0 <= x <= 100 for x in vals), "RSI 必须在 0~100"
+
+    def test_load_multi_chart_forwards_mas_and_rsi(self, monkeypatch):
+        """2026-11-20 实报「多窗口没有 RSI」：`load_multi_chart` 拼 series 时是**白名单**，
+        新加的 mas/rsi 被漏拷 ⇒ 前端永远收不到。这里钉住转发。"""
+        api = gui.Api()
+        fr = _frame(120)
+        fr["sig"] = "d119|2.000|120"
+        fr["mas"] = [[float(j)] * 120 for j in range(5)]
+        fr["rsi"] = {"rsi6": [50.0] * 120, "rsi12": [55.0] * 120, "rsi24": [60.0] * 120}
+        monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (fr, "fresh"))
+        monkeypatch.setattr(api, "_daily_ma_bundle", lambda c, price=None: None)
+        monkeypatch.setattr(api, "_daily_levels", lambda c: None)
+        monkeypatch.setattr(api, "_mw_trades", lambda c, dates: [])
+        monkeypatch.setattr(api, "_instrument_name", lambda c: c)
+        r = api.load_multi_chart(["600000"], "min5", 90, {})
+        ser = r["items"][0]["series"]
+        assert len(ser.get("mas") or []) == 5, "本周期均线 mas 必须转发"
+        assert set(ser.get("rsi") or {}) == {"rsi6", "rsi12", "rsi24"}, "RSI 必须转发"
+        assert len(ser["rsi"]["rsi24"]) == 90, "按 tail=90 截齐"
+
+    def test_tooltip_shows_rsi_values(self):
+        """2026-11-20 owner：「悬停明细（红框）里要显示具体 RSI 值」——6/12/24 三条。"""
+        assert 'RSI6 ${r6 ?? "—"}' in _JS
+        assert "RSI12 ${r12" in _JS and "RSI24 ${r24" in _JS
+        i = _JS.index("const r6 = _rv(\"rsi6\")")
+        assert i > 0, "tooltip 里要取 rsi6/12/24"
+
+    def test_frontend_draws_three_rsi_lines_and_grid4(self):
+        assert 'name: "RSI6"' in _JS and 'name: "RSI12"' in _JS and 'name: "RSI24"' in _JS
+        assert "data: s.rsi.rsi6" in _JS and "data: s.rsi.rsi24" in _JS
+        assert 'top: "78%", height: "14%"' in _JS, "底窗 = RSI（第 4 格）"
+        assert "{ yAxis: 30," in _JS and "{ yAxis: 70," in _JS, "30/70 参考虚线"

@@ -33,7 +33,7 @@ class TestPayloadPartialBar(unittest.TestCase):
         self._tmp.cleanup()
 
     def _write(self, code, payload_rows, cache_rows, saved_at, provisional=False):
-        rec = {"date": saved_at[:10], "saved_at": saved_at, "schema": 4, "version": 1,
+        rec = {"date": saved_at[:10], "saved_at": saved_at, "schema": 5, "version": 1,
                "last_daily_date": payload_rows[-1]["date"], "provisional": provisional,
                "payload": {"available": True}, "daily_rows": payload_rows}
         (cc._PAYLOAD_DIR / f"{code}.json").write_text(json.dumps(rec), encoding="utf-8")

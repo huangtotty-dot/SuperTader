@@ -3592,6 +3592,19 @@ function _sentMetaHtml(d) {
     ? ` · <span style="color:${SENT_BANDS[2].color}">弱势→强势</span> 历史 <b>${tr.n}</b> 次，`
       + `中位 <b>${tr.median}</b> 个交易日（均值 ${tr.mean}，最长 ${tr.max}）`
     : "";
+  // 2026-11-19 owner：斜率陡 → 持续不长？有依据就显示出来（研究见 doc/solutions/2026-11-19_情绪温度斜率判词.md）
+  const sl = s.slope || {};
+  const slText = (sl.cur == null) ? "" :
+    ` · 5日斜率 <b style="color:${sl.cur >= 0 ? MA365_UP : MA365_DOWN}">${sl.cur >= 0 ? "+" : ""}${sl.cur}</b>/日`
+    + (sl.cur_pct != null ? `<span class="cell-dim">（历史 P${Math.round(sl.cur_pct * 100)}）</span>` : "")
+    + (sl.threshold != null
+      ? `<span class="cell-dim">（陡峭阈值 +${sl.threshold}/日：历史 ${sl.episodes} 段，<b>中位只持续 ${sl.median_len} 天</b>，`
+        + `段末后 5 日温度均值 ${sl.fwd5_temp_mean}、${Math.round((sl.fwd5_fall_ratio || 0) * 100)}% 回落 —— `
+        + `<b>只是温度自身的寿命，指数同期并不跌，不是买卖点</b>）</span>`
+      : "");
+  const rangeText = d.start && d.end
+    ? ` · 区间 <b>${esc(d.start)} → ${esc(d.end)}</b>（${(d.series || []).length} 个交易日，底部滑条可缩放/拖动）`
+    : "";
   return `<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">
       <span style="font-size:26px;font-weight:700;line-height:1;color:${b.color}">${big}</span>
       <span style="font-size:13px;font-weight:600;color:${b.color}">${b.name}</span>
@@ -3608,7 +3621,7 @@ function _sentMetaHtml(d) {
       跌停 <b style="color:${MA365_DOWN}">${l.dt ?? "—"}</b> 家 ·
       炸板率 <b>${l.zb_rate ?? "—"}%</b>（60日分位 ${_pct(s.zb_rate_p60)}）·
       5日均涨停 ${s.zt_ma5 ?? "—"} · 口径：同花顺涨停池，每天 14:30 尾盘快照
-      ${trText}
+      ${trText}${slText}${rangeText}
     </div>`;
 }
 
@@ -3645,6 +3658,31 @@ function renderMarketSentiment(d) {
     const w = zt.slice(Math.max(0, i - 4), i + 1).filter(x => x != null);
     return w.length ? +(w.reduce((a, b) => a + b, 0) / w.length).toFixed(1) : null;
   });
+  /* 5 日斜率（2026-11-19 owner：「斜率陡，持续时间不长？有依据就显示出来」）：
+     后端 `series[i].slope5` = (sent_ma[t]−sent_ma[t−5])/5（点/日），阈值/寿命统计在
+     `d.stats.slope`。这里只做两件事：①把「陡峭上行段的起点」标成橙色菱形；
+     ②悬浮给该段的历史寿命统计。研究结论见 doc/solutions/2026-11-19_情绪温度斜率判词.md：
+     段长中位 3 天、段末 5 日温度均值 −9.9（74% 回落），但**指数未来 5 日 +0.67%/胜率 59%**
+     ⇒ 不是买卖信号，只回答"这波温度还剩几天"。 */
+  const slopes = series.map(x => (x.slope5 === undefined ? null : x.slope5));
+  const sInfo = (d.stats || {}).slope || {};
+  const steepTh = (sInfo.threshold != null) ? Number(sInfo.threshold) : null;
+  const steepPts = [];
+  if (steepTh != null) {
+    for (let i = 0; i < series.length; i++) {
+      const sl = slopes[i];
+      if (sl == null || sl < steepTh || sent[i] == null) continue;
+      if (i > 0 && slopes[i - 1] != null && slopes[i - 1] >= steepTh) continue;   // 只标起点
+      // ⚠️ x 用**索引**而不是 "MM-DD" 字符串：全部区间的 x 类目跨 3 年、MM-DD 会重复，
+      // 用字符串会被 ECharts 映射到最早那次同一天（点画到 2023 年去）。
+      steepPts.push([i, sent[i], sl]);
+    }
+  }
+  const steepTip = steepTh == null ? "" :
+    `陡峭上行起点：5日斜率 ≥ +${steepTh}/日（P80）`
+    + `<br>历史 ${sInfo.episodes} 段，中位只持续 ${sInfo.median_len} 天（最长 ${sInfo.max_len}）`
+    + `<br>段末后 5 日温度均值 ${sInfo.fwd5_temp_mean}，${Math.round((sInfo.fwd5_fall_ratio || 0) * 100)}% 回落`
+    + `<br><span style="color:#8b949e">只是温度自身寿命，不是买卖信号</span>`;
   /* 「弱势区 → 强势区」跨越（2026-11-13 owner：「跨越的时间标注出来」）：
      后端按**交易日**算（最后一天弱势 → 首次进入强势，中途回落到弱势就重新计时），
      这里只取落在当前区间里的那几次，打点 + 标 "N日"。区间太长（全部 328 天）时
@@ -3673,7 +3711,18 @@ function renderMarketSentiment(d) {
   sentInst.setOption({
     backgroundColor: "transparent",
     animation: false,
-    grid: { left: 44, right: 52, top: 30, bottom: 24 },
+    // 2026-11-19：底部加 dataZoom 滑条（owner 要看 2023 底/2024 全年，804 根挤在一屏读不出来）
+    grid: { left: 44, right: 52, top: 30, bottom: 40 },
+    dataZoom: [
+      { type: "inside", xAxisIndex: 0, filterMode: "none" },
+      { type: "slider", xAxisIndex: 0, height: 12, bottom: 6,
+        borderColor: "#30363d", backgroundColor: "rgba(255,255,255,.03)",
+        fillerColor: "rgba(88,166,255,.16)",
+        handleStyle: { color: "#58a6ff", borderColor: "#58a6ff" },
+        moveHandleStyle: { color: "#58a6ff" },
+        dataBackground: { lineStyle: { color: "#30363d" }, areaStyle: { color: "rgba(139,148,158,.10)" } },
+        textStyle: { color: "#8b949e", fontSize: 9 } },
+    ],
     legend: { top: 0, left: 6, itemGap: 12, itemWidth: 14, itemHeight: 8,
       textStyle: { color: "#8b949e", fontSize: 10 } },
     tooltip: {
@@ -3696,6 +3745,8 @@ function renderMarketSentiment(d) {
           + (_tr ? `<div style="color:${SENT_BANDS[2].color}">▲ 弱势→强势：自 ${esc(_tr.from)} 起跨越 <b>${_tr.days}</b> 个交易日</div>` : "")
           + `涨停 <b style="color:${MA365_UP}">${x.zt}</b> 家 · 跌停 <b style="color:${MA365_DOWN}">${x.dt}</b> 家`
           + ` · 净涨停 <b>${x.net >= 0 ? "+" : ""}${x.net}</b>`
+          + ` · 5日斜率 <b style="color:${(slopes[i] != null && slopes[i] >= (steepTh || 1e9)) ? "#d29922" : "#8b949e"}">`
+          + `${slopes[i] == null ? "—" : (slopes[i] >= 0 ? "+" : "") + slopes[i]}/日</b>`
           + (x.touch != null ? ` · 触板 ${x.touch}` : "")
           + `<br>炸板率 <b>${x.zb_rate != null ? x.zb_rate + "%" : "—"}</b>`
           + (x.seal_rate != null ? ` · 封板率 ${x.seal_rate}%` : "")
@@ -3740,14 +3791,21 @@ function renderMarketSentiment(d) {
         } : undefined },
       /* 今日盘中（未定型）：空心点 + "盘中"，别让它看着像已收盘的一格 */
       { name: "今日盘中", type: "scatter", yAxisIndex: 1, z: 7,
+        // 同上：用**最后一格的索引**而不是日期字符串（全部区间会撞 2023/2024 的同一天）
         data: tail.intraday && tail.sent_ma != null
-          ? [[String(tail.date).slice(5), tail.sent_ma]] : [],
+          ? [[series.length - 1, tail.sent_ma]] : [],
         symbol: "circle", symbolSize: 10,
         itemStyle: { color: "rgba(0,0,0,0)", borderColor: "#d29922", borderWidth: 2 },
         label: { show: true, position: "top", distance: 5, fontSize: 9,
                  fontWeight: "bold", color: "#d29922",
                  formatter: tail.provisional === false ? "收盘" : "盘中" },
         tooltip: { show: false } },
+      /* 陡峭上行段起点（2026-11-19）：橙色菱形，悬停给出该段的历史寿命 */
+      { name: "陡峭上行", type: "scatter", yAxisIndex: 1, z: 6,
+        data: steepPts, symbol: "diamond", symbolSize: 8,
+        itemStyle: { color: "#d29922", borderColor: "#8a6116", borderWidth: 1 },
+        tooltip: { show: true, formatter: () => steepTip },
+        emphasis: { scale: 1.3 } },
     ],
     // 线按区上色：弱势蓝 / 平稳灰 / 强势红（dimension 1 = y 值）
     visualMap: {
@@ -6460,9 +6518,16 @@ function _chartLog(event, detail) {
 // 在深底上发白刺眼。换成按深底重新选的一组（dataviz 校验器 dark 全项通过：
 // 亮度带 / 彩度 / CVD ΔE≥8.4 / 对比度≥3:1）。
 const MA_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9", "#e66767"];
+/* K 线显示的均线周期（2026-11-20 owner：「均线用斐波那契数列 5 13 21 34 55 …」）。
+   顺序 = 后端 `_CHART_MA_PERIODS`（gui.py）与 `_to_series()["ma"]` 的数组顺序。
+   233 = 「年线」（青色虚线，替代原 365）；610 = 长线（金色点线，需 ≥610 根日线才出数）。
+   改这里要同步 gui.py 的常量。 */
+const MA_PERIODS = [5, 13, 21, 34, 55, 89, 233, 610];
+const MA_LONG_COLOR = "#ffcc66";   // 610 长线（金色点线）：与涨跌语义无关，且和 233 青色区分
 // 2026-10-25 owner：「365 均线换一个颜色和其他均线区分开」。
 // 原 MA365 用的是 #e66767（红），与 A 股「涨=红」和蜡烛涨色 #f85149 撞车，看着像另一根上涨信号。
 // 改成**青色 + 虚线 + 2px**：与涨跌语义无关，且虚线在深底上不会被当成普通均线。
+// 2026-11-20：这条线的周期换成 233（斐波那契），常量名保留 MA365_COLOR 以免牵动其他引用。
 const MA365_COLOR = "#22d3ee";
 
 /* 量能基准窗口（2026-10-25 owner：「成交量部分画一条平均成交量，用来测主力行为」）。
@@ -7474,7 +7539,7 @@ function renderStockSummary(d) {
   // 同日晚上 owner 去掉 MA5 的特殊金线后，那个「把 MA5 说成金线」的前缀已失效 ⇒ 只说两条虚线。
   const _pcnHint = ({ min5: "5分", min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod];
   const _ma5Hint = _pcnHint
-    ? `<span class="ss-item cell-dim" style="font-size:10px">MA5(${_pcnHint})=5 根该周期K · 蓝虚线=日线MA5 · 紫虚线=日线MA10</span>`
+    ? `<span class="ss-item cell-dim" style="font-size:10px">MA5(${_pcnHint})=5 根该周期K · 蓝虚线=日线MA5 · 紫虚线=日线MA13</span>`
     : "";
   // 2026-10-20：把「当前周期实际有多少根数据」写出来，避免"看起来只有一部分"时
   // 无法区分是数据缺失还是缩放窗口。
@@ -9588,67 +9653,36 @@ function renderStockChart(applyZoom = true) {
     lineStyle: { color: _nowCol, width: 1, type: "dashed", opacity: .85 },
     label: { show: false } };
 
-  // 2026-10-20（北方华创案例）：分钟图的「MA5」= 5 根该周期 K 线（10min→50分钟），
-  // 与「日线 5 日线」不是同一条线。分钟 tab 额外画一条**日线 MA5**蓝色虚线参考线，
-  // 这样「日线站上 MA5、10 分钟落在 MA5 下方」能同时看见，不再误读。
-  const _dma5Arr = (((data.period_data || {}).daily || {}).ma
-    ? data.period_data.daily.ma[0] : null);
-  const _dma5 = (_dma5Arr && _dma5Arr.length) ? _dma5Arr[_dma5Arr.length - 1] : null;
-  // 2026-10-20 owner：「10 分钟周期内也显示 10 日均线」——同样画成日线 MA10 紫色虚线，
-  // 与金色周期 MA10（10 根 10min=100 分钟）区分开。
-  const _dma10Arr = (((data.period_data || {}).daily || {}).ma
-    ? data.period_data.daily.ma[1] : null);
-  const _dma10 = (_dma10Arr && _dma10Arr.length) ? _dma10Arr[_dma10Arr.length - 1] : null;
-  const dailyMa10Line = (showDailyMA && stockChartPeriod !== "daily" && _dma10 != null) ? {
-    yAxis: _dma10,
-    lineStyle: { color: "#bc8cff", type: "dashed", width: 1.4, opacity: .95 },
-    label: { formatter: `日线MA10 ${fmt(_dma10, 2)}`, color: "#bc8cff",
-             fontSize: 9, position: "insideStartBottom" },
-  } : null;
-  const dailyMa5Line = (showDailyMA && stockChartPeriod !== "daily" && _dma5 != null) ? {
-    yAxis: _dma5,
-    lineStyle: { color: "#58a6ff", type: "dashed", width: 1.4, opacity: .95 },
-    label: { formatter: `日线MA5 ${fmt(_dma5, 2)}`, color: "#58a6ff",
-             fontSize: 9, position: "insideStartTop" },
-  } : null;
-  // 2026-10-20 owner：「除了日线图，其它周期的图也画出 20 日均线」——
-  // 与上面两条同口径，画的是**日线 MA20**（20 个交易日）的水平参考线，不是「20 根本周期 K 线」
-  // 的周期 MA20（那条 maSeries 里一直有，别混淆）。**周/月/10/30/60 分全画**；
-  // 日线 tab 本身就是真正的 MA20 曲线，不重复叠线。
-  // 颜色选 teal：与蓝(日线MA5)/紫(日线MA10)/金(周期MA5)/绿(周期MA20) 五个在用色
-  // 两两 CVD ΔE≥12.7、常视觉 ΔE≥16.9（dataviz 校验器 dark 口径实测），且带直标"日线MA20"。
+  /* 图上叠加的**日线**均线参考线（2026-11-20 owner：均线统一改斐波那契 5/13/21/34/55）。
+     与「本周期均线」(maSeries) 不是一回事：分钟图的 MA5 = 5 根该周期 K，
+     这里的「日线MA5」= 5 个交易日。取值 = `period_data.daily.ma[i]` 的最新一格；
+     索引与后端 `_CHART_MA_PERIODS` 一致（0=MA5、1=MA13、2=MA21、3=MA34、4=MA55）。
+     日线 tab 本身就是这些曲线，不重复叠线；标签用 distance 错开，价位接近也不叠。 */
   const _dailyMa = (((data.period_data || {}).daily || {}).ma) || [];
   const _lastMa = (i) => {
     const a = _dailyMa[i];
     return (a && a.length) ? a[a.length - 1] : null;
   };
-  const _dma20 = _lastMa(2);
-  const dailyMa20Line = (showDailyMA && stockChartPeriod !== "daily" && _dma20 != null) ? {
-    yAxis: _dma20,
-    lineStyle: { color: "#2dd4bf", type: "dashed", width: 1.4, opacity: .95 },
-    label: { formatter: `日线MA20 ${fmt(_dma20, 2)}`, color: "#2dd4bf",
-             // 与日线MA10 同用左下角 ⇒ 用 distance 再往下让（markLine 标签只认
-             // `distance`，`offset` 在这条渲染路径里不被读取），两条价位接近时不叠字。
-             fontSize: 9, position: "insideStartBottom", distance: 17 },
-  } : null;
-  /* 2026-10-22 owner：「其它周期也画出 30 日、60 日均线」——与上面 MA20 完全同口径：
-     画的是**日线** MA30/MA60（30/60 个交易日）的水平参考线，不是"30 根本周期 K 线"的周期均线
-     （那条在 maSeries 里本来就有）。周/月/分钟全画，日线 tab 不重复。
-     标签用 distance 错开：左上 MA5→MA30，左下 MA10→MA20→MA60，价位接近也不叠。 */
-  const _dma30 = _lastMa(3);
-  const dailyMa30Line = (showDailyMA && stockChartPeriod !== "daily" && _dma30 != null) ? {
-    yAxis: _dma30,
-    lineStyle: { color: "#f0883e", type: "dashed", width: 1.4, opacity: .95 },
-    label: { formatter: `日线MA30 ${fmt(_dma30, 2)}`, color: "#f0883e",
-             fontSize: 9, position: "insideStartTop", distance: 17 },
-  } : null;
-  const _dma60 = _lastMa(4);
-  const dailyMa60Line = (showDailyMA && stockChartPeriod !== "daily" && _dma60 != null) ? {
-    yAxis: _dma60,
-    lineStyle: { color: "#a371f7", type: "dashed", width: 1.4, opacity: .95 },
-    label: { formatter: `日线MA60 ${fmt(_dma60, 2)}`, color: "#a371f7",
-             fontSize: 9, position: "insideStartBottom", distance: 34 },
-  } : null;
+  const _DMA_DEFS = [
+    { i: 0, p: 5, color: "#58a6ff", pos: "insideStartTop", dist: 0 },
+    { i: 1, p: 13, color: "#bc8cff", pos: "insideStartBottom", dist: 0 },
+    { i: 2, p: 21, color: "#2dd4bf", pos: "insideStartBottom", dist: 17 },
+    { i: 3, p: 34, color: "#f0883e", pos: "insideStartTop", dist: 17 },
+    { i: 4, p: 55, color: "#a371f7", pos: "insideStartBottom", dist: 34 },
+  ];
+  const _dmaVals = _DMA_DEFS.map(o => _lastMa(o.i));
+  const _dma5 = _dmaVals[0], _dma13 = _dmaVals[1];
+  const dailyMaLines = (showDailyMA && stockChartPeriod !== "daily")
+    ? _DMA_DEFS.map((o, j) => {
+        const v = _dmaVals[j];
+        return (v == null) ? null : {
+          yAxis: v,
+          lineStyle: { color: o.color, type: "dashed", width: 1.4, opacity: .95 },
+          label: { formatter: `日线MA${o.p} ${fmt(v, 2)}`, color: o.color,
+                   fontSize: 9, position: o.pos, distance: o.dist },
+        };
+      }).filter(Boolean)
+    : [];
 
   // 黄金分割（斐波那契回撤/扩展）：跟随当前 Tab；后端已按周期各算一份
   const fib = (period.fib && period.fib.available) ? period.fib : null;
@@ -9863,14 +9897,16 @@ function renderStockChart(applyZoom = true) {
   };
 
   const maSeries = period.ma.map((maArr, i) => {
-    const _isYear = i === 6;                       // 第 7 条 = MA365（年线）
-    const _color = _isYear ? MA365_COLOR : MA_COLORS[i];
+    const _isYear = MA_PERIODS[i] === 233;         // 233 = 年线（2026-11-20 起替代 365）
+    const _isLong = MA_PERIODS[i] === 610;         // 610 = 长线（金色点线）
+    const _color = _isYear ? MA365_COLOR : (_isLong ? MA_LONG_COLOR : MA_COLORS[i]);
     return {
-      name: `MA${[5,10,20,30,60,180,365][i]}` + (_isYear ? "（年线）" : ""),
+      name: `MA${MA_PERIODS[i]}` + (_isYear ? "（年线）" : ""),
       type: "line", data: maArr, symbol: "none",
       z: 2,
       lineStyle: _isYear ? { width: 2, color: _color, type: "dashed" }
-                         : { width: 1, color: _color },
+                         : _isLong ? { width: 2, color: _color, type: "dotted" }
+                                   : { width: 1, color: _color },
       // ⚠️ **必须同时给 itemStyle.color**（2026-10-16 owner 报"图例颜色和线不一样"）：
       //    ECharts 的**图例图标**取 `itemStyle.color`，只给 `lineStyle.color` 时图例回落到
       //    默认调色板 ⇒ 图例是 A 色、线是 B 色。凡是想让图例跟着线走的 series 都要两处同色。
@@ -10111,11 +10147,12 @@ function renderStockChart(applyZoom = true) {
         // 会把 58.10 打成 58.1、几行数字对不齐；ETF/低价标的（<5 元）用三位小数，别把 0.612 压成 0.61。
         const _px = (v) => (v == null || v === "" || isNaN(Number(v))) ? "—"
           : Number(v).toFixed(Math.abs(Number(v)) < 5 ? 3 : 2);
-        const _maLab = ["MA5", "MA10", "MA20", "MA30", "MA60", "MA180", "MA365"];
+        // 标签跟随后端数组顺序（斐波那契 5/13/21/34/55/89 + 年线 365）
+        const _maLab = MA_PERIODS.map(n => `MA${n}`);
         const _maCells = (period.ma || []).map((arr, j) =>
           arr[i] != null ? `${_maLab[j]} <b>${_px(arr[i])}</b>` : null).filter(Boolean);
         const _ma5 = (period.ma && period.ma[0]) ? period.ma[0][i] : null;
-        const _ma20 = (period.ma && period.ma[2]) ? period.ma[2][i] : null;
+        const _ma21 = (period.ma && period.ma[2]) ? period.ma[2][i] : null;
         // 这根 K 线自身的强度：收盘落在当根区间的哪个位置（0%=最低，100%=最高）
         const _posBar = (hi != null && lo != null && hi > lo) ? (c - lo) / (hi - lo) * 100 : null;
         const _posBarTxt = _posBar == null ? ""
@@ -10127,10 +10164,10 @@ function renderStockChart(applyZoom = true) {
         const _dayTxt = _dayOf(period.dates[i]);
         const _lastDaily = (((data.period_data || {}).daily || {}).dates || []).slice(-1)[0];
         const _dailyRef = (_dma5 != null && _lastDaily && _dayTxt === _dayOf(_lastDaily))
-          ? `<div style="color:#8b949e;font-size:10px;margin-top:3px">日线参考（图上蓝/紫/青虚线，取最新收盘）：`
+          ? `<div style="color:#8b949e;font-size:10px;margin-top:3px">日线参考（图上蓝/紫/青/橙/紫红虚线，取最新收盘）：`
             + `MA5 <b>${_px(_dma5)}</b>`
-            + (_dma10 != null ? ` · MA10 <b>${_px(_dma10)}</b>` : "")
-            + (_dma20 != null ? ` · MA20 <b>${_px(_dma20)}</b>` : "") + `</div>`
+            + (_dma13 != null ? ` · MA13 <b>${_px(_dma13)}</b>` : "")
+            + (_dmaVals[2] != null ? ` · MA21 <b>${_px(_dmaVals[2])}</b>` : "") + `</div>`
           : "";
         /* 2026-10-25 owner：量比 —— 这根柱子相对「近 60 根均量」是多大，才是测主力行为的读数。
            阈值来自全市场实测（doc/research/2026-10-25_成交量均线窗口实验.md）：
@@ -10170,7 +10207,7 @@ function renderStockChart(applyZoom = true) {
                      : `<div>成交 <b>${volTxt}</b> 手</div>`)
           + _ogTxt
           + _vrTxt
-          + (_posBarTxt ? `<div style="color:#8b949e">${_posBarTxt}${_vsMa(_ma5, "MA5")}${_vsMa(_ma20, "MA20")}</div>` : "");
+          + (_posBarTxt ? `<div style="color:#8b949e">${_posBarTxt}${_vsMa(_ma5, "MA5")}${_vsMa(_ma21, "MA21")}</div>` : "");
         if (_maCells.length) {
           html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;color:#8b949e;font-size:10px">`
             + `均线（本周期口径：MA5 = 5 根${_periodCn}K${_isIntradayPeriod
@@ -10343,11 +10380,7 @@ function renderStockChart(applyZoom = true) {
                        position: "insideStartTop" },
             }] : []),
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
-            ...(dailyMa5Line ? [dailyMa5Line] : []),
-            ...(dailyMa10Line ? [dailyMa10Line] : []),
-            ...(dailyMa20Line ? [dailyMa20Line] : []),
-            ...(dailyMa30Line ? [dailyMa30Line] : []),
-            ...(dailyMa60Line ? [dailyMa60Line] : []),
+            ...dailyMaLines,
           ].filter(_finiteLineItem),
           label: { position: "insideEndTop" } },
         // 形态自动标注（2026-11-14）：叠加在蜡烛顶/底（本 series 的 markPoint 未被占用）。
@@ -13608,7 +13641,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261117f", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261120d", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -14646,17 +14679,19 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
   }
   const _near = y => (y != null && isFinite(y) && _lo != null
     && y >= _lo * 0.995 && y <= _hi * 1.005);
+  // 2026-11-20 owner：多窗口的**日线**均线也改斐波那契（5/13/21/34/55），
+  // key 与后端 `_daily_ma_bundle` 同口径；34/55 远了不画（沿用"近的才画"）。
   const _dmaDefs = [
     { key: "ma5", color: "#58a6ff", txt: "日MA5", bg: "rgba(88,166,255,.95)", pos: "insideStartTop", dist: 0 },
-    { key: "ma10", color: "#bc8cff", txt: "日MA10", bg: "rgba(124,77,255,.95)", pos: "insideStartBottom", dist: 0 },
-    { key: "ma20", color: "#2dd4bf", txt: "日MA20", bg: "rgba(13,148,136,.95)", pos: "insideStartBottom", dist: 16 },
-    { key: "ma30", color: "#f0883e", txt: "日MA30", bg: "rgba(240,136,62,.95)", pos: "insideEndTop", dist: 0 },
-    { key: "ma60", color: "#a371f7", txt: "日MA60", bg: "rgba(163,113,247,.95)", pos: "insideEndBottom", dist: 0 },
+    { key: "ma13", color: "#bc8cff", txt: "日MA13", bg: "rgba(124,77,255,.95)", pos: "insideStartBottom", dist: 0 },
+    { key: "ma21", color: "#2dd4bf", txt: "日MA21", bg: "rgba(13,148,136,.95)", pos: "insideStartBottom", dist: 16 },
+    { key: "ma34", color: "#f0883e", txt: "日MA34", bg: "rgba(240,136,62,.95)", pos: "insideEndTop", dist: 0 },
+    { key: "ma55", color: "#a371f7", txt: "日MA55", bg: "rgba(163,113,247,.95)", pos: "insideEndBottom", dist: 0 },
   ];
   const _present = _dmaDefs
     .map(d => ({ ...d, y: dma ? dma[d.key] : null }))
     .filter(d => d.y != null && isFinite(d.y))
-    .filter(d => d.key === "ma5" || d.key === "ma10" || d.key === "ma20" || _near(d.y));
+    .filter(d => d.key === "ma5" || d.key === "ma13" || d.key === "ma21" || _near(d.y));
   // MA5/10/20 标签在**左**列、MA30/60 在**右**列 ⇒ 价格贴近时两组标签也不会挤在一起。
   let _ma5Line = null;
   const _dmaData = [];
@@ -14694,7 +14729,7 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
   const _vp = _vpOn ? buildVolumeProfile(ohlc, vals, MW_TAIL, 48) : null;
   // 与单图一致：右侧留白里画横向直方图（格子只有 ~500px，留白 46px 够看形状）
   const _mwVpRight = _vp ? 52 : 6;
-  const _vpSeries = _vp ? _vpSeriesOption(_vp.profile, _mwVpRight, 42, 3) : null;
+  const _vpSeries = _vp ? _vpSeriesOption(_vp.profile, _mwVpRight, 42, 4) : null;  // 隐藏轴（2026-11-20 起 RSI 占了 3）
   const _vpLine = (_vp && _vp.poc) ? {
     yAxis: _vp.poc,
     lineStyle: { color: "#c9a7ff", type: "dotted", width: 1, opacity: .9 },
@@ -14808,15 +14843,15 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       }
       const txt = li >= 0 ? _volFmt(vals[li]) : "";
       if (!txt) return undefined;
-      return [{ type: "text", silent: true, z: 20, left: 44, top: "49.4%",
+      return [{ type: "text", silent: true, z: 20, left: 44, top: "45.4%",
         style: { text: `${amtYi ? "额" : "量"} ${txt}`, fill: "#c9d1d9",
                  font: "9px ui-monospace", textBorderColor: "#0d1117", textBorderWidth: 2 } }];
     })(),
     // 十字光标 + 悬停明细（2026-10-21 owner：多窗口要十字光标）。
     // `axisPointer.link` 让**同一格的三窗**共享一条竖线（K线/成交额/MACD 对齐），
     // 但**不跨格**联动 —— 九宫格里跨格跟着动会看花眼。
-    // 只联动 3 个真实子图（隐藏轴 3 是密集区直方图专用，不参与十字光标）
-    axisPointer: { link: [{ xAxisIndex: [0, 1, 2] }],
+    // 只联动 4 个真实子图（隐藏轴 4 是密集区直方图专用，不参与十字光标）
+    axisPointer: { link: [{ xAxisIndex: [0, 1, 2, 3] }],
                    label: { fontSize: 9, backgroundColor: "#30363d", color: "#e6edf3" } },
     tooltip: {
       trigger: "axis",
@@ -14834,6 +14869,10 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         const amt = (amtYi && amtYi[i] != null) ? `${amtYi[i].toFixed(2)} 亿` : null;
         const m = s.macd || {};
         const dif = m.dif ? m.dif[i] : null, dea = m.dea ? m.dea[i] : null;
+        // 2026-11-20 owner：「红框（悬停明细）里要显示具体的 RSI 值」——6/12/24 三条一起给
+        const _rsi = s.rsi || {};
+        const _rv = (k) => (_rsi[k] && _rsi[k][i] != null) ? Number(_rsi[k][i]).toFixed(2) : null;
+        const r6 = _rv("rsi6"), r12 = _rv("rsi12"), r24 = _rv("rsi24");
         return `<div style="font-weight:700;margin-bottom:2px">${esc(dates[i])}</div>`
           + `开 ${o[0]}　高 ${o[3]}<br>低 ${o[2]}　收 <b>${o[1]}</b>`
           + (chg != null ? ` <span style="color:${_c}">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</span>` : "")
@@ -14843,7 +14882,12 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
               + (_mz.vwap[i] != null && _mz.zero[i] != null ? "　" : "")
               + (_mz.zero[i] != null ? `0轴 ${_mz.zero[i]}` : "") : "")
           + (dif != null ? `<br><span style="color:#3987e5">DIF ${dif}</span>　`
-              + `<span style="color:#d55181">DEA ${dea}</span>` : "");
+              + `<span style="color:#d55181">DEA ${dea}</span>` : "")
+          + ((r6 != null || r12 != null || r24 != null)
+              ? `<br><span style="color:#bc8cff">RSI6 ${r6 ?? "—"}</span>　`
+                + `<span style="color:#f0883e">RSI12 ${r12 ?? "—"}</span>　`
+                + `<span style="color:#58a6ff">RSI24 ${r24 ?? "—"}</span>`
+              : "");
       },
     },
     /* 2026-10-26 owner：「可以通过鼠标滚轮放大或者缩小」。
@@ -14858,23 +14902,25 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
       preventDefaultMouseMove: true,
     }],
-    // 三窗：主图 44% / 成交额 **20%** / MACD 18%（底部留给时间轴）。
-    // 2026-11-02 owner：「多窗口显示中，成交量的显示太小很难看清楚」——
-    //   原比例 52/10/18 在九宫格里成交额只有 ~25px（3×3）/~39px（3×2），柱子糊成一条线。
-    //   现在成交额 10%→**20%**（约 50~78px，翻倍），主图 52%→44%、MACD 18% 不变；
-    //   三窗之间各留 ~2% 当分隔，底部 11% 给时间轴标签。
-    // 开着「密集区」时右侧留白 6→52，多出的 46px 放量价分布直方图（三窗必须同值对齐）
-    grid: [{ left: 40, right: _mwVpRight, top: 3, height: "44%" },
-           { left: 40, right: _mwVpRight, top: "49%", height: "20%" },
-           { left: 40, right: _mwVpRight, top: "71%", height: "18%" }],
+    // 四窗：主图 40% / 成交额 16% / MACD 13% / RSI 6·12·24 14%（底部留给时间轴）。
+    // 2026-11-02 owner：「多窗口显示中，成交量的显示太小很难看清楚」——成交额翻倍到 20%；
+    // 2026-11-20 owner：「多窗口也要 RSI 6/12/24」⇒ 再加一窗，等比例压缩前三窗：
+    //   44/20/18 → 40/16/13，RSI 14%，各窗之间仍留 ~2% 分隔，底部 ~6% 给时间轴标签。
+    // 开着「密集区」时右侧留白 6→52，多出的 46px 放量价分布直方图（四窗必须同值对齐）
+    grid: [{ left: 40, right: _mwVpRight, top: 3, height: "40%" },
+           { left: 40, right: _mwVpRight, top: "45%", height: "16%" },
+           { left: 40, right: _mwVpRight, top: "63%", height: "13%" },
+           { left: 40, right: _mwVpRight, top: "78%", height: "14%" }],
     xAxis: [
       { type: "category", data: dates, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { show: false } },
       { type: "category", data: dates, gridIndex: 1, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { show: false } },
       { type: "category", data: dates, gridIndex: 2, axisLine: { lineStyle: { color: "#2b333d" } },
-        // 不写死 interval：滚轮缩放后根数会变，固定的"每 dates.length/4 根一个"在放大后
-        // 会只剩一两个标签。交给 ECharts 自动避让（默认 auto）。
+        axisLabel: { show: false } },
+      { type: "category", data: dates, gridIndex: 3, axisLine: { lineStyle: { color: "#2b333d" } },
+        // 时间轴标签只挂在**最底窗(RSI)**；不写死 interval：滚轮缩放后根数会变，
+        // 固定"每 dates.length/4 根一个"放大后只剩一两个标签，交给 ECharts 自动避让。
         axisLabel: { color: "#8b949e", fontSize: 10 } },   // 9→10（2026-11-02：小屏也看得清）
       // 密集区直方图专用的隐藏 x 轴（不参与 dataZoom，理由同单图）
       { type: "category", data: dates, gridIndex: 0, show: false,
@@ -14893,6 +14939,11 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         splitLine: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
       { scale: true, splitNumber: 2, gridIndex: 2, axisLabel: { show: false },
         splitLine: { show: false } },
+      // RSI 窗（2026-11-20）：0~100 固定刻度，只标 50 一条（30/70 用虚线画在 series 里）
+      { min: 0, max: 100, gridIndex: 3, splitNumber: 2,
+        axisLabel: { show: true, fontSize: 8, color: "#8b949e", margin: 2,
+                     interval: 1, formatter: (v) => (v === 0 || v === 100) ? "" : String(Math.round(v)) },
+        splitLine: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
     ],
     series: [
       { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 12, barCategoryGap: "10%",
@@ -14908,7 +14959,15 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
                      borderColor: "#ff6b62", borderColor0: "#3fbf72", borderWidth: 1 } },
       // 密集成交区：右侧横向直方图（画在网格外留白里，不压 K 线/缺口/画框）
       ...(_vpSeries ? [_vpSeries] : []),
-      line(s.ma5, "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
+      // 本周期均线（2026-11-20 owner：多窗口也改斐波那契 5/13/21/34/55）。
+      // 后端 `mas` 数组与单图 `_CHART_MA_PERIODS` 前 5 条同序；旧 payload 只有 ma5 ⇒ 回落单条。
+      ...((Array.isArray(s.mas) && s.mas.length)
+        ? s.mas.map((arr, i) => {
+            const o = line(arr, MA_COLORS[i], 1.1);
+            o.name = `MA${[5, 13, 21, 34, 55][i] || ""}`;
+            return o;
+          })
+        : [line(s.ma5, "#e3b341", 1.2)]),
       // 2026-10-25 owner：「多窗口也要支持」——VWAP 与 0 轴，口径与单图同一函数
       ...(_mz.vwap.some(v => v != null) ? [line(_mz.vwap, "#f0b429", 1.6)] : []),
       ...(_mz.zero.some(v => v != null) ? [{ name: "昨收(0轴)", type: "line", data: _mz.zero,
@@ -14949,6 +15008,25 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       { name: "DEA", type: "line", xAxisIndex: 2, yAxisIndex: 2, data: _macd.dea || [],
         symbol: "none", connectNulls: true, z: 3,
         lineStyle: { width: 1.1, color: "#d55181" } },
+      // RSI 6/12/24（2026-11-20 owner：多窗口也提供 RSI，分 6/12/24 三档）。
+      // 与单图同一实现（Wilder）；30/70 虚线只挂在第一条上，三条共用一套刻度（0~100）。
+      ...((s.rsi && (s.rsi.rsi6 || s.rsi.rsi12 || s.rsi.rsi24)) ? [
+        { name: "RSI6", type: "line", xAxisIndex: 3, yAxisIndex: 3, data: s.rsi.rsi6 || [],
+          symbol: "none", connectNulls: true, z: 3,
+          lineStyle: { width: 1.1, color: "#bc8cff" },
+          markLine: { silent: true, symbol: "none", data: [
+            { yAxis: 30, label: { show: false },
+              lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed", width: 1 } },
+            { yAxis: 70, label: { show: false },
+              lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed", width: 1 } },
+          ] } },
+        { name: "RSI12", type: "line", xAxisIndex: 3, yAxisIndex: 3, data: s.rsi.rsi12 || [],
+          symbol: "none", connectNulls: true, z: 3,
+          lineStyle: { width: 1.1, color: "#f0883e" } },
+        { name: "RSI24", type: "line", xAxisIndex: 3, yAxisIndex: 3, data: s.rsi.rsi24 || [],
+          symbol: "none", connectNulls: true, z: 3,
+          lineStyle: { width: 1.1, color: "#58a6ff" } },
+      ] : []),
     ],
   };
 }

@@ -132,7 +132,8 @@ class TestVolumeProfileWiring(unittest.TestCase):
     def test_直方图不参与dataZoom过滤(self):
         """挂在主 x 轴上会被 dataZoom 的 filter 模式过滤掉（缩放到别处整条消失）。"""
         self.assertIn("_vpSeriesOption(_vp.profile, _vpRight, _vpRight - 62, 4)", JS)
-        self.assertIn("_vpSeriesOption(_vp.profile, _mwVpRight, 42, 3)", JS)
+        # 2026-11-20：多窗口加了 RSI 子图（占 3 号轴）⇒ 直方图改挂隐藏轴 4
+        self.assertIn("_vpSeriesOption(_vp.profile, _mwVpRight, 42, 4)", JS)
         self.assertIn("密集区直方图专用的隐藏 x 轴", JS)
         self.assertIn("xAxisIndex: (xAxisIndex == null ? 0 : xAxisIndex)", JS)
 
@@ -254,7 +255,8 @@ class TestMultiWindowOptionBehavior(unittest.TestCase):
         self.assertEqual(r["vp"]["type"], "custom")
         self.assertGreater(r["vp"]["n"], 10, "直方图应有全部分箱")
         self.assertTrue(r["vp"]["clip"] is False)
-        self.assertEqual(r["vp"]["xAxisIndex"], 3, "挂在隐藏轴上，避免被 dataZoom 过滤")
+        # 2026-11-20：多窗口加了 RSI 子图（占 3 号轴）⇒ 直方图挂隐藏轴 4
+        self.assertEqual(r["vp"]["xAxisIndex"], 4, "挂在隐藏轴上，避免被 dataZoom 过滤")
         self.assertEqual(r["gridRight"], 52, "开着时右侧留白要加宽")
         self.assertTrue(any((x or {}).get("label", {}).get("formatter") == "POC"
                             for x in (r.get("line") or [])), "POC 线没进 markLine")

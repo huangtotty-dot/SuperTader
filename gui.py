@@ -1967,11 +1967,18 @@ def _norm_min_bars(df):
     return df.reset_index(drop=True)
 
 
+# K 线图显示的均线周期（2026-11-20 owner：「均线用斐波那契数列 5 13 21 34 55 …」）：
+# 全部为斐波那契；**233 替代原 365 作「年线」**（前端青色虚线），再补一条 **610** 长线
+# （2026-11-20 owner：「365 换 233，另加 610」）。610 需要 ≥610 根日线才出数。
+# ⚠️ 这是**图表展示口径**；仓位结构/量比/MA20占比/站上365日线占比等业务口径不变，别混。
+_CHART_MA_PERIODS = (5, 13, 21, 34, 55, 89, 233, 610)
+
+
 def _calc_ma_and_indicators(d):
-    """MA(7 条)/MACD/RSI(Wilder)/BOLL。2026-10-04 从 _build_chart_from_df 的嵌套函数抽出，
+    """MA(_CHART_MA_PERIODS 条)/MACD/RSI(Wilder)/BOLL。2026-10-04 从 _build_chart_from_df 的嵌套函数抽出，
     供 K线 payload 缓存「仅补日线末根」时复用（避免整图重建）。"""
     d = d.copy()
-    for n in (5, 10, 20, 30, 60, 180, 365):
+    for n in _CHART_MA_PERIODS:
         d[f"ma{n}"] = d["close"].rolling(n).mean()
     ema12 = d["close"].ewm(span=12, adjust=False).mean()
     ema26 = d["close"].ewm(span=26, adjust=False).mean()
@@ -2183,7 +2190,7 @@ def _to_series(d, intraday=False):
                  for o, c, l, h in zip(d["open"], d["close"], d["low"], d["high"])],
         "volume": [round(float(v), 0) for v in d["volume"]],
         "ma": [[round(x, 3) if not pd.isna(x) else None for x in d[f"ma{n}"]]
-               for n in (5, 10, 20, 30, 60, 180, 365)],
+               for n in _CHART_MA_PERIODS],
         "macd": {"dif": [round(x, 3) if not pd.isna(x) else None for x in d["dif"]],
                  "dea": [round(x, 3) if not pd.isna(x) else None for x in d["dea"]],
                  "hist": [round(x, 3) if not pd.isna(x) else None for x in d["macd_hist"]]},
@@ -7601,8 +7608,13 @@ class Api:
                         "dates": _at(fr.get("dates")), "ohlc": _at(fr.get("ohlc")),
                         "volume": _at(fr.get("volume")), "amount": _at(fr.get("amount")),
                         "ma5": _at(fr.get("ma5")),
+                        # 本周期斐波那契均线 5/13/21/34/55（2026-11-20；**别漏**：这里曾只拷
+                        # ma5/macd 的白名单，`_mw_compute` 新加的 mas/rsi 因此到不了前端）
+                        "mas": [_at(a) for a in (fr.get("mas") or [])],
                         # MACD 三条线也要按 tail 截齐（2026-10-21 owner：多窗口要 MACD）
                         "macd": {k: _at(v) for k, v in (fr.get("macd") or {}).items()},
+                        # RSI 6/12/24（2026-11-20 owner：多窗口要 RSI）
+                        "rsi": {k: _at(v) for k, v in (fr.get("rsi") or {}).items()},
                     }
                 items.append(_item)
             except Exception as e:
@@ -7693,10 +7705,30 @@ class Api:
         df = df.tail(120).reset_index(drop=True)
         _cut = max(0, n - 120)
         _closes = _closes_all[_cut:]
-        _ma5 = []
-        for i in range(len(_closes)):
-            w = _closes[max(0, i - 4): i + 1]
-            _ma5.append(round(sum(w) / len(w), 3) if len(w) == 5 else None)
+        # RSI 6/12/24（2026-11-20 owner：多窗口也要 RSI）。
+        # 真相源 = `analysis.indicators.wilder_rsi`（与单图/持仓表同一实现）；在**完整 340 根**上
+        # 算完再截尾，和 MACD 同一纪律（只喂 120 根会让长周期 RSI 的种子段偏掉）。
+        try:
+            import pandas as _pd
+            from analysis.indicators import wilder_rsi as _wilder_rsi
+            _cs = _pd.Series(_closes_all, dtype="float64")
+            _rsi = {}
+            for _p in (6, 12, 24):
+                _arr = _wilder_rsi(_cs, _p).tolist()
+                _rsi[f"rsi{_p}"] = [None if (x is None or x != x) else round(float(x), 2)
+                                    for x in _arr[_cut:]]
+        except Exception:
+            _rsi = {}
+        # 2026-11-20 owner：多窗口 K 线的本周期均线也改斐波那契（5/13/21/34/55）。
+        # 与单图同口径：在**完整 340 根**上算再截尾（截尾只切数组、不重算）。
+        _mas = []
+        for _n in (5, 13, 21, 34, 55):
+            _arr = []
+            for i in range(len(_closes_all)):
+                w = _closes_all[max(0, i - _n + 1): i + 1]
+                _arr.append(round(sum(w) / len(w), 3) if len(w) == _n else None)
+            _mas.append(_arr[_cut:])
+        _ma5 = _mas[0]
         # 指数不算成交额（点位 × 量没有意义，实测上证 5 分钟会算出 2.7 万亿）⇒ 交给前端回落成交量
         _amt = None if _index_code(code) else [
             round(((float(h) + float(l) + float(c)) / 3.0) * float(v) * 100.0)
@@ -7715,6 +7747,10 @@ class Api:
             "volume": [round(float(v)) for v in df["volume"]],
             "amount": _amt,
             "ma5": _ma5,
+            # 本周期斐波那契均线 5/13/21/34/55（与单图 _CHART_MA_PERIODS 前 5 条同序）
+            "mas": _mas,
+            # RSI 6/12/24（Wilder，与单图同源）
+            "rsi": _rsi,
             # MACD（2026-10-21 owner：多窗口也要 MACD）—— 与单图同口径 EMA12/26/9，hist 取 (DIF-DEA)×2
             "macd": {"dif": [round(x, 4) for x in _dif[_cut:]],
                      "dea": [round(x, 4) for x in _dea[_cut:]],
@@ -7730,7 +7766,7 @@ class Api:
             return ""
 
     def _daily_ma_bundle(self, code, price=None):
-        """日线 MA5/10/20（**含当日**）：`MA_n = (前 n-1 个完成日收盘 + 现价) / n`。
+        """日线斐波那契均线 MA5/13/21/34/55（**含当日**）：`MA_n = (前 n-1 个完成日收盘 + 现价) / n`。
 
         与 `core.ma_reclaim.ma5_state` 同口径（日线均线该把当日算进去），数据走本地
         日线缓存 ⇒ **零网络**。60 秒记忆：六宫格每 4 秒轮询，日线基准一天只变一次，
@@ -7764,11 +7800,10 @@ class Api:
             _px = float(price) if price else float(_cls[-1])
             if _px <= 0:
                 return None
-            # 2026-11-05 owner：「如果上方有30日线、60日线也要显示，前提是离得很近」——
-            # 这里把 MA30/MA60 一并算出来；**画不画**由前端按当日价格区间判断（近了才画）。
-            # MA_n = (前 n-1 个完成日收盘 + 现价)/n，与 MA5/10/20 同一口径。
+            # 2026-11-20 owner：多窗口 K 线的日线均线也改斐波那契（5/13/21/34/55）。
+            # 离得远的由前端「近了才画」控制；MA_n = (前 n-1 个完成日收盘 + 现价)/n。
             out = {f"ma{n}": round((sum(_basis[-(n - 1):]) + _px) / n, 3)
-                   for n in (5, 10, 20, 30, 60) if len(_basis) >= n - 1}
+                   for n in (5, 13, 21, 34, 55) if len(_basis) >= n - 1}
             _memo[_c] = (_now, out)
             return out
         except Exception:
@@ -8570,7 +8605,9 @@ class Api:
             #     `want_minutes` 里面，日 K 视图照样会回放旧档 ⇒ 现在**所有视图**都拦。
             #   · <4（2026-10-30）：min5/min10 只有 320 根；展示档已加深到近 3 个月
             #     （MIN_BARS_CHART 3200/1600），旧档切到 5/10 分 Tab 时按需重建一次。
-            if int(hit.get("schema") or 0) < 4:
+            #   · <5（2026-11-20）：均线改斐波那契 5/13/21/34/55/89/233/610 ⇒ 旧档 ma 是
+            #     7 条旧周期，回放会让图上均线整套错位。
+            if int(hit.get("schema") or 0) < 5:
                 return None
             # 2026-10-21：payload 里若含**盘中半成品根**（相邻日跳空超过涨跌停上限）⇒ 不可回放。
             # 现场：002929 的 payload 存着 10-20 收 46.10（真实是涨停 51.04），而日线缓存已修好；

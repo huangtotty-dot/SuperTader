@@ -318,8 +318,15 @@ def _calc_support_resistance(daily):
     add(2 * PP - L, "R1中枢", 2)
     add(2 * PP - H, "S1中枢", 2)
     # 均线（近价均线更有效）
+    # ⚠️ 2026-11-20：图表均线改成斐波那契（5/13/21/34/55/89/365）后，传进来的 df **不再保证**
+    #    有 ma20/60/180 列（实报 KeyError: 'ma20'）⇒ 缺列就地补算。支撑压力的口径仍是
+    #    MA20/60/180（这是业务判据，与"图上画哪几条线"无关）。
+    def _ma(n):
+        col = f"ma{n}"
+        return d[col] if col in d.columns else d["close"].astype(float).rolling(n).mean()
+
     for n, label, base_strength in ((20, "MA20", 2), (60, "MA60", 2), (180, "MA180", 1)):
-        val = d[f"ma{n}"].iloc[-1]
+        val = _ma(n).iloc[-1]
         if not pd.isna(val):
             add(float(val), label, base_strength)
     # 前高/前低（120日局部极值）

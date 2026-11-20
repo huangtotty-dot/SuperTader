@@ -265,7 +265,8 @@
         <span style="display:inline-flex;gap:4px;margin-left:10px;font-weight:400">
           <button class="mini-btn primary" id="sentRangeRecent" onclick="setSentRange(120)">近120日</button>
           <button class="mini-btn" id="sentRange360" onclick="setSentRange(360)">近360日</button>
-          <button class="mini-btn" id="sentRangeAll" onclick="setSentRange(0)">全部</button>
+          <button class="mini-btn" id="sentRangeAll" onclick="setSentRange(0)"
+                  title="全部历史（本地自算从 2023-07 起，约 800 个交易日）；图底部滑条可缩放/拖动到 2023 底、2024 全年">全部</button>
         </span>
       </h2>
       <div class="cell-dim" style="font-size:11px;line-height:1.8;margin-bottom:8px;padding:5px 9px;background:rgba(210,153,34,.12);border-left:3px solid #d29922">
@@ -647,7 +648,7 @@
         <label class="toggle-item" title="显示/隐藏跳空缺口色块（真缺口 + 跳空开盘；多窗口同步）"><input type="checkbox" id="tgGaps" checked onchange="chartToggleChanged()"> 缺口</label>
         <label class="toggle-item"><input type="checkbox" id="tgChannel" onchange="renderStockChart()"> 通道</label>
         <label class="toggle-item"><input type="checkbox" id="tgMA" onchange="renderStockChart()"> 均线</label>
-        <label class="toggle-item" title="非日线周期上叠的**日线** MA5/10/20/30/60 水平虚线（5/10/20/30/60 个交易日）。与「均线」开关不同：那个是当前周期自己的均线（分钟图的 MA5 = 5 根该周期 K 线）。日线周期不显示这组参考线。默认关闭（2026-11-17 owner）"><input type="checkbox" id="tgDailyMA" onchange="renderStockChart()"> 日线均线</label>
+        <label class="toggle-item" title="非日线周期上叠的**日线** MA5/13/21/34/55 水平虚线（斐波那契，2026-11-20 起；单位=交易日）。与「均线」开关不同：那个是当前周期自己的均线（分钟图的 MA5 = 5 根该周期 K 线）。日线周期不显示这组参考线。默认关闭（2026-11-17 owner）"><input type="checkbox" id="tgDailyMA" onchange="renderStockChart()"> 日线均线</label>
         <label class="toggle-item"><input type="checkbox" id="tgFib" onchange="renderStockChart()"> 黄金分割</label>
         <label class="toggle-item" title="MACD 背离：DIF 两峰背离 + 柱线动量衰减（标记「·柱」）；展示口径按周期放宽（日/周/月 1.0×/1.5×，分钟 1.5×/2.0×），与信号口径不同"><input type="checkbox" id="tgDiv" checked onchange="renderStockChart()"> 背离</label>
         <label class="toggle-item" title="K线形态自动标注：吞没/锤子/射击之星/十字星/孕线（只标注，不构成买卖信号）"><input type="checkbox" id="tgPattern" checked onchange="chartToggleChanged()"> 形态</label>
@@ -732,7 +733,7 @@
         · <b>收在当根区间 X%</b>：收盘价落在「本根最低→最高」的位置。
           <b>≥70%</b> 贴住上沿 = 盘中偏强、<b>≤30%</b> 贴住下沿 = 盘中偏弱。
           比只看涨跌更能回答「这根是谁在收」<br>
-        · <b>收在 MA5 / MA20 上方 X%</b>：收盘相对那条均线偏了多少<br>
+        · <b>收在 MA5 / MA21 上方 X%</b>：收盘相对那条均线偏了多少<br>
         · <b>均线（本周期口径）</b>：MA5 = <b>5 根 10 分 K = 50 分钟</b>，<b>不是</b>日线 5 日线<br>
         · <b>日线参考</b>（图上蓝/紫/青虚线）：用<b>最新收盘</b>算的日线 MA5/MA10/MA20；
           只在悬停<b>最后一个交易日</b>时显示 —— 老 K 线上写最新的日线值等于把未来的线画到过去上<br>
@@ -857,6 +858,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261117f"></script>
+<script src="app.js?v=20261120d"></script>
 </body>
 </html>
