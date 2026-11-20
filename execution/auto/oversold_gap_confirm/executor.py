@@ -1135,12 +1135,38 @@ def _log_decision(log, full: dict, names: dict | None = None,
             n.get('prev_close') or 0, n.get('low') or 0, n.get('close') or 0))
 
 
+def _apply_cash_floor(cash0, cash_floor, log, date):
+    """候选㊱（2026-11-20 施工）先卖后买的现金衔接。
+
+    事故形态（2026-11-19）：早盘卖单 10:00:07 成交回款 18.4 万，买侧同一秒
+    `get_cash()` 读到的仍是卖前 5,456 元（GM 回款到账有一拍延迟）⇒ gap 第一候选
+    688630「不足一手」漏买、002119 欠配。
+    修法：调用方传入 `cash_floor = 卖前基线现金 + 当日早盘已成交卖出净回款`，
+    买侧取 `max(实时读数, 下限)`——实时读数已含回款时不受影响（防双计），
+    未含时用下限兜底（设计意图「卖钱养买」）。`cash_floor=None` ⇒ 与旧版逐位一致。
+    """
+    if cash_floor is None:
+        return cash0, None
+    try:
+        fl = float(cash_floor)
+    except Exception:
+        return cash0, None
+    meta = {"cash_before_raw": round(cash0, 2), "cash_floor": round(fl, 2),
+            "cash_floor_applied": bool(fl > cash0)}
+    if fl > cash0:
+        log(f"[WS] {date} 买侧现金衔接：实时读数 {cash0:.0f} < 卖前基线+回款下限 {fl:.0f}"
+            f" ⇒ 按下限配额（候选㊱）")
+        return fl, meta
+    return cash0, meta
+
+
 def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
                  board: dict | None = None, allowed_boards=None,
                  book_dir: str = BOOK_DIR_DEFAULT, params: dict | None = None,
                  dry_run: bool = False, sleep_fn=time.sleep, log=print,
                  exclude_codes=None, code_committed=None, names: dict | None = None,
-                 prescreen_meta: dict | None = None) -> dict:
+                 prescreen_meta: dict | None = None,
+                 cash_floor: float | None = None) -> dict:
     """超跌跳空确认 10:00 买侧执行主流程。返回 fills dict（同时落盘）。
 
     fail-closed：决策核因缺数据/min_pool 不足返回空 picks ⇒ 当日不下单（不抛异常）。
@@ -1186,10 +1212,11 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
             cash0 = float(gateway.get_cash() or 0)
         except Exception:
             cash0 = 0.0
+        cash0, _cm = _apply_cash_floor(cash0, cash_floor, log, date)
         return _write_fills(date, mode, started, [], [], cash0, 0.0, cfg, book_dir,
-                            note="no_picks", spares=spares)
+                            note="no_picks", spares=spares, cash_meta=_cm)
 
-    cash0 = float(gateway.get_cash() or 0)
+    cash0, _cm = _apply_cash_floor(float(gateway.get_cash() or 0), cash_floor, log, date)
     positions = {code_of(k) or str(k): {"qty": int((v or {}).get("qty") or 0),
                                         "available": int((v or {}).get("available") or 0),
                                         "cost": float((v or {}).get("cost") or 0)}
@@ -1231,7 +1258,7 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
         log(f"[WS] ⛔ 买入上界审计异常，后续 BUY 已 fail-closed: {budget_issues}")
 
     fills = _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
-                         cfg, book_dir, spares=spares)
+                         cfg, book_dir, spares=spares, cash_meta=_cm)
     if not dry_run:
         try:
             # 恢复出的旧委托只回填 fills，不再次加进 positions；仅本轮新记录入账。
@@ -1408,13 +1435,17 @@ def _buys_summary(buys_out: list) -> dict:
 
 
 def _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
-                 cfg, book_dir, note: str = "", spares=None, skip_reason=None) -> dict:
+                 cfg, book_dir, note: str = "", spares=None, skip_reason=None,
+                 cash_meta=None) -> dict:
     finished = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # ⚠️ 2026-10-12：`buys_placed` 原先只数 `qty_placed>0`，把**被拒/被锁**的单也算成"已下单"
     # （与 S1 复盘里 `buys_placed=4/rejected=0` 的虚报同源）。改为只数未被终态否决的。
     # （2026-10-16：口径抽成 `_buys_summary` 与补单轮合并共用；数值不变，由单测钉住。）
     summary = {**_buys_summary(buys_out),
                "candidates": len(picks), "cash_before": round(cash0, 2)}
+    if cash_meta:
+        # 候选㊱：现金下限留痕（cash_before_raw / cash_floor / cash_floor_applied）
+        summary.update(cash_meta)
     if skip_reason is not None:
         summary["skip_reason"] = skip_reason
     fills = {"date": str(date), "mode": mode, "started_at": started, "finished_at": finished,

@@ -89,7 +89,8 @@ def reset_day(today, preserve_prescreen: bool = False) -> None:
                   board_gate_unproved=False, board_gate_persist_failed=False,
                   prepare_via=None, prepare_skip_logged=False,
                   sell_retries=0, morning_retries=0,
-                  probe_plan=False, probe_final=False)
+                  probe_plan=False, probe_final=False,
+                  morning_sell_proceeds=0.0, cash_before_morning_sell=None)
     if _keep is not None:
         _STATE.update(_keep)
 
@@ -611,11 +612,19 @@ def try_buy(rt, context, now) -> int:
         "order_poll_sleep_sec": float(rt.param("osc_order_poll_sleep_sec", 2.0)),
     }
     try:
+        # 候选㊱：现金下限 = 早盘卖前基线 + 已成交净回款（仅在确有回款时启用；
+        # GM 回款到账有一拍延迟，买侧同一秒读 get_cash() 会低估——11-19 事故）
+        _cash_floor = None
+        _cb = _STATE.get("cash_before_morning_sell")
+        _pr = float(_STATE.get("morning_sell_proceeds") or 0.0)
+        if _cb is not None and _pr > 0:
+            _cash_floor = float(_cb) + _pr
         _res = executor.run_buy_exec(rt.gateway(context), str(now.date()),
                                  prev_close=_pc, ma20=_ma, bars=_bars, board=_board,
                                  allowed_boards=None, book_dir=_book, params=_params,
                                  dry_run=False, log=print, names=_names,
-                                 prescreen_meta=_STATE.get("prescreen_meta") or {})
+                                 prescreen_meta=_STATE.get("prescreen_meta") or {},
+                                 cash_floor=_cash_floor)
         _sm = (_res or {}).get("summary") or {}
         rt.audit({"event": "osc_buy_exec", "date": str(now.date()),
                       "candidates": _sm.get("candidates"), "buys": _sm.get("buys_placed"),
@@ -1293,6 +1302,11 @@ def try_morning_sell(rt, context, now, today) -> int:
     """
     _exec = executor
     _reconcile_book(rt, context)                 # ⚠️ 必须先对账：挂单未成交会让账本虚高
+    # 候选㊱：卖前基线现金（供买侧现金下限 = 基线 + 已成交净回款兜底）
+    try:
+        _STATE["cash_before_morning_sell"] = float(rt.gateway(context).get_cash() or 0)
+    except Exception:
+        _STATE["cash_before_morning_sell"] = None
     _codes = sell_codes(rt)
     if not _codes:
         rt.log("[OSC] 10:00 早盘冲高卖: 账本无持仓，跳过")
@@ -1323,6 +1337,19 @@ def try_morning_sell(rt, context, now, today) -> int:
         _res = executor.run_morning_sell_exec(rt.gateway(context), str(today), _highs,
                                           book_dir=_book, params=_params, dry_run=False, log=print)
         _sm = (_res or {}).get("summary") or {}
+        # 候选㊱：已成交卖出净回款（Σ 成交股数×成交价 − 实际费用），供买侧现金下限
+        _proceeds = 0.0
+        for _s in (_res or {}).get("sells") or []:
+            _fq = float(_s.get("filled_qty") or 0)
+            if _fq > 0:
+                _proceeds += _fq * float(_s.get("filled_price") or 0) \
+                    - float(_s.get("fee_actual") or _s.get("fee_est") or 0)
+        _STATE["morning_sell_proceeds"] = _proceeds
+        if _proceeds > 0:
+            _base = _STATE.get("cash_before_morning_sell")
+            _fl = (_base + _proceeds) if _base is not None else None
+            rt.log(f"[OSC] 早盘卖成交净回款 {_proceeds:.0f}"
+                   + (f" → 买侧现金下限 {_fl:.0f}" if _fl is not None else "（无卖前基线，不设下限）"))
         rt.audit({"event": "osc_morning_sell_exec", "date": str(today),
                       "sells": _sm.get("sells_placed"), "pops": _sm.get("pop_count"),
                       "open_after": _sm.get("open_after"),
