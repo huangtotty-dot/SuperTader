@@ -4779,6 +4779,57 @@ class Api:
                                            + 0.3 * (1.0 - p_zb_ma[j])
                                            + 0.2 * (1.0 - p_dt_ma[j])), 1)
                             if None not in (p_touch_ma[j], p_zb_ma[j], p_dt_ma[j]) else None)
+        # ── 5 日斜率（2026-11-19 owner：「斜率陡 → 时间持续不长？」）───────────────
+        # 口径：slope5 = (sent_ma[t] − sent_ma[t−5]) / 5（点/日），与曲线同为 5 日均值口径。
+        # 研究（2023-07-26~2026-11-19，783 行，见 doc/solutions/2026-11-19_情绪温度斜率判词.md）：
+        #   · 陡峭上行段（斜率 ≥ P80 ≈ +2.6/日）历史 54 段，**中位只持续 3 天**（最长 7）
+        #     ⇒ owner 的"斜率陡，它时间不会长"在**温度自身寿命**上成立；
+        #   · 段末之后 5 日温度平均回落 ~10 点（>80% 的段 5 日内转跌）；
+        #   · **但同期上证未来 5 日 +0.67%、胜率 59%**（平缓段 −0.15%/44%）⇒ 它不是卖点/买点，
+        #     只能当"这波温度还剩下几天"的可读性提示。面板上照实写。
+        _sv = [r.get("sent_ma") for r in rows]
+        for _j, _r in enumerate(rows):
+            if _j >= 5 and _sv[_j] is not None and _sv[_j - 5] is not None:
+                _r["slope5"] = round((_sv[_j] - _sv[_j - 5]) / 5.0, 2)
+            else:
+                _r["slope5"] = None
+        _slopes = [x for x in (r["slope5"] for r in rows) if x is not None]
+        slope_info = {"threshold": None, "episodes": 0, "median_len": None, "max_len": None,
+                      "fwd5_temp_mean": None, "fwd5_fall_ratio": None, "starts": [],
+                      "cur": None, "cur_pct": None}
+        if len(_slopes) >= 60:
+            _sorted = sorted(_slopes)
+            _th = round(_sorted[int(len(_sorted) * 0.8)], 2)
+            _eps = []
+            _i = 0
+            while _i < len(rows):
+                _sl = rows[_i]["slope5"]
+                if _sl is not None and _sl >= _th:
+                    _j2 = _i
+                    while (_j2 + 1 < len(rows) and rows[_j2 + 1]["slope5"] is not None
+                           and rows[_j2 + 1]["slope5"] >= _th):
+                        _j2 += 1
+                    _eps.append((_i, _j2))
+                    _i = _j2 + 1
+                else:
+                    _i += 1
+            _lens = [b - a + 1 for a, b in _eps]
+            _fwd5 = [_sv[b + 5] - _sv[b] for a, b in _eps
+                     if b + 5 < len(rows) and _sv[b] is not None and _sv[b + 5] is not None]
+            slope_info.update({
+                "threshold": _th, "episodes": len(_eps),
+                "median_len": sorted(_lens)[len(_lens) // 2] if _lens else None,
+                "max_len": max(_lens) if _lens else None,
+                "fwd5_temp_mean": round(sum(_fwd5) / len(_fwd5), 1) if _fwd5 else None,
+                "fwd5_fall_ratio": (round(sum(1 for x in _fwd5 if x < 0) / len(_fwd5), 2)
+                                    if _fwd5 else None),
+                "starts": [rows[a]["date"] for a, _ in _eps],
+            })
+        _cur = rows[-1].get("slope5")
+        if _cur is not None and _slopes:
+            slope_info["cur"] = _cur
+            slope_info["cur_pct"] = round(sum(1 for x in _slopes if x <= _cur) / len(_slopes), 2)
+
         # ── 弱势区 → 强势区 的跨越（2026-11-13 owner：「跨越的时间标注出来」）。
         # 用**全量 rows** 算，不受前端区间切片影响（切到近 120 日也还是同一批跨越）。
         # 口径跑在 **5 日均值**上（与曲线/分区一致），否则标记点和色带对不上。
@@ -4834,6 +4885,8 @@ class Api:
             # 当前处于哪个区 + 已连续几天（弱势区里"第几天"最有参考价值）
             "zone": _zone_last,
             "zone_days": _zone_days,
+            # 5 日斜率：当前值/历史百分位 + 陡峭上行段（≥P80）的寿命统计（2026-11-19）
+            "slope": slope_info,
         }
         return _clean({"available": True, "source": "ths_limit_up_pool",
                        "days": days, "series": series, "last": last, "stats": stats,

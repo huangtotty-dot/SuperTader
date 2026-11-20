@@ -77,6 +77,34 @@ class TestMarketSentiment(unittest.TestCase):
         ds = [x["date"] for x in r["series"]]
         self.assertEqual(ds, sorted(ds))
 
+    def test_slope5_and_episode_stats(self):
+        """5 日斜率 / 陡峭段寿命统计（2026-11-19 owner：斜率陡 → 持续不长？）。
+
+        契约：①每行 `slope5` = (sent_ma[t]−sent_ma[t−5])/5；②`stats.slope` 给出
+        陡峭阈值(P80)/段数/中位段长/段末 5 日温度均值，前端据此画"陡峭上行"菱形点。"""
+        from datetime import date, timedelta
+        d0 = date(2026, 1, 1)
+        data = {}
+        for i in range(120):
+            d = d0 + timedelta(days=i)
+            # 造一段明显上冲再回落，保证出现"陡峭段"
+            zt = 10 + (i % 40) * 3
+            data[d.strftime("%Y%m%d")] = _rec(i, zt, i % 5)
+        self._write(data)
+        r = self.api.load_market_sentiment(1200)
+        self.assertTrue(r["available"])
+        s = r["stats"]["slope"]
+        self.assertIn("threshold", s)
+        self.assertGreaterEqual(s["episodes"], 1)
+        self.assertIsNotNone(s["median_len"])
+        self.assertIsNotNone(s["cur"])
+        # 每行前 5 天以后都要有 slope5，且与定义一致
+        ser = r["series"]
+        for j in range(5, len(ser)):
+            if ser[j].get("sent_ma") is not None and ser[j - 5].get("sent_ma") is not None:
+                self.assertAlmostEqual(ser[j]["slope5"],
+                                       round((ser[j]["sent_ma"] - ser[j - 5]["sent_ma"]) / 5.0, 2))
+
     def test_composite_index(self):
         """情绪温度 = 0.5×触板分位 + 0.3×(1−炸板率分位) + 0.2×(1−跌停分位)，0~100；展示用 5 日均值。"""
         from datetime import date, timedelta
