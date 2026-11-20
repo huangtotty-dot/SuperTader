@@ -3336,7 +3336,7 @@
   "primary_source": "legacy",
   "sector": "商务服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-20 15:25:53",
   "aiapp_verdicts": {},
   "aiapp_audited_at": "2026-10-27",
   "aiapp_evidence": {
@@ -3357,7 +3357,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主营广告、报刊、印刷及教育业务，2025年报虽提及数字人、“审点芯”“杭州迹忆”等探索，但仍属初步尝试且暂无明显业绩贡献，未披露可核验的AI短剧产品、客户项目或收入。AIGC内容工具体验不能直接认定为AI影视短剧商业化，更不足以支撑核心定级，因此摘除原有关联。"
-  }
+  },
+  "category1": "AI应用",
+  "concept1": "AI影视短剧",
+  "category": "AI应用",
+  "concept": "AI影视短剧"
  },
  "000608": {
   "business_summary": "商业运营管理、物业租赁及房屋销售。",
@@ -4428,13 +4432,16 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "超节点|半导体",
+  "concept": "半导体材料-靶材与蒸镀材料",
   "name": "京蓝科技",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-19 15:29:49",
+  "category1": "超节点",
+  "category2": "半导体",
+  "concept2": "半导体材料-靶材与蒸镀材料"
  },
  "000712": {
   "business_summary": "主营证券Ⅱ",
@@ -5882,7 +5889,7 @@
   "primary_source": "legacy",
   "sector": "元件/PCB概念/共封装光学(CPO)/苹果概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-20 15:26:25",
   "concept_desc": {
    "PCB-HDI与任意层互连": "HDI、任意层互连、类载板和高密度互连PCB。",
    "覆铜板与粘结片": "覆铜板、半固化片、粘结片及其直接产品。"
@@ -5894,11 +5901,6 @@
    "PCB-HDI与任意层互连": "公司直接生产双面及多层印制线路板、HDI高密度互连板，并生产覆铜板和半固化片，既覆盖PCB制造又覆盖其关键基材，产品和收入均有正式披露。2025年印制线路板收入31.4951亿元，占营业收入约49.75%；覆铜板收入11.0944亿元，占约17.52%，两项合计约67.27%，其余主要为液晶显示器17.4402亿元、超声电子仪器3.2805亿元，不能把公司全部63.3102亿元收入都归为PCB。印刷板与覆铜板分别构成重要收入来源，故定级为核心。旧“AI服务器相关”过于笼统且会把显示器等业务误带入算力链条，应改按实际板型列HDI与任意层互连，并补充覆铜板与粘结片，不额外推定服务器收入。",
    "覆铜板与粘结片": "公司直接生产双面及多层印制线路板、HDI高密度互连板，并生产覆铜板和半固化片，既覆盖PCB制造又覆盖其关键基材，产品和收入均有正式披露。2025年印制线路板收入31.4951亿元，占营业收入约49.75%；覆铜板收入11.0944亿元，占约17.52%，两项合计约67.27%，其余主要为液晶显示器17.4402亿元、超声电子仪器3.2805亿元，不能把公司全部63.3102亿元收入都归为PCB。印刷板与覆铜板分别构成重要收入来源，故定级为核心。旧“AI服务器相关”过于笼统且会把显示器等业务误带入算力链条，应改按实际板型列HDI与任意层互连，并补充覆铜板与粘结片，不额外推定服务器收入。"
   },
-  "category1": "PCB",
-  "concept1": [
-   "PCB-HDI与任意层互连",
-   "覆铜板与粘结片"
-  ],
   "pcb_verdicts": {
    "PCB": "核心"
   },
@@ -5930,7 +5932,13 @@
    ],
    "verdict": "核心",
    "reason": "公司直接生产双面及多层印制线路板、HDI高密度互连板，并生产覆铜板和半固化片，既覆盖PCB制造又覆盖其关键基材，产品和收入均有正式披露。2025年印制线路板收入31.4951亿元，占营业收入约49.75%；覆铜板收入11.0944亿元，占约17.52%，两项合计约67.27%，其余主要为液晶显示器17.4402亿元、超声电子仪器3.2805亿元，不能把公司全部63.3102亿元收入都归为PCB。印刷板与覆铜板分别构成重要收入来源，故定级为核心。旧“AI服务器相关”过于笼统且会把显示器等业务误带入算力链条，应改按实际板型列HDI与任意层互连，并补充覆铜板与粘结片，不额外推定服务器收入。"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "PCB-HDI与任意层互连|覆铜板与粘结片",
+  "category2": "超节点",
+  "concept2": "PCB",
+  "category": "PCB|超节点",
+  "concept": "PCB-HDI与任意层互连|覆铜板与粘结片|PCB"
  },
  "000825": {
   "business_summary": "主营其他",
@@ -11635,13 +11643,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "封装测试",
   "name": "大港股份",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-19 15:29:49",
+  "category1": "半导体",
+  "concept1": "封装测试"
  },
  "002078": {
   "business_summary": "主营造纸和纸制品业",
@@ -13704,18 +13714,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "化工",
-  "concept": "基础化工",
+  "category": "化工|半导体",
+  "concept": "基础化工|半导体材料-光刻胶与配套试剂",
   "name": "红宝丽",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-19 15:29:49",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "基础化工": "主营：环氧丙烷衍生品；与本标签一致"
-  }
+  },
+  "category1": "化工",
+  "concept1": "基础化工",
+  "category2": "半导体",
+  "concept2": "半导体材料-光刻胶与配套试剂"
  },
  "002166": {
   "business_summary": "主营医药制造业",
@@ -14460,7 +14474,7 @@
   "primary_source": "legacy",
   "sector": "通信设备/光通信/石英晶振",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:13:00",
+  "updated_at": "2026-11-20 15:26:25",
   "tag_source": "2026-10-26 光通信二级概念整合（owner 确认）",
   "optical_comm_audited_at": "2026-10-27",
   "optical_comm_evidence": {
@@ -14481,7 +14495,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主营石英晶体谐振器和振荡器，产品确实可广泛用于通讯、消费电子、汽车电子等领域，但2025年年报没有将光模块或光通信列作专门用途，也没有披露光通信客户、订单或对应产品收入。2025年石英晶体元器件收入2.4086亿元，总收入3.5527亿元，占比约67.79%，其中谐振器2.3593亿元、振荡器493.35万元；这些数字证明的是通用晶振主业，不能转换成光通信收入，光通信占比亦无法可靠拆分。通用电子元器件在理论上能够进入某种设备，不足以证明已经形成可识别产业暴露，因此本次应摘除旧“时钟晶振与频率器件”标签，不保留任何光通信二级概念，纠错点是消除由潜在用途推导现实业务的误判。"
-  }
+  },
+  "category": "超节点",
+  "concept": "其他",
+  "category1": "超节点",
+  "concept1": "其他"
  },
  "002200": {
   "business_summary": "",
@@ -19054,16 +19072,18 @@
   "business_summary": "主营通用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "液冷",
-  "concept": "液冷模组",
+  "category": "液冷|超节点",
+  "concept": "液冷模组|液冷散热",
   "name": "康盛股份",
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-26 18:47:06",
+  "updated_at": "2026-11-19 15:29:49",
+  "tag_source": "2026-10-26 液冷产业链全景图补漏（owner 确认）",
   "category1": "液冷",
   "concept1": "液冷模组",
-  "tag_source": "2026-10-26 液冷产业链全景图补漏（owner 确认）"
+  "category2": "超节点",
+  "concept2": "液冷散热"
  },
  "002419": {
   "business_summary": "主营零售业",
@@ -19085,20 +19105,22 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "category1": "液冷",
-  "concept": "",
-  "concept1": "快换接头",
+  "category": "液冷|机器人",
+  "concept": "快换接头|结构件与材料",
   "name": "毅昌科技",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 10:00:00",
+  "updated_at": "2026-11-19 15:29:49",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
   "concept_reason": {
    "快换接头": "毅昌科技：汽车零部件"
-  }
+  },
+  "category1": "液冷",
+  "concept1": "快换接头",
+  "category2": "机器人",
+  "concept2": "结构件与材料"
  },
  "002421": {
   "business_summary": "基于自主研发的AIoT智能物联网管控平台，聚合模块化的空间场景应用，为用户提供全生命周期的智慧服务。",
@@ -22172,7 +22194,7 @@
   "primary_source": "legacy",
   "sector": "元件/PCB概念/共封装光学(CPO)/AI PC",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-19 15:29:49",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -22181,13 +22203,6 @@
    "PCB-FPC与刚挠结合": "公司直接制造刚性印制电路板、HDI、柔性电路板及刚挠结合产品，并披露AI加速卡、交换机等高端应用产品，板型和算力应用均有真实业务基础。2025年刚性电路板收入20.7345亿元，占约66.02%；柔性电路板及其应用模组8.6068亿元，占约27.40%，其他收入2.0652亿元，合计营业收入31.4065亿元，PCB构成主营。刚性板是包含不同层数和终端的宽口径，柔性模组也包含非服务器应用，不能将两部分全部视为AI收入；AI相关板型未单列金额。基于PCB整体主业定级为核心。旧“AI服务器相关”过度聚焦单一应用，应改为通用刚性板、HDI、FPC与刚挠结合，并对有证据的算力产品补充高多层与服务器板。",
    "PCB-高多层与服务器板": "公司直接制造刚性印制电路板、HDI、柔性电路板及刚挠结合产品，并披露AI加速卡、交换机等高端应用产品，板型和算力应用均有真实业务基础。2025年刚性电路板收入20.7345亿元，占约66.02%；柔性电路板及其应用模组8.6068亿元，占约27.40%，其他收入2.0652亿元，合计营业收入31.4065亿元，PCB构成主营。刚性板是包含不同层数和终端的宽口径，柔性模组也包含非服务器应用，不能将两部分全部视为AI收入；AI相关板型未单列金额。基于PCB整体主业定级为核心。旧“AI服务器相关”过度聚焦单一应用，应改为通用刚性板、HDI、FPC与刚挠结合，并对有证据的算力产品补充高多层与服务器板。"
   },
-  "category1": "PCB",
-  "concept1": [
-   "PCB-通用刚性板",
-   "PCB-HDI与任意层互连",
-   "PCB-FPC与刚挠结合",
-   "PCB-高多层与服务器板"
-  ],
   "concept_desc": {
    "PCB-通用刚性板": "单双面板、多层刚性印制电路板，未明确服务器或HDI时使用。",
    "PCB-HDI与任意层互连": "HDI、任意层互连、类载板和高密度互连PCB。",
@@ -22233,7 +22248,13 @@
    ],
    "verdict": "核心",
    "reason": "公司直接制造刚性印制电路板、HDI、柔性电路板及刚挠结合产品，并披露AI加速卡、交换机等高端应用产品，板型和算力应用均有真实业务基础。2025年刚性电路板收入20.7345亿元，占约66.02%；柔性电路板及其应用模组8.6068亿元，占约27.40%，其他收入2.0652亿元，合计营业收入31.4065亿元，PCB构成主营。刚性板是包含不同层数和终端的宽口径，柔性模组也包含非服务器应用，不能将两部分全部视为AI收入；AI相关板型未单列金额。基于PCB整体主业定级为核心。旧“AI服务器相关”过度聚焦单一应用，应改为通用刚性板、HDI、FPC与刚挠结合，并对有证据的算力产品补充高多层与服务器板。"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "PCB-通用刚性板|PCB-HDI与任意层互连|PCB-FPC与刚挠结合|PCB-高多层与服务器板",
+  "category2": "超节点",
+  "concept2": "PCB",
+  "category": "PCB|超节点",
+  "concept": "PCB-通用刚性板|PCB-HDI与任意层互连|PCB-FPC与刚挠结合|PCB-高多层与服务器板|PCB"
  },
  "002580": {
   "business_summary": "储能电池及系统的设计、研发、制造和销售。",
@@ -24776,14 +24797,18 @@
   "business_summary": "主营电子化学品Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "PCB",
-  "concept": "PCB化学品-电镀与湿制程",
+  "category": "PCB|超节点",
+  "concept": "PCB化学品-电镀与湿制程|PCB",
   "name": "光华科技",
   "primary_source": "legacy",
   "sector": "电子化学品Ⅱ/PET铜箔/PCB概念/固态电池",
   "sector_type": "legacy",
-  "updated_at": "2026-10-28 15:42:32",
-  "tag_source": "owner 2026-10-28 午盘涨停复盘简图"
+  "updated_at": "2026-11-20 15:26:25",
+  "tag_source": "owner 2026-10-28 午盘涨停复盘简图",
+  "category1": "PCB",
+  "concept1": "PCB化学品-电镀与湿制程",
+  "category2": "超节点",
+  "concept2": "PCB"
  },
  "002742": {
   "business_summary": "主营非金属矿物制品业",
@@ -24937,13 +24962,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "大农业",
+  "concept": "农药",
   "name": "国光股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-20 15:26:25",
+  "category1": "大农业",
+  "concept1": "农药"
  },
  "002752": {
   "business_summary": "主营IP经济",
@@ -47047,13 +47074,15 @@
   "business_summary": "主营消费电子",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "半导体设备-其他专用设备",
   "name": "易天股份",
   "primary_source": "legacy",
   "sector": "消费电子/共封装光学(CPO)/先进封装/第三代半导体",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-20 15:26:25",
+  "category1": "半导体",
+  "concept1": "半导体设备-其他专用设备"
  },
  "300813": {
   "business_summary": "主营专用设备制造业",
@@ -52349,14 +52378,12 @@
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-20 15:26:25",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "PCB-通用刚性板": "公司真实主营为印制电路板研发、生产和销售，产品以单双面板和多层刚性板为主。2025年PCB产品收入14.7052亿元、约占总营收16.4715亿元的89.28%，其他业务1.7664亿元不能混入PCB产品收入，核心定级由PCB主业支撑。年报除披露AI服务器领域的布局、接触、试样、试产和联合研发外，还明确中高端服务器电源产品订单增长并已规模化批量出货，说明该类电源PCB已形成实际交付；但公司未单列AI服务器板收入，服务器电源PCB也不能等同全部AI服务器板。因此维持核心和通用刚性板标签，既不把研发机会当成收入，也不遗漏服务器电源产品的量产事实。"
   },
-  "category1": "PCB",
-  "concept1": "PCB-通用刚性板",
   "concept_desc": {
    "PCB-通用刚性板": "单双面板、多层刚性印制电路板，未明确服务器或HDI时使用。"
   },
@@ -52388,7 +52415,13 @@
    "verdict": "核心",
    "reason": "公司真实主营为印制电路板研发、生产和销售，产品以单双面板和多层刚性板为主。2025年PCB产品收入14.7052亿元、约占总营收16.4715亿元的89.28%，其他业务1.7664亿元不能混入PCB产品收入，核心定级由PCB主业支撑。年报除披露AI服务器领域的布局、接触、试样、试产和联合研发外，还明确中高端服务器电源产品订单增长并已规模化批量出货，说明该类电源PCB已形成实际交付；但公司未单列AI服务器板收入，服务器电源PCB也不能等同全部AI服务器板。因此维持核心和通用刚性板标签，既不把研发机会当成收入，也不遗漏服务器电源产品的量产事实。",
    "borderline_review": "2026-10-27二次复核修正"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "PCB-通用刚性板",
+  "category2": "超节点",
+  "concept2": "PCB",
+  "category": "PCB|超节点",
+  "concept": "PCB-通用刚性板|PCB"
  },
  "301133": {
   "business_summary": "主营PCB概念",
@@ -55659,13 +55692,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "半导体",
+  "concept": "封装测试",
   "name": "蓝箭电子",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-19 15:29:49",
+  "category1": "半导体",
+  "concept1": "封装测试"
  },
  "301349": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -75658,13 +75693,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "",
-  "concept": "",
+  "category": "算力租赁",
+  "concept": "算力租赁",
   "name": "广电电气",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-19 15:29:29",
+  "category1": "算力租赁",
+  "concept1": "算力租赁"
  },
  "601618": {
   "business_summary": "主营其他",
@@ -77596,18 +77633,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "化工",
-  "concept": "基础化工",
+  "category": "化工|半导体",
+  "concept": "基础化工|半导体材料-光刻胶与配套试剂",
   "name": "鼎龙科技",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-20 15:26:25",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "基础化工": "主营：染发剂原料；与本标签一致"
-  }
+  },
+  "category1": "化工",
+  "concept1": "基础化工",
+  "category2": "半导体",
+  "concept2": "半导体材料-光刻胶与配套试剂"
  },
  "603005": {
   "business_summary": "全球第二大能为影像传感芯片提供WLCSP量产服务的专业封测服务商",
@@ -83874,7 +83915,7 @@
   "primary_source": "legacy",
   "sector": "元件/人形机器人/毫米波雷达/汽车电子",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-20 15:26:25",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -83884,14 +83925,6 @@
    "PCB-HDI与任意层互连": "公司真实业务包括印制电路板研发、生产和销售，以及印制电路板表面贴装SMT和少量整机产品，既有PCB裸板又有后段贴装服务，两类环节需要区分，不能把SMT或整机收入全部视为裸板收入。iFinD二〇二五年PCB行业收入二十三点四三亿元，占营业收入百分之九十二点三八；分产品中PCB为二十一点八一亿元，SMT为一点〇二亿元，整机产品为零点五九亿元，其他业务占百分之七点六二。PCB及直接延伸服务构成主营重要收入，故定核心，但整机和未拆分其他业务保留混合边界。旧“PCB+SMT”含义基本正确，现按白名单拆为通用刚性板和PCB设计与SMT服务，避免简单沿用组合标签。",
    "PCB-FPC与刚挠结合": "公司真实业务包括印制电路板研发、生产和销售，以及印制电路板表面贴装SMT和少量整机产品，既有PCB裸板又有后段贴装服务，两类环节需要区分，不能把SMT或整机收入全部视为裸板收入。iFinD二〇二五年PCB行业收入二十三点四三亿元，占营业收入百分之九十二点三八；分产品中PCB为二十一点八一亿元，SMT为一点〇二亿元，整机产品为零点五九亿元，其他业务占百分之七点六二。PCB及直接延伸服务构成主营重要收入，故定核心，但整机和未拆分其他业务保留混合边界。旧“PCB+SMT”含义基本正确，现按白名单拆为通用刚性板和PCB设计与SMT服务，避免简单沿用组合标签。"
   },
-  "category1": "PCB",
-  "concept1": [
-   "PCB-通用刚性板",
-   "PCB设计与SMT服务",
-   "PCB-高多层与服务器板",
-   "PCB-HDI与任意层互连",
-   "PCB-FPC与刚挠结合"
-  ],
   "concept_desc": {
    "PCB-通用刚性板": "单双面板、多层刚性印制电路板，未明确服务器或HDI时使用。",
    "PCB设计与SMT服务": "PCB设计、研发打样、SMT贴装和PCBA制造服务。",
@@ -83943,7 +83976,13 @@
    "verdict": "核心",
    "reason": "公司真实业务包括印制电路板研发、生产和销售，以及印制电路板表面贴装SMT和少量整机产品，既有PCB裸板又有后段贴装服务，两类环节需要区分，不能把SMT或整机收入全部视为裸板收入。iFinD二〇二五年PCB行业收入二十三点四三亿元，占营业收入百分之九十二点三八；分产品中PCB为二十一点八一亿元，SMT为一点〇二亿元，整机产品为零点五九亿元，其他业务占百分之七点六二。PCB及直接延伸服务构成主营重要收入，故定核心，但整机和未拆分其他业务保留混合边界。旧“PCB+SMT”含义基本正确，现按白名单拆为通用刚性板和PCB设计与SMT服务，避免简单沿用组合标签。",
    "borderline_review": "2026-10-27二次复核修正"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "PCB-通用刚性板|PCB设计与SMT服务|PCB-高多层与服务器板|PCB-HDI与任意层互连|PCB-FPC与刚挠结合",
+  "category2": "超节点",
+  "concept2": "PCB",
+  "category": "PCB|超节点",
+  "concept": "PCB-通用刚性板|PCB设计与SMT服务|PCB-高多层与服务器板|PCB-HDI与任意层互连|PCB-FPC与刚挠结合|PCB"
  },
  "603387": {
   "business_summary": "主营医药制造业",
@@ -89279,18 +89318,22 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "电池",
-  "concept": "电解液",
+  "category": "电池|半导体",
+  "concept": "电解液|半导体材料-电子特气与湿化学品",
   "name": "建业股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-11-20 15:26:25",
   "tag_evidence": "text",
   "tag_verdict": "相关",
   "concept_reason": {
    "电解液": "建业股份：电子化学品，电解液溶剂延伸"
-  }
+  },
+  "category1": "电池",
+  "concept1": "电解液",
+  "category2": "半导体",
+  "concept2": "半导体材料-电子特气与湿化学品"
  },
  "603949": {
   "business_summary": "主营汽车制造业",
@@ -89403,18 +89446,22 @@
   "business_summary": "柔性自动化装备、工业机器人系统集成与应用、燃油分配器、燃油管、冷却水硬管、二氧化碳空调管路",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "汽车",
-  "concept": "零部件",
+  "category": "汽车|机器人",
+  "concept": "零部件|智能装备与机床",
   "name": "克来机电",
   "primary_source": "legacy",
   "sector": "汽车零部件/新型工业化/机器视觉/汽车热管理",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-20 15:26:25",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "零部件": "主营：智能装备业务；与本标签一致"
-  }
+  },
+  "category1": "汽车",
+  "concept1": "零部件",
+  "category2": "机器人",
+  "concept2": "智能装备与机床"
  },
  "603966": {
   "business_summary": "主营通用设备制造业",
@@ -90003,18 +90050,22 @@
   "business_summary": "汽车金属零部件的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "汽车",
-  "concept": "零部件",
+  "category": "汽车|机器人",
+  "concept": "零部件|核心零部件-传动",
   "name": "长华集团",
   "primary_source": "fallback",
   "sector": "汽车零部件/人形机器人/长三角一体化/比亚迪概念",
   "sector_type": "fallback",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-11-20 15:26:25",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
    "零部件": "主营：紧固件领域；与本标签一致"
-  }
+  },
+  "category1": "汽车",
+  "concept1": "零部件",
+  "category2": "机器人",
+  "concept2": "核心零部件-传动"
  },
  "605020": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -90119,7 +90170,7 @@
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-20 15:26:25",
   "tag_evidence": "text",
   "tag_verdict": "核心",
   "concept_reason": {
@@ -90127,12 +90178,6 @@
    "PCB-HDI与任意层互连": "公司真实主营是印制电路板研发、生产和销售，产品包括单面板、双面板、多层板与HDI板；年报明确HDI用于汽车电子、服务器电源、高速信号连接器和工控等领域，但并未把所有产品都认定为AI服务器板，故以通用刚性板为基本标签、HDI为补充。iFinD二〇二五年印制电路板行业收入十一点九六亿元，占营业收入百分之八十八点七三，其中双面板七点七四亿元、单面板四点二二亿元，其他业务占百分之十一点二七。PCB独立收入占绝对主体，符合核心定级；其他业务不得并入，服务器电源等应用也不能替代具体产品分类。旧“PCB”方向无误但过于笼统，现按真实板型纠正，未额外添加缺乏单独证据的IC载板或高多层服务器标签。",
    "PCB-高多层与服务器板": "公司真实主营是印制电路板研发、生产和销售，产品包括单面板、双面板、多层板与HDI板；年报明确HDI用于汽车电子、服务器电源、高速信号连接器和工控等领域，但并未把所有产品都认定为AI服务器板，故以通用刚性板为基本标签、HDI为补充。iFinD二〇二五年印制电路板行业收入十一点九六亿元，占营业收入百分之八十八点七三，其中双面板七点七四亿元、单面板四点二二亿元，其他业务占百分之十一点二七。PCB独立收入占绝对主体，符合核心定级；其他业务不得并入，服务器电源等应用也不能替代具体产品分类。旧“PCB”方向无误但过于笼统，现按真实板型纠正，未额外添加缺乏单独证据的IC载板或高多层服务器标签。"
   },
-  "category1": "PCB",
-  "concept1": [
-   "PCB-通用刚性板",
-   "PCB-HDI与任意层互连",
-   "PCB-高多层与服务器板"
-  ],
   "concept_desc": {
    "PCB-通用刚性板": "单双面板、多层刚性印制电路板，未明确服务器或HDI时使用。",
    "PCB-HDI与任意层互连": "HDI、任意层互连、类载板和高密度互连PCB。",
@@ -90174,7 +90219,13 @@
    "verdict": "核心",
    "reason": "公司真实主营是印制电路板研发、生产和销售，产品包括单面板、双面板、多层板与HDI板；年报明确HDI用于汽车电子、服务器电源、高速信号连接器和工控等领域，但并未把所有产品都认定为AI服务器板，故以通用刚性板为基本标签、HDI为补充。iFinD二〇二五年印制电路板行业收入十一点九六亿元，占营业收入百分之八十八点七三，其中双面板七点七四亿元、单面板四点二二亿元，其他业务占百分之十一点二七。PCB独立收入占绝对主体，符合核心定级；其他业务不得并入，服务器电源等应用也不能替代具体产品分类。旧“PCB”方向无误但过于笼统，现按真实板型纠正，未额外添加缺乏单独证据的IC载板或高多层服务器标签。",
    "borderline_review": "2026-10-27二次复核修正"
-  }
+  },
+  "category1": "PCB",
+  "concept1": "PCB-通用刚性板|PCB-HDI与任意层互连|PCB-高多层与服务器板",
+  "category2": "超节点",
+  "concept2": "PCB",
+  "category": "PCB|超节点",
+  "concept": "PCB-通用刚性板|PCB-HDI与任意层互连|PCB-高多层与服务器板|PCB"
  },
  "605060": {
   "business_summary": "主营通用设备制造业",
@@ -90865,18 +90916,22 @@
   "business_summary": "主营建筑装饰、装修和其他建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "category": "低空经济",
-  "concept": "智慧灯杆",
+  "category": "低空经济|半导体",
+  "concept": "智慧灯杆|存储模组与系统",
   "name": "时空科技",
   "primary_source": "legacy",
   "sector": "建筑装饰、装修和其他建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 11:00:00",
+  "updated_at": "2026-11-19 15:29:49",
   "tag_evidence": "text",
   "tag_verdict": "边缘",
   "concept_reason": {
    "智慧灯杆": "时空科技：夜间经济/智慧城市"
-  }
+  },
+  "category1": "低空经济",
+  "concept1": "智慧灯杆",
+  "category2": "半导体",
+  "concept2": "存储模组与系统"
  },
  "605179": {
   "business_summary": "主营食品制造业",
@@ -112942,5 +112997,5 @@
   "concept1": "零部件",
   "updated_at": "2026-11-08 17:21:26"
  },
- "updated_at": "2026-11-18 15:06:32"
+ "updated_at": "2026-11-20 15:26:25"
 }
