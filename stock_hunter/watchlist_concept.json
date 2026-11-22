@@ -55266,7 +55266,7 @@
   "primary_source": "legacy",
   "sector": "数字媒体/空间计算/智谱AI/军工信息化",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-21 15:29:54",
   "role": "龙头",
   "role_reason": "10月三度20cm涨停，物理AI/AI 3D数字孪生龙头",
   "dataelement_verdict": "相关",
@@ -55275,8 +55275,6 @@
   },
   "tag_evidence": "text",
   "tag_verdict": "相关",
-  "category1": "数据要素",
-  "concept1": "数据要素_其他行业数据",
   "dataelement_audited_at": "2026-10-27",
   "dataelement_evidence": {
    "title": "凡拓数创2024年年度报告",
@@ -55284,7 +55282,13 @@
    "url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=301313&id=10973301",
    "profile_source": "iFinD ifind_get_stock_info",
    "profile_asof": "2026-10-27"
-  }
+  },
+  "category1": "数据要素",
+  "concept1": "数据要素_其他行业数据",
+  "category2": "物理AI",
+  "concept2": "物理AI_数据采集",
+  "category": "数据要素|物理AI",
+  "concept": "数据要素_其他行业数据|物理AI_数据采集"
  },
  "301314": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -112997,5 +113001,5 @@
   "concept1": "零部件",
   "updated_at": "2026-11-08 17:21:26"
  },
- "updated_at": "2026-11-20 15:26:25"
+ "updated_at": "2026-11-21 15:29:54"
 }
