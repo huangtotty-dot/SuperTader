@@ -208,6 +208,7 @@ const _API_MAX_INFLIGHT = 6;
 let _apiInflight = 0;
 let _apiTimeoutCnt = 0;
 let _lastReportAt = 0;      // 上报节流（见 apiCall 末尾注释）
+let _lastApiMs = 0;         // 最近一次 apiCall 耗时 ms（P0-7 被动 ping 的拥堵探针依据）
 
 async function apiCall(name, ...args) {
   if (!window.pywebview || !window.pywebview.api) {
@@ -245,6 +246,7 @@ async function apiCall(name, ...args) {
   } finally {
     _apiInflight--;
     const _dt = performance.now() - _t0;
+    _lastApiMs = _dt;   // P0-7：记录最近一次调用耗时（含 ping 自身——慢 ping 会维持探测，快 ping 一拍即停）
     // ⚠️ 上报本身是个 js_api 调用（会新起线程 + 占用 UI 线程返回通道）。冻结时"每次调用都慢"
     // ⇒ 每次都再触发一次上报 = **把队列翻倍**。故全局节流：2s 内至多上报一次。
     // ⚠️ 注意写法：**绝不能在 finally 里 `return`** —— JS 中 finally 的 return 会**覆盖**
@@ -273,6 +275,11 @@ async function loadAndRender(date, silent) {
     }
     state.date = payload.date;
     state.payload = payload;
+    // 2026-11-22（P2-5）：启动三小件随 load_day 一并回来（省 3 次启动扇出）——
+    // 重点关注星标 / 猎手标红 / 周线MACD上次轮巡；键缺失（旧后端）时各函数回退原端点。
+    loadFocusCodes(payload.focus_codes);
+    loadRedMarks(payload.red_marks);
+    loadWeeklyMacdLastStatus(payload.weekly_macd_status);
     // 独立配置（账户总资金+已实现亏损），不随 holdings.json 更新丢失
     portfolioCfg = (payload.portfolio_config) || { accounts: {}, realized_loss: {} };
     // 文件版本指纹基线（本次 loadAndRender 自己会重拉下面这些面板 ⇒ 只记基线）
@@ -376,11 +383,12 @@ function focusStarHtml(code, cls) {
 let _wmTimer = null;
 /* 上次轮巡摘要（后端落盘 weekly_macd_scan.json）——启动时拉到按钮 title 里，
    重启 GUI 后也能看到"上次什么时候跑的、标了几只"。 */
-async function loadWeeklyMacdLastStatus() {
+async function loadWeeklyMacdLastStatus(pre) {
   const btn = document.getElementById("wmScanBtn");
   if (!btn) return;
   try {
-    const st = await apiCall("weekly_macd_status");
+    // P2-5：load_day 已带 `weekly_macd_status` 键时直接用，否则回退独立端点
+    const st = pre !== undefined ? pre : await apiCall("weekly_macd_status");
     const last = st && st.last;
     if (!last || !last.finished_at) return;
     if (btn.dataset.baseTip === undefined) btn.dataset.baseTip = btn.title || "";
@@ -443,9 +451,10 @@ async function runWeeklyMacdScan() {
   }
 }
 
-async function loadFocusCodes() {
+async function loadFocusCodes(pre) {
   try {
-    const r = await apiCall("load_focus_codes");
+    // P2-5：load_day 已带 `focus_codes` 键时直接用，否则回退独立端点
+    const r = pre !== undefined ? pre : await apiCall("load_focus_codes");
     FOCUS_SET = new Set((r && r.codes) || []);
     FOCUS_META = (r && r.items) || {};
     syncFocusStars();
@@ -537,9 +546,10 @@ function syncRedMarks() {
    猎手扫描可能伴随页面重载 / GUI 重启，localStorage 在 WebView2 下不保证跨会话存活。
    改为后端 `load_red_marks / toggle_red_mark` 落 `t_io/state/hunter_red_marks.json`，
    localStorage 只当**首屏缓存**（桥未就绪时先用它把颜色画出来，再以后端为准）。 */
-async function loadRedMarks() {
+async function loadRedMarks(pre) {
   try {
-    const r = await apiCall("load_red_marks");
+    // P2-5：load_day 已带 `red_marks` 键时直接用，否则回退独立端点
+    const r = pre !== undefined ? pre : await apiCall("load_red_marks");
     if (!r || !Array.isArray(r.codes)) return;
     const server = new Set(r.codes.map(String));
     if (!r.updated_at && REDMARK_SET.size) {
@@ -616,6 +626,7 @@ let liveFailCnt = 0, pbFailCnt = 0;
 // 轮询器只管 `load_live` 是否返回 ⇒ 慢的时候（实测峰值 refresh_pb 19.4s）会并发叠加。
 // 加单飞闸做背压：上一次没回来，这一拍就跳过。
 let _loadQuotesInflight = false, _refreshPbInflight = false;
+window._pbSig = null;   // P1-4：pb rows 内容指纹（bundle 瘦帧握手；内容派生 ⇒ 切日/后端重启自动失效）
 function updateRefreshAlarm() {
   const interrupted = liveFailCnt >= 3 || pbFailCnt >= 3;
   if (interrupted) {
@@ -634,7 +645,10 @@ async function refreshLive(reset) {
      而切 tab 时它们还在队列里，体感就是"点了没反应"。
      任一项失败只影响那一块（保留上一帧），失败/老后端 ⇒ 回退到底下的原路径。 */
   let b = null;
-  try { b = await apiCall("poll_live_bundle", date); } catch (e) { b = null; }
+  // 2026-11-22 P1-4：pb 瘦帧握手 —— 回传上次 rows 的内容指纹，没变 ⇒ pb 键只回
+  // {sig, unchanged:true}（几百字节 vs 全表 100-300KB），本拍跳过 PB 全表重建；
+  // 价格/涨幅列由 quotes 路径每拍就地刷新，不受影响。
+  try { b = await apiCall("poll_live_bundle", date, window._pbSig || null); } catch (e) { b = null; }
   const _ok = k => (b && b[k] && !b[k].__error__) ? b[k] : null;
   if (b && _ok("live")) {
     try {
@@ -642,14 +656,16 @@ async function refreshLive(reset) {
       renderLive(_ok("live"), date === todayStr());
       refreshIndexBoard({ indices: _ok("indices"), divergence: _ok("divergence"),
                           turnover: _ok("turnover") });
-      // 先铺 quotes，下面 renderPB 才带得上涨幅；pb 也一并回来了就跳过这次多余的表重绘
-      if (_ok("quotes")) _applyQuotesPayload(_ok("quotes"), !!_ok("pb"));
-      if (_ok("pb")) {
-        pbFailCnt = 0;
+      const _pb = _ok("pb");
+      const _pbFresh = !!(_pb && _pb.rows);      // 瘦帧命中 ⇒ 无 rows，沿用 state.payload 里的旧表
+      if (_pb) { pbFailCnt = 0; if (_pb.sig) window._pbSig = _pb.sig; }
+      // 先铺 quotes，下面 renderPB 才带得上涨幅；pb 全量回来了会自己渲染 ⇒ 那次 quotes 路径跳过重绘
+      if (_ok("quotes")) _applyQuotesPayload(_ok("quotes"), _pbFresh);
+      if (_pbFresh) {
         // 与老路径同一契约：把带技术标签的结果合并回 state.payload，否则后续 quotes 路径
         // 用无 tags 的旧 payload 重渲染，会覆盖掉已显示的技术标签（一会有一会无）
-        if (_ok("pb").rows && state.payload) state.payload.position_builder = _ok("pb");
-        renderPB(applyQuotesToPB(_ok("pb")));
+        if (state.payload) state.payload.position_builder = _pb;
+        renderPB(applyQuotesToPB(_pb));
       }
       // 2026-10-28：建仓信号增量 + 人工确认闸也搭这趟车（原本各挂一个 10s/5s 轮询器）
       if (_ok("signals")) pollSignals(_ok("signals"));
@@ -756,6 +772,7 @@ function _refreshQuotesAndSidebar(pre) {
 // date：缓存归属日期。风向标必须跟着**全局选中日**走（与选股猎手同一天），
 // 否则猎手跑历史日、风向标却总挑"≤今天的最新一天" ⇒ 两边排名对不上（2026-10-18 owner 报）。
 let _beacon = { ts: 0, data: null, inflight: false, date: null };
+window._beaconVer = null;   // P1-2 版本握手：上一次全量 payload 的 ver（内容指纹，切日/猎手重跑自动失效）
 // 风向标的"日期跟随"（2026-10-18）：
 //   · 默认跟随全局选中日 `state.date`（与「选股猎手」主按钮的运行日期同源）；
 //   · 猎手「重新生成」看历史日时，用 dateOverride **临时**把风向标钉到同一天；
@@ -826,9 +843,18 @@ async function loadMarketBeacon(force, dateOverride) {
   _beacon.inflight = true;
   try {
     // 传全局选中日 ⇒ 与「选股猎手」同一天（后端取 ≤date 的最近一日）
-    const d = await apiCall("load_market_beacon", _curDate);
-    _beacon = { ts: Date.now(), data: d || {}, inflight: false, date: _curDate };
-    renderMarketBeacon(d || {});
+    // 2026-11-22 P1-2：版本握手 —— 回传上次的 ver，后端组包指纹没变 ⇒ 只回
+    // {unchanged:true, ver}（几百字节 vs 全量 200-400KB），前端跳过重建渲染、保留本地数据。
+    const d = await apiCall("load_market_beacon", _curDate, null, window._beaconVer || null);
+    if (d && d.unchanged && d.ver && _beacon.data) {
+      window._beaconVer = d.ver;
+      _beacon.ts = Date.now();            // 数据没变：续一拍 TTL，不重渲染
+      _beacon.inflight = false;
+    } else {
+      _beacon = { ts: Date.now(), data: d || {}, inflight: false, date: _curDate };
+      window._beaconVer = (d && d.ver) || null;   // pending 帧不带 ver ⇒ 保留上次
+      renderMarketBeacon(d || {});
+    }
   } catch (e) {
     _beacon.inflight = false;
     // ⚠️ 这里原来写的是 `if (!_beacon.data)` —— 而 data 在 renderMarketBeacon **之前**就赋了值
@@ -1110,10 +1136,30 @@ function renderAll(p, tradePnl) {
 }
 
 /* ---- ECharts 辅助 ---- */
-const echarts = window.echarts;
+// 2026-11-22（P2-5）：echarts.min.js（~1MB）不再同步阻塞首屏 —— 首次真正画图时才
+// 动态注入；并发调用共用同一 Promise（单飞）；加载期间的渲染请求**排队补画**而不是丢帧
+// （原 `const echarts = window.echarts` + 各渲染点 `if (!echarts) return` 直接丢帧）。
+let echarts = window.echarts || null;
+let _echartsLoading = null;
+function _ensureEcharts() {
+  if (echarts) return Promise.resolve(echarts);
+  if (_echartsLoading) return _echartsLoading;
+  _echartsLoading = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "vendor/echarts.min.js";
+    s.onload = () => { echarts = window.echarts; resolve(echarts); };
+    s.onerror = () => { _echartsLoading = null; reject(new Error("echarts.min.js 加载失败")); };
+    document.head.appendChild(s);
+  });
+  return _echartsLoading;
+}
 const echInstances = {};
 function echRender(id, opt) {
-  if (!echarts) return;
+  if (!echarts) {   // P2-5：图库未就绪 ⇒ 排队，加载完补画这一帧（不丢帧）
+    _ensureEcharts().then(() => echRender(id, opt))
+      .catch(e => console.error(`[图表] ${id} echarts 加载失败：`, e));
+    return;
+  }
   const el = document.getElementById(id);
   if (!el) return;
   let inst = echInstances[id];
@@ -1833,7 +1879,8 @@ async function drawTurnoverHist() {
   // 节点每 10s 会被回收复用，所以每次画都刷一遍（幂等）。
   box.style.cursor = "zoom-in";
   box.title = "双击放大为独立窗口";
-  if (!window.echarts) { _turnoverFail("ECharts 未加载"); return; }
+  try { await _ensureEcharts(); }   // P2-5：按需加载（原：未加载直接报错丢帧）
+  catch (e) { _turnoverFail("ECharts 加载失败"); return; }
   // 面板隐藏（别的 tab / 窗口最小化）时容器宽高为 0：**连 API 都不用打**，
   // 等可见时 switchTab / visibilitychange / 短重试会自动重画。
   if (!box.clientWidth || !box.clientHeight) {
@@ -2081,7 +2128,10 @@ function _turnoverOption(d, days, ma5) {
 let turnoverWinTimer = null;
 let _turnoverWinBusy = false;
 let TURNOVER_WINDOW_MODE = false;
-const TURNOVER_WIN_PERIOD_MS = 10000;   // 与「盘中状态」卡片同节拍；后端本身 60s 去重
+// 2026-11-22 P1-9：10s → 30s。后端 `load_market_turnover` 本身是 60s TTL 去重，
+// 10s 轮询有 5/6 拍是无效往返（拿回同一份缓存）；后端没有下发"下次有效刷新时间"字段，
+// 自适应做不了 ⇒ 固定 30s（同一份数据最多多停 20s，成交额是慢变量，可接受）。
+const TURNOVER_WIN_PERIOD_MS = 30000;
 
 function openTurnoverWin() {
   const win = document.getElementById("turnoverWin");
@@ -2368,7 +2418,8 @@ let _sectorStarsInflight = false;
 async function loadSectorStars(force) {
   const box = document.getElementById("echSectorStars");
   if (!box) return;
-  if (!window.echarts) { echClear("echSectorStars"); return; }
+  try { await _ensureEcharts(); }   // P2-5：按需加载（原：未加载直接清空丢帧）
+  catch (e) { echClear("echSectorStars"); return; }
   const _key = String(_panelDate());
   if (!force && !_sectorStarsInflight && _sectorStarsCache.data
       && _sectorStarsCache.key === _key && Date.now() - _sectorStarsCache.ts < 60000) {
@@ -2936,6 +2987,11 @@ async function loadSectorMaBreadth(force) {
 }
 
 function renderSectorMaBreadth(d) {
+  if (!echarts) {   // P2-5：图库未就绪 ⇒ 排队补画（不丢帧）
+    _ensureEcharts().then(() => renderSectorMaBreadth(d))
+      .catch(e => console.error("[图表] 板块均线广度 echarts 加载失败：", e));
+    return;
+  }
   const el = document.getElementById("echSectorMa");
   const meta = document.getElementById("sectorMaMeta");
   if (!el) return;
@@ -3271,6 +3327,11 @@ async function loadMa365Breadth() {
 }
 
 function renderMa365(d) {
+  if (!echarts) {   // P2-5：图库未就绪 ⇒ 排队补画（不丢帧）
+    _ensureEcharts().then(() => renderMa365(d))
+      .catch(e => console.error("[图表] 年限宽度 echarts 加载失败：", e));
+    return;
+  }
   const el = document.getElementById("ma365Chart");
   if (!el) return;
   const series = d.series || [];
@@ -3385,6 +3446,11 @@ function _ma20MetaHtml(d, series, last) {
 }
 
 function renderMa20Breadth(d) {
+  if (!echarts) {   // P2-5：图库未就绪 ⇒ 排队补画（不丢帧）
+    _ensureEcharts().then(() => renderMa20Breadth(d))
+      .catch(e => console.error("[图表] 20日线宽度 echarts 加载失败：", e));
+    return;
+  }
   const el = document.getElementById("ma20BreadthChart");
   const meta = document.getElementById("ma20BreadthMeta");
   if (!el) return;
@@ -3626,6 +3692,11 @@ function _sentMetaHtml(d) {
 }
 
 function renderMarketSentiment(d) {
+  if (!echarts) {   // P2-5：图库未就绪 ⇒ 排队补画（不丢帧）
+    _ensureEcharts().then(() => renderMarketSentiment(d))
+      .catch(e => console.error("[图表] 市场情绪 echarts 加载失败：", e));
+    return;
+  }
   const el = document.getElementById("sentChart");
   const meta = document.getElementById("sentMeta");
   if (!el) return;
@@ -3840,9 +3911,12 @@ function _trendEmptyHtml(st) {
 }
 
 function renderLive(live, isToday) {
+  // P1-10：帧记忆 —— 页面隐藏期间只更新它、跳过 DOM 写入，回可见时按最新帧补画。
+  window._lastLiveFrame = { live: live || null, isToday: !!isToday };
   const el = document.getElementById("liveBody");
   const tag = document.getElementById("liveTag");
   if (!isToday) {
+    if (document.hidden) return;       // P1-10
     el.innerHTML = '<div class="empty">选择今天（' + state.date + '）查看盘中实时数据</div>';
     tag.style.display = "none";
     const prev = document.getElementById("livePreview");
@@ -3883,9 +3957,13 @@ function renderLive(live, isToday) {
   // 做法：先把图节点**摘下来**（脱离文档但对象活着、实例也活着），重建后原样**放回占位处**。
   // 这样 10s 一轮里节点与实例都不换，drawTurnoverHist 走"同节点 → 原地 setOption"分支，不闪。
   // 与 2026-10-13「市场风向标搬出 #liveBody」是同一病根，这里用了代价更小的保守修法。
-  const _keepChart = _keepNode("turnoverHistChart");
+  // P1-4③/P1-10：liveBody 大段 innerHTML（趋势卡 + 成交额图槽）只在页面可见且
+  // 「盘中实时」tab 激活时才重建；否则只保留上面的帧记忆，切回/回可见时补画。
+  const _liveBodyVisible = !document.hidden && _signalsTabActive();
+  const _keepChart = _liveBodyVisible ? _keepNode("turnoverHistChart") : null;
 
-  el.innerHTML = `
+  if (_liveBodyVisible) {
+    el.innerHTML = `
     <div class="card">
       <div class="card-title">盘中状态
         <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近1年全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
@@ -3902,17 +3980,18 @@ function renderLive(live, isToday) {
       ${trendCards || _trendEmptyHtml(liveState)}
     </div>`;
 
-  // 把（上面摘下来的）图节点放回占位处。首次渲染没有旧节点 ⇒ 就地新建一个同 id 的容器。
-  _putBackNode("turnoverHistSlot", _keepChart, '<div id="turnoverHistChart" style="height:130px"></div>');
-  // 近1年成交额柱状图，容器节点已复用 ⇒ 同节点走原地 setOption，不再每次 dispose+init
-  drawTurnoverHist();
+    // 把（上面摘下来的）图节点放回占位处。首次渲染没有旧节点 ⇒ 就地新建一个同 id 的容器。
+    _putBackNode("turnoverHistSlot", _keepChart, '<div id="turnoverHistChart" style="height:130px"></div>');
+    // 近1年成交额柱状图，容器节点已复用 ⇒ 同节点走原地 setOption，不再每次 dispose+init
+    drawTurnoverHist();
+  }
 
   // 🧭 市场风向标已**搬出** #liveBody（独立 section，自带调度）—— 原来长在这里，
   //   被 refreshLive 每 10s 整体覆写 ⇒ 点开板块后一直跳闪（2026-10-13 实测）。
 
-  // 概览仪表盘简版
+  // 概览仪表盘简版（overview tab；便宜。P1-10：页面隐藏时同样跳过，回可见补画）
   const prev = document.getElementById("livePreview");
-  if (prev) {
+  if (prev && !document.hidden) {
     const sigs = live.signals || [];
     const nonHolds = sigs.filter(s => s.decision !== "HOLD").slice(0, 5);
     const trends = (live.intraday_state || {}).trend_regimes || {};
@@ -5563,6 +5642,9 @@ try { _secRestore(); } catch (e) { /* 忽略 */ }
 
 function renderPB(pb) {
   window._pbLastPayload = pb;  // P3-2 池筛选：切换下拉时用最近一次 payload 重渲染
+  // P1-4③/P1-10：页面隐藏 或 PB 所在 tab（盘中实时）不可见 ⇒ 只存 state 跳过全表 DOM 重建
+  // （19 列×全池行 ≈ 2,000-6,000 节点），切回/回可见时按 _pbLastPayload 补画一帧。
+  if (document.hidden || !_signalsTabActive()) return;
   const el = document.getElementById("pbBody");
   if (!pb || !pb.has_data) {
     el.innerHTML = '<div class="empty">当日无建仓扫描记录（position_builder 未运行）</div>';
@@ -5977,16 +6059,29 @@ function renderAutoPositions(positions) {
   els.forEach(el => { el.innerHTML = html; });
 }
 
-/* ---- 自动盘盈亏账单（2026-10-10 需求5）：每次建仓→清仓为一周期 ---- */
+/* ---- 自动盘盈亏账单（2026-10-10 需求5）：每次建仓→清仓为一周期 ----
+   2026-11-22 P1-3：流水增量瘦帧 —— 每拍记住 fills 指纹（append-only：条数+最新一条的 md5），
+   下拍回传 `fills_sig` + `fills_limit=AUTO_FILLS_SHOW`（界面本来就只显示尾 200 条）。
+   指纹命中 ⇒ 响应**不带 fills**（~1MB → KB 级），复用本地缓存渲染；有新成交 ⇒ 回尾 200 条替换。
+   summary/stocks/daily 等小字段照常每拍更新。 */
+let _autoFillsSig = null, _autoFillsCache = null;
 async function loadAutoPnl() {
   try {
-    const d = await apiCall("load_auto_pnl");
-    renderAutoPnl(d || {});
+    const d = await apiCall("load_auto_pnl", _autoFillsSig, AUTO_FILLS_SHOW);
+    if (d && !d.error) {
+      if (d.fills_sig) {
+        _autoFillsSig = d.fills_sig;
+        if (d.fills) _autoFillsCache = d.fills;        // 新流水 ⇒ 替换本地缓存
+        else if (_autoFillsCache) d.fills = _autoFillsCache;   // 指纹命中 ⇒ 复用本地缓存渲染
+      }
+      renderAutoPnl(d);
+    }
   } catch (e) { /* 桥接未就绪/后端异常时忽略 */ }
 }
 
 function renderAutoPnl(d) {
   state.autoLedger = d || {};
+  if (document.hidden) return;   // P1-10：隐藏期只更新 state，DOM 回可见时按 state.autoLedger 补画
   renderAutoLedger(d || {});
   const body = document.getElementById("autoPnlBody");
   if (!body) return;
@@ -6083,18 +6178,22 @@ const AUTO_FILLS_SHOW = 200;   // 流水表只显示最近 N 笔
 let _autoFillsOpen = false;    // 逐笔流水默认折叠（owner 2026-10-17）；展开状态跨重渲染保留
 
 function renderAutoLedger(d) {
+  if (document.hidden) return;   // P1-10：隐藏期跳过 DOM（state.autoLedger 已由 renderAutoPnl 更新）
   const sumEl = document.getElementById("autoLedgerSummary");
   const bodyEl = document.getElementById("autoFillsBody");
   if (!sumEl && !bodyEl) return;
   const fills = (d && d.fills) || [];
   const daily = (d && d.daily) || [];
+  // P1-3：fills 可能被后端截到尾 AUTO_FILLS_SHOW 条（fills_total = 全量条数）；汇总口径如实标注
+  const fillsTotal = (d && d.fills_total != null) ? d.fills_total : fills.length;
   if (sumEl) {
     if (!fills.length && !daily.length) {
       sumEl.textContent = "无自动盘成交流水（t_io/bridge/events_*.jsonl 为空）";
     } else {
       const realSum = fills.reduce((a, f) => a + (f.side === "SELL" ? (f.net || 0) : 0), 0);
       const buySum = fills.reduce((a, f) => a + (f.side === "BUY" ? (f.net || 0) : 0), 0);
-      sumEl.innerHTML = `逐笔 ${fills.length} 笔 · 买入净流出 <span class="down mono">${fmt(buySum, 0)}</span> · `
+      const _trunc = fillsTotal > fills.length ? `（示最近 ${fills.length} 笔）` : "";
+      sumEl.innerHTML = `逐笔 ${fillsTotal} 笔${_trunc} · 买入净流出 <span class="down mono">${fmt(buySum, 0)}</span> · `
         + `卖出净流入 <span class="up mono">+${fmt(realSum, 0)}</span> · 收盘快照 ${daily.length} 日`;
     }
   }
@@ -7089,6 +7188,8 @@ async function openDayIntraday(code, name, date) {
       lineStyle: { color: "#d55181", width: 1.2 }, itemStyle: { color: "#d55181" } });
   }
 
+  try { await _ensureEcharts(); }   // P2-5：按需加载
+  catch (e) { if (info) info.innerHTML = '<span style="color:#f85149">ECharts 加载失败</span>'; return; }
   dayInst = echarts.init(box);
   dayInst.setOption({
     backgroundColor: "#000020", animation: false,
@@ -9681,6 +9782,11 @@ function onBoxTemplateSel(sel) {
 }
 
 function renderStockChart(applyZoom = true) {
+  if (!echarts) {   // P2-5：图库未就绪 ⇒ 排队补画（不丢帧）；状态都在模块级，重入安全
+    _ensureEcharts().then(() => renderStockChart(applyZoom))
+      .catch(e => console.error("[图表] K线 echarts 加载失败：", e));
+    return;
+  }
   // 2026-10-20：实时尾（1~5s）重绘时**不要**再写 dataZoom —— setOption 里的
   // start/end 会把用户正在拖动的滑杆弹回，表现为「看一会儿就缩放不了」。
   // 只有打开/切周期/点区间/点缩放按钮时才 applyZoom=true。
@@ -11132,6 +11238,23 @@ function _hunterTabActive() {
   return !!(p && p.classList && p.classList.contains("active"));
 }
 
+/* P1-10：页面从隐藏回可见 ⇒ 按最新 state 给挂了渲染闸的面板各补画一帧。
+   覆盖：PB 大表 / 盘中实时 / 自动盘账单+流水 / 指数板（帧记忆 {d,turn} 直接作 pre 回传，零桥往返）。
+   告警响铃、状态栏、轮询节奏在隐藏期间照常运行，不在此处处理。 */
+function _repaintAfterHidden() {
+  try { if (window._pbLastPayload) renderPB(window._pbLastPayload); } catch (e) { }
+  try { const _lf = window._lastLiveFrame; if (_lf) renderLive(_lf.live, _lf.isToday); } catch (e) { }
+  try { if (state.autoLedger) renderAutoPnl(state.autoLedger); } catch (e) { }
+  try { if (window._lastIndicesFrame) loadIndices(window._lastIndicesFrame); } catch (e) { }
+}
+
+/* 「盘中实时」页（tab-signals：指数板 / 盘中状态 / PB 建仓大表都在这页）当前是否可见。
+   P1-4③：renderPB/renderLive 在 tab 不可见时只更新 state 不写 DOM，切回时按最新 state 补画。 */
+function _signalsTabActive() {
+  const p = document.getElementById("tab-signals");
+  return !!(p && p.classList && p.classList.contains("active"));
+}
+
 /* 取**实时**价/涨幅（2026-10-12 改：一次覆盖全部展开板块）。
    ⚠️ 三条约束都在这里解决，别退回"每板块一次"：
      ① **一次请求**覆盖所有展开板块（`_allRenderedHunterCodes` 并集去重）⇒ 与展开数无关；
@@ -11417,6 +11540,10 @@ async function loadIndices(pre) {
       ]);
     }
     const idx = (d && d.indices) || [];
+    // P1-10：帧记忆（{d, turn} 直接可作 pre 回传 ⇒ 回可见补画零桥往返）；
+    // 页面隐藏时只存帧、跳过整板 DOM 重建（数据照拉，告警/轮询逻辑不受影响）。
+    window._lastIndicesFrame = { d, turn };
+    if (document.hidden) return;
     if (!idx.length) {
       body.innerHTML = '<div class="empty">指数行情不可用</div>';
       return;
@@ -12922,6 +13049,11 @@ function parseCrossTable(md) {
 }
 
 function renderReviewCharts(md, meta) {
+  if (!echarts) {   // P2-5：图库未就绪 ⇒ 排队补画（不丢帧）
+    _ensureEcharts().then(() => renderReviewCharts(md, meta))
+      .catch(e => console.error("[图表] 复盘图 echarts 加载失败：", e));
+    return;
+  }
   const wrap = document.getElementById("reviewChartWrap");
   if (!wrap) return;
   const rows = parseCrossTable(md);
@@ -13484,6 +13616,9 @@ function switchTab(tab) {
     }
     if (tab === "signals") {
       _turnoverSizeRetryN = 0; drawTurnoverHist();
+      // P1-4③：tab 不可见期间 renderPB/renderLive 只存了 state ⇒ 切回按最新 state 补画一帧
+      try { if (window._pbLastPayload) renderPB(window._pbLastPayload); } catch (e) { }
+      try { const _lf = window._lastLiveFrame; if (_lf) renderLive(_lf.live, _lf.isToday); } catch (e) { }
       // 切回本页时补一次异常监控池（内部有 TTL 节流：60s 内刚拉过就只刷行情，
       // 有「均线突破」pending 时 15s 重拉）。它不在 10s live 轮询里，别指望自动回来。
       loadAbnormalPool();
@@ -13749,12 +13884,10 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261122a", 0); } catch (e) { /* 静默 */ }
-  // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
-  // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
-  loadFocusCodes();
-  loadRedMarks();          // 2026-11-09：猎手「标红」标记（后端持久化，跨重载/重启）
-  loadWeeklyMacdLastStatus();
+  try { window.pywebview.api.report_slow_call("app_boot_20261122c", 0); } catch (e) { /* 静默 */ }
+  // 2026-11-22（P2-5）：重点关注/猎手标红/周线MACD上次轮巡 已**并入 load_day 响应**
+  // （原这里 3 个独立 apiCall 与首帧扇出挤 6 个在飞名额）⇒ 由 loadAndRender 统一应用。
+  // 后端键缺失时三函数各自回退原端点（见 loadFocusCodes/loadRedMarks/loadWeeklyMacdLastStatus 的 pre 参数）。
   _vpSyncButtons();   // 密集成交区按钮按 localStorage 里的持久状态显示（默认关）
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
@@ -13895,6 +14028,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 给被测的队列添堵（每个 js_api 调用都会新起一个线程 + 占用一次 UI 线程返回通道）：
   //  · jsblock：保留（纯 JS 侧，零桥接调用，不添载）。
   //  · ping   ：2s → **10s**，且改走 `apiCall` ⇒ **受在飞上限约束**，不再绕过限流。
+  //    （2026-11-22 P0-7 起再降为**被动触发**：桥健康时跳过不发，见下方 setInterval 处注释。）
   //  · dump_threads：**取消自动触发**（一次写 100KB+ 栈、且它本身是个 js_api 调用）。
   //    需要时手工调 `dump_threads()`（或临时把下面的开关打开）。
   const _AUTO_DUMP = false;   // 需要再抓栈现场时改 true
@@ -13929,19 +14063,33 @@ document.addEventListener("DOMContentLoaded", () => {
   }, 250);
 
   /* 页面从后台切回前台（2026-10-22）：隐藏期间定时器被节流、轮询几乎停摆，回来时按"休眠恢复"
-     重排一次 —— 否则会看到一屏旧数据，且所有轮询在同一瞬间齐发（惊群）。 */
+     重排一次 —— 否则会看到一屏旧数据，且所有轮询在同一瞬间齐发（惊群）。
+     2026-11-22 P1-10：隐藏期间各渲染函数只更新 state 没写 DOM ⇒ 回可见按最新 state 补画一帧
+     （轮询与告警逻辑一律不动；各渲染函数内部仍有 tab 闸，画不画由它们自己判）。 */
   let _hiddenAt = 0;
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       const _g = _hiddenAt ? Date.now() - _hiddenAt : 0;
       _hiddenAt = 0;
       if (_g > 60000) _onWakeFromSleep(_g);
+      _repaintAfterHidden();
     } else {
       _hiddenAt = Date.now();
     }
   });
   let _dumpedAt = 0;
+  // P0-7（2026-11-22）：诊断 ping **被动化**。原先 10s 常驻 —— 全局在飞名额仅 6 个，
+  // 它常年白占其一（~1/5 桥容量），桥拥堵时连它自己也被排队（ping avg 5.7s 的假象）。
+  // 错位论证同后端 `_INDICES_TTL`（gui.py）：业务轮询本身每 10s 就在过桥，桥健康时
+  // ping 是纯冗余 ⇒ 仅当**最近一次 apiCall 耗时 > 3000ms**（桥已拥堵，需要空端点
+  // 探针定位）或 URL 带 `?diag=1`（排查模式，恢复常驻）时才真发，否则跳过不占名额。
+  // 250ms 的 jsblock 看门狗保留不动。
+  const _diagMode = (() => {
+    try { return new URLSearchParams(location.search || "").get("diag") === "1"; }
+    catch (e) { return false; }
+  })();
   setInterval(async () => {
+    if (!_diagMode && _lastApiMs <= 3000) return;   // 桥健康：跳过，不占在飞名额
     const t0 = performance.now();
     try {
       await apiCall("ping");     // 走 apiCall ⇒ 受 _API_MAX_INFLIGHT / 超时约束
@@ -14241,9 +14389,15 @@ async function openMultiWatch() {
   if (mwTurnTimer) clearInterval(mwTurnTimer);
   mwTurnTimer = setInterval(mwTurnTick, 10000);
   // 证券/银行/保险 涨幅：同样 10 秒（2026-11-21 owner）
-  mwSectorTick();
-  if (mwSectorTimer) clearInterval(mwSectorTimer);
-  mwSectorTimer = setInterval(mwSectorTick, 10000);
+  // 2026-11-22 P1-9：与成交额小卡**错峰 5s** —— 两个 10s setInterval 同相位齐发，
+  // 每 10s 双桥并发互相排队；kick 句柄存下来，关窗时一并清（否则关了窗 5s 后又复活）。
+  if (mwSectorKick) clearTimeout(mwSectorKick);
+  mwSectorKick = setTimeout(() => {
+    mwSectorKick = null;
+    mwSectorTick();
+    if (mwSectorTimer) clearInterval(mwSectorTimer);
+    mwSectorTimer = setInterval(mwSectorTick, 10000);
+  }, 5000);
 }
 
 /* ===== 多窗口看盘 · 标题栏「两市成交额」行内读数（2026-11-17 owner：
@@ -14258,6 +14412,7 @@ let mwTurnTimer = null, mwTurnInflight = false;
 /* 证券/银行/保险 涨幅（2026-11-21 owner：「成交额旁边显示，最好 10 秒刷新」）——
    后端 `load_sector_pcts`（腾讯指数快照三腿，8s 内存缓存）⇒ 10 秒轮询每拍都是新值。 */
 let mwSectorTimer = null, mwSectorInflight = false;
+let mwSectorKick = null;   // P1-9：错峰 5s 的首拍 timeout（关窗时要一并清掉）
 
 async function mwSectorTick() {
   if (mwSectorInflight) return;
@@ -14436,6 +14591,7 @@ function closeMultiWatch() {
     if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
     if (mwTurnTimer) { clearInterval(mwTurnTimer); mwTurnTimer = null; }
     if (mwSectorTimer) { clearInterval(mwSectorTimer); mwSectorTimer = null; }
+    if (mwSectorKick) { clearTimeout(mwSectorKick); mwSectorKick = null; }   // P1-9 错峰首拍
     try { window.pywebview.api.close_multi_window(); } catch (e) { /* 忽略 */ }
     return;
   }
@@ -14444,6 +14600,7 @@ function closeMultiWatch() {
   if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
   if (mwTurnTimer) { clearInterval(mwTurnTimer); mwTurnTimer = null; }
   if (mwSectorTimer) { clearInterval(mwSectorTimer); mwSectorTimer = null; }
+  if (mwSectorKick) { clearTimeout(mwSectorKick); mwSectorKick = null; }   // P1-9 错峰首拍
   if (mwRO) { try { mwRO.disconnect(); } catch (e) { /* 忽略 */ } mwRO = null; }
   mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
   mwInsts = [];
@@ -14580,6 +14737,7 @@ function mwRefreshAll() { mwTick(); }
 function _mwBuildCells() {
   const host = document.getElementById("multiWatchGrid");
   if (!host) return;
+  _ensureEcharts().catch(() => { });   // P2-5：开窗即触发按需加载（init 仍由下方/mwTick 懒建）
   mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
   mwInsts = [];
   mwZoom = [];                 // 重开窗口 / 重建格子 ⇒ 缩放归位（换票同理，见 mwPick）
@@ -15219,6 +15377,7 @@ async function mwTick() {
   // 只请求**当前布局可见**的那几只：3×2 时后 3 只不下发（省 1/3 的取数与渲染）
   const codes = mwCodes.slice(0, mwN()).filter(Boolean);
   if (!codes.length) return;
+  try { await _ensureEcharts(); } catch (e) { return; }   // P2-5：图库未就绪本轮跳过，下一拍再来
   mwBusy = true;
   try {
     await _mwRefreshBoxes();          // 画框：10s 节流，拿不到就沿用上一次

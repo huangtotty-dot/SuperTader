@@ -181,6 +181,19 @@ class TestNoBareUrlopen(unittest.TestCase):
         from core.market_data.tencent_provider import TencentProvider
         self._assert_pooled(TencentProvider.index_minute)
 
+    # ── P1-6(2026-11-22)：GUI 层 3 处东财裸直连收编（core 层 5 处之外漏网的）──
+    def test_gui_em_last_price(self):
+        import gui
+        self._assert_pooled(gui.Api._em_last_price)
+
+    def test_gui_load_stock_chart(self):
+        import gui
+        self._assert_pooled(gui.Api.load_stock_chart)
+
+    def test_gui_em_stock_boards(self):
+        import gui
+        self._assert_pooled(gui.Api._em_stock_boards)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

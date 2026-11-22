@@ -33,7 +33,10 @@ class TestFrontend(unittest.TestCase):
                                 f"focusStarHtml 出现 {JS.count('focusStarHtml(')} 次，应有 5 表 + 定义")
         self.assertIn('data-focus-code="${esc(c)}"', JS)
         self.assertIn("function toggleFocus(", JS)
-        self.assertIn("loadFocusCodes();", JS)
+        # 2026-11-22（P2-5）：启动加载已从「init 独立 apiCall」改为「load_day 并入 focus_codes 键」，
+        # 前端在 loadAndRender 里统一应用；键缺失时 loadFocusCodes 回退原端点。
+        self.assertIn("loadFocusCodes(payload.focus_codes);", JS)
+        self.assertIn("focus_codes", PY)   # 后端 load_day 并入（见 gui._init_marks_payload）
 
     def test_紫色且不撞色(self):
         self.assertIn(".focus-star.on", CSS)

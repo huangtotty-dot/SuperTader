@@ -15,6 +15,7 @@ v2 改动（vs v1 fix1 审核）：
 """
 import os
 import json
+import time
 import pandas as pd
 from typing import Dict
 
@@ -118,13 +119,49 @@ def load_history() -> dict:
 
 
 def save_daily_summary(date_str: str, sectors: list) -> None:
-    """无条件保存当日板块数据到 history"""
+    """保存当日板块数据到 history；**内容与现档一致则跳过写**（2026-11-22 P2-3）。
+
+    交易时段 `core.hunter_poll.run_summary_regen` 每 15min 全池重跑都会走到这里，
+    8.2MB 整体重写 ⇒ ~130MB/日写放大。写前把「合并后的 history」与刚读出的现档做
+    **规范化指纹**对比（`sort_keys=True` 定序 ⇒ 比较的是内容不是字节，键序/缩进差异
+    不产生假变化）：没变 ⇒ 跳过；变了 ⇒ 唯一 tmp + os.replace 原子重写
+    （替换冲突按本仓 C19 口径指数退避重试，见 core/utils.py `_snapshot_write` 头注）。
+    落盘格式保持原样（`indent=2` 自然序），下游读取方零感知。
+    """
     path = _history_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    history = load_history()
+    before = load_history()
+    history = dict(before)
     history[date_str] = sectors
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+
+    def _canon(obj) -> str:
+        return json.dumps(obj, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":"), default=str)
+
+    try:
+        if _canon(before) == _canon(history):
+            return   # 内容没变：跳过 8.2MB 全量重写
+    except Exception:
+        pass       # 指纹异常按原路径写，绝不因优化丢数据
+    tmp = f"{path}.{os.getpid()}.{int(time.time() * 1000)}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    for attempt in range(5):   # C19 口径：AV/索引器秒级锁窗，退避 0.2/0.4/0.8/1.6/3.2s
+        try:
+            os.replace(tmp, path)
+            return
+        except OSError:
+            if attempt < 4:
+                time.sleep(0.2 * (2 ** attempt))
+            else:
+                raise
 
 
 def compute_heat_scores(

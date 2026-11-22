@@ -1301,6 +1301,12 @@ def on_order_status(context, order):
         return
 
     if status == 3:  # 全部成交
+        # P0-1(2026-11-22)：成交到达 ⇒ 心跳持仓/现金快照缓存立即失效（置 ts=None），
+        # 下一根 bar 强制重取——否则 P1-6 降频（_HB_SNAPSHOT_INTERVAL_SEC=300）后
+        # GUI 持仓链最坏滞后 ~6 分钟，出现"看到成交、持仓不变"。放在孤儿闸**之前**：
+        # 池外手工单同样改变账户真实持仓（心跳会合并 _account_positions_all）。
+        # dict 单键赋值原子（GIL），回调线程与 on_bar 线程交叉读写安全（本文件无锁模式）。
+        _HB_CACHE["ts"] = None
         # P2-3A(2026-09-10): 孤儿闸——账户级回调对非本策略成交（掘金仿真终端手工单）也触发，
         # 当日无本策略 order 记录 → 只留痕 risk:orphan_fill，不写 fill/不进台账（09-10 300054 串 800 股根因）。
         _side = "BUY" if side == 1 else "SELL"

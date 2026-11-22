@@ -15,11 +15,13 @@ gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
   holdings.json / t_io/state/holdings_daily_{date}.json     持仓（当前 + GUI 日快照；旧 holdings_{date}.json 已于 2026-08-30 清理）
 """
 import array as _array
+import atexit as _atexit
 import copy
 import json
 import math
 import os
 import re
+import subprocess
 import sys
 import threading
 import time as _time_mod
@@ -1037,6 +1039,58 @@ if str(HUNTER_DIR) not in sys.path:
 # 2026-08-15: 选股猎手后台运行状态（进度条轮询用）。进度细节来自 market_data.MARKET_PROGRESS。
 import threading as _th
 HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
+# 2026-11-22（P2-4）：猎手管线改**子进程**执行（core/hunter_worker.py）——
+# 此前在同进程后台线程跑 1~2min 全管线：取数挤 GM facade 的 max_workers=1 串行池
+# （与 K线弹窗/指数板的 GM 调用互排），批算纯 GIL 活只能靠 sleep 给 UI 让路。
+# 子进程有独立 GIL 与 GM 池；进度经 t_io/state/hunter_run_status.json 回传、
+# 结果经 t_io/state/hunter_run_result.json 回收，前端契约（run_hunter /
+# hunter_progress / load_hunter 三端点）零改动。
+_HUNTER_PROC_LOCK = _th.Lock()
+_HUNTER_PROC = {"proc": None, "log_fp": None}
+_HUNTER_STATUS_FP = STATE_DIR / "hunter_run_status.json"
+_HUNTER_RESULT_FP = STATE_DIR / "hunter_run_result.json"
+_HUNTER_WORKER = BASE / "core" / "hunter_worker.py"
+
+
+def _write_json_atomic(fp, obj):
+    """tmp + os.replace 原子写（供猎手状态档；与 _focus_save 同款）。"""
+    fp = Path(fp)
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    tmp = fp.with_suffix(fp.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, fp)
+
+
+def _terminate_hunter_proc():
+    """GUI 退出时收掉猎手子进程（atexit 注册）。
+
+    覆盖「关窗/优雅退出」路径；GUI 被 terminate/kill 或 Ctrl+C 看门狗 os._exit 时
+    本函数不会跑 ⇒ worker 侧的**父进程看门狗**（--parent-pid）兜底自杀，双保险。
+    """
+    try:
+        with _HUNTER_PROC_LOCK:
+            proc, fp = _HUNTER_PROC.get("proc"), _HUNTER_PROC.get("log_fp")
+            _HUNTER_PROC["proc"] = None
+            _HUNTER_PROC["log_fp"] = None
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=3)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        if fp is not None:
+            try:
+                fp.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+_atexit.register(_terminate_hunter_proc)
 # 2026-10-10: 原「开盘后每小时自动跑」定时器已删除（owner 需求6，扫描一律按钮触发）。
 _CHART_PREFETCH_STATE = {"started": False}  # 盘后 K线预下载调度（2026-10-04）
 # 主线程(js_api)心跳：高频轮询方法每次更新；看门狗发现停跳 ⇒ 判界面卡死并落线程栈（2026-10-08）
@@ -1104,9 +1158,14 @@ _LIMITUP_PHASE_LOCK = threading.Lock()
 # 压两三个整表计算 ⇒ 谁都被拖过超时、结果全被丢弃（表一直空着）。
 # 这里只做两件事：同一 (池子成员, 日期) 同时只让一个线程算；算的时候后来的请求直接拿
 # **上一拍**的结果（行数据不变的部分占绝对多数），不再叠加一份 CPU。
-_POOL_ROWS_RUN: set = set()          # 正在算的 key
-_POOL_ROWS_MEM: dict = {}            # key -> 上一拍 payload
+_POOL_ROWS_RUN: set = set()          # 正在算的 key（前台同步算 + 后台 SWR 重算共用单飞）
+# key -> {"payload": 上一拍结果, "ts": 算完时刻, "fp": 输入文件指纹(mtime,size)}
+# 2026-11-22 P1-1：整表 SWR 化 —— 新鲜(30s 且指纹没变)直返；过期/指纹变但有旧值 ⇒
+# 立返旧值 + 后台单飞重算；无旧值（首次）才同步算（旧行为）。原来只在并发重叠时兜底，
+# 等于每次轮询都全量重算（avg 6.6s / max 84s 压在 js_api 线程上）。
+_POOL_ROWS_MEM: dict = {}
 _POOL_ROWS_LOCK = threading.Lock()
+_POOL_ROWS_TTL = 30.0                # 整表缓存新鲜期（秒）
 # 市场情绪面板的数据源：同花顺涨停池按日缓存（`analysis.index_regime` 每天 14:30 落盘一次，
 # append-only）。面板**只读、零网络**；测试会 patch 这个常量。
 _E5_THS_FP = BASE / "t_io" / "index_regime" / "e5_ths_cache.json"
@@ -1147,7 +1206,8 @@ _ROTATION_CACHE_MEM = {}
 # 2026-08-23: 每日大盘复盘（LLM）后台线程状态
 _REVIEW_RUN_STATE = {"running": False, "error": None}
 # 2026-10-10: 自动盘盈亏账单缓存（load_auto_pnl；纯磁盘读，30s TTL 足够）
-_AUTO_PNL_CACHE = {"ts": 0.0, "date": None, "data": None}
+# 2026-11-22 P1-3：+ running 单飞闸（TTL 到期有旧值 ⇒ 立返旧值 + 后台重算，不再压调用线程）
+_AUTO_PNL_CACHE = {"ts": 0.0, "date": None, "data": None, "running": False}
 # 2026-10-20：自动盘盈亏/成本是**纯磁盘全量重算**（实测 3~5s），30s TTL 会在盘中
 # 每半分钟把 UI 线程压住一次（K 线弹窗首帧正好撞上就明显变慢）。fill 是事件驱动的，
 # 面板摘要 2 分钟刷新足够 ⇒ TTL 提到 120s，重算频率降 4 倍。
@@ -1779,6 +1839,27 @@ _INSTRUMENT_NAMES = {"ts": 0.0, "map": {}}
 _INSTRUMENT_NAMES_TTL = 600.0
 _INSTRUMENT_NAMES_LOCK = threading.Lock()
 
+# ---- 东财请求 60s 负缓存（2026-11-22 P1-6）----
+# push2his/push2delay/push2 间歇风控时，原来每个请求点都各自重试（8 次 × 6~10s），
+#  GUI 线程被白等拖死。连续失败记一笔，60s 内同一 key 直接走兜底、不再重试。
+_EM_NEG: dict = {}
+_EM_NEG_LOCK = threading.Lock()
+_EM_NEG_TTL = 60.0
+
+
+def _em_neg_fresh(key):
+    """东财负缓存命中（60s 内失败过）→ True。"""
+    with _EM_NEG_LOCK:
+        ts = _EM_NEG.get(key)
+    return ts is not None and (_time_mod.time() - ts) < _EM_NEG_TTL
+
+
+def _em_neg_store(key):
+    with _EM_NEG_LOCK:
+        if len(_EM_NEG) > 500:
+            _EM_NEG.clear()
+        _EM_NEG[key] = _time_mod.time()
+
 # ---- 持仓体检（OB）30 分钟快照层（2026-10-09）----
 # 背景：体检表趋势/背离/风险提醒改用 30min 口径。`load_ob_analysis` 跑在 pywebview 串行主线程，
 # 任何网络调用都会冻界面 ⇒ 该层**只读磁盘/内存缓存**（零网络），由后台按 30 分钟时段预热。
@@ -1819,6 +1900,13 @@ _BEACON_ENRICH: dict = {"key": None, "ts": 0.0, "rows": None, "running": False}
 # 骨架（成分/涨幅/分档）SWR：全部板块要读 ~1300 个日线缓存 ≈6s ⇒ 同样后台算
 _BEACON_SKELETON: dict = {"key": None, "ts": 0.0, "val": None, "running": False}
 _BEACON_LOCK = threading.Lock()
+# 组包产物记忆化（2026-11-22 P1-2）：骨架/重列两级 SWR 之后，主线程每拍还要
+# ~34 板块 × ~270 行逐行 update + _pb_struct_get/_m30_verdict_pb + tags 映射 + _clean
+# 深递归（200~400KB，慢日志 13,785 次 avg 1.8s）。按指纹键（骨架ts/重列ts/tags ts/
+# 30min 时段/结构&m30 缓存预热进度）记忆化：指纹没变直接回上次组包结果。
+# ver = 指纹摘要，供前端版本握手（传 client_ver 且未变 ⇒ 只回 {"unchanged": true}）。
+_BEACON_PKG: dict = {"ver": None, "payload": None}
+_BEACON_PKG_LOCK = threading.Lock()
 # 成分股 涨幅/成交额 的 mtime 缓存（见 load_market_beacon 内 _daily_stats 的注释）
 _BEACON_STATS: dict = {}
 # 历史日「30min 判定」（2026-10-10）：键 {base}_{date}，值 = {level,label,reason,asof} 或 None。
@@ -2418,6 +2506,15 @@ def _fetch_min_bars_disk(ts_code, freq):
     return best
 
 
+# 分钟K 8s 共享缓存（2026-11-22 P1-5）：九宫格一拍 9 格可能重复取同一 (code,freq)，
+# 相邻拍（4s 轮询）也大概率可复用 —— 原实现每次现拉腾讯（~95ms 固定开销/次）。
+# 键 (code6, freq, 日期)；只缓存**非空**结果（空=失败，不钉住，调用方兜底链行为不变）。
+# 命中回**副本**（各调用方原语义是各自拿到新帧，防有人就地改列互相污染）。
+_MWBARS_CACHE: dict = {}
+_MWBARS_LOCK = threading.Lock()
+_MWBARS_TTL = 8.0
+
+
 def _fetch_min_bars_tencent(code, freq):
     """腾讯分钟 K 线（**盘中唯一实时源**，含未收盘根）→ 规范帧。
 
@@ -2430,11 +2527,18 @@ def _fetch_min_bars_tencent(code, freq):
     （n=640→165ms、n=340→125ms、n=20→96ms）。实时尾只要够 `MIN_BARS_KEEP` 根，
     多取的那几百根纯属白等 ⇒ 非 10min 档只取 `MIN_BARS_KEEP+20`。
     ⚠️ 10min 必须保持 640：它是 m5 两两合成的，取一半只剩 170 根（前端会判"序列变短"跳过替换）。
+    2026-11-22 P1-5：加 8s 共享缓存（`_MWBARS_CACHE`，见上）。
     """
     import pandas as pd
     _m = {"5min": "m5", "10min": "m5", "30min": "m30", "60min": "m60"}.get(freq)
     if not _m:
         return pd.DataFrame()
+    _ck = (str(code).split("_")[0], freq, datetime.now().strftime("%Y-%m-%d"))
+    _now = _time_mod.time()
+    with _MWBARS_LOCK:
+        _hit = _MWBARS_CACHE.get(_ck)
+    if _hit is not None and (_now - _hit[0]) < _MWBARS_TTL:
+        return _hit[1].copy()
     _n = 640 if freq == "10min" else (MIN_BARS_KEEP + 20)
     try:
         from core.market_data.tencent_provider import minute_kline
@@ -2457,7 +2561,13 @@ def _fetch_min_bars_tencent(code, freq):
             df = _d10
         except Exception:
             return pd.DataFrame()
-    return _norm_min_bars(df)
+    out = _norm_min_bars(df)
+    if not out.empty:
+        with _MWBARS_LOCK:
+            if len(_MWBARS_CACHE) > 600:      # 无界增长防护（9格×4周期远小于此）
+                _MWBARS_CACHE.clear()
+            _MWBARS_CACHE[_ck] = (_time_mod.time(), out)
+    return out if out.empty else out.copy()
 
 
 # ── 图表展示档：深底座 + 实时尾合并（2026-10-30）──────────────────────────────
@@ -3623,6 +3733,85 @@ def _watchlist_fp():
         return ""
 
 
+# ---- daily_summary.json（8.3MB）解析产物记忆化（2026-11-22 P1-8）----
+# `available_hunter_dates` 只要日期 keys、`_sector_ma_payload` 只要「最新日排名映射」，
+# 原来两处各自全量 json.load（实测 0.21s/次）。按 (mtime,size) 指纹记忆化三份产物：
+# keys（全量日期键）/ valid_days（值为非空 list 的日期键，升序）/ rank（按日懒建的
+# {板块: 排名} 映射，cap 8 日）。文件没变直接回缓存；变了重解析一次重建。全 GUI 共享一份。
+_DAILY_SUMMARY_FP = BASE / "stock_hunter" / "history" / "daily_summary.json"
+_DAILY_SUMMARY_MEMO: dict = {"fp": None, "keys": None, "valid_days": None, "rank": {}}
+_DAILY_SUMMARY_MEMO_LOCK = threading.Lock()
+
+
+def _dsum_stat_fp():
+    """daily_summary.json 的 (mtime,size) 指纹；读不到 → None。"""
+    try:
+        st = _DAILY_SUMMARY_FP.stat()
+        return (st.st_mtime, st.st_size)
+    except OSError:
+        return None
+
+
+def _dsum_parse():
+    """读文件 → (指纹, dict|None)。解析失败给 None（调用方按空处理，与旧 except 同义）。"""
+    fp = _dsum_stat_fp()
+    try:
+        d = json.loads(_DAILY_SUMMARY_FP.read_text(encoding="utf-8"))
+        return fp, (d if isinstance(d, dict) else None)
+    except Exception:
+        return fp, None
+
+
+def _dsum_keys():
+    """→ (all_keys, valid_days_sorted)；按文件指纹记忆化（P1-8）。"""
+    fp = _dsum_stat_fp()
+    with _DAILY_SUMMARY_MEMO_LOCK:
+        m = _DAILY_SUMMARY_MEMO
+        if m["fp"] == fp and m["keys"] is not None:
+            return m["keys"], m["valid_days"]
+    fp2, d = _dsum_parse()
+    keys, valid = [], []
+    if d:
+        keys = [str(k) for k in d.keys()]
+        valid = sorted(str(k) for k, v in d.items() if isinstance(v, list) and v)
+    with _DAILY_SUMMARY_MEMO_LOCK:
+        m = _DAILY_SUMMARY_MEMO
+        if m["fp"] != fp2:
+            m["fp"] = fp2
+            m["rank"] = {}
+        m["keys"], m["valid_days"] = keys, valid
+        return m["keys"], m["valid_days"]
+
+
+def _dsum_rank_for(day):
+    """指定日的 {板块名: 排名} 映射；按文件指纹记忆化 + 按日懒建（P1-8）。"""
+    if not day:
+        return {}
+    fp = _dsum_stat_fp()
+    with _DAILY_SUMMARY_MEMO_LOCK:
+        m = _DAILY_SUMMARY_MEMO
+        if m["fp"] == fp and day in m["rank"]:
+            return m["rank"][day]
+    fp2, d = _dsum_parse()
+    rank = {}
+    if d:
+        try:
+            rank = {str(r.get("板块") or "").strip(): int(r.get("排名") or 9999)
+                    for r in (d.get(day) or [])}
+        except Exception:
+            rank = {}
+    with _DAILY_SUMMARY_MEMO_LOCK:
+        m = _DAILY_SUMMARY_MEMO
+        if m["fp"] != fp2:
+            m["fp"] = fp2
+            m["keys"], m["valid_days"] = None, None     # 指纹变了 ⇒ keys 懒重建
+            m["rank"] = {}
+        if len(m["rank"]) > 8:
+            m["rank"].clear()
+        m["rank"][day] = rank
+        return rank
+
+
 def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
     """每个板块每日「收盘站上 5 日线 / 20 日线」的成分股占比。
 
@@ -3896,6 +4085,23 @@ class Api:
         """
         return "pandas" in sys.modules and "analysis.divergence" in sys.modules
 
+    def _init_marks_payload(self):
+        """启动三小件并入 load_day（2026-11-22 P2-5）：重点关注 / 猎手标红 / 周线MACD上次轮巡。
+
+        原来前端 init 阶段各发一个 apiCall（load_focus_codes / load_red_marks /
+        weekly_macd_status），与首帧 10+ 个扇出挤 6 个在飞名额。载荷即各端点原样
+        返回（前端按原形状消费）；单键失败静默，绝不影响 load_day 主载荷。
+        """
+        out = {}
+        for key, fn in (("focus_codes", self.load_focus_codes),
+                        ("red_marks", self.load_red_marks),
+                        ("weekly_macd_status", self.weekly_macd_status)):
+            try:
+                out[key] = fn()
+            except Exception:
+                pass
+        return out
+
     def load_day(self, date=None):
         if not date:
             dates = self.available_dates()
@@ -3931,6 +4137,7 @@ class Api:
                     "state_revision": self.state_revision(),
                     "report_md": "", "name_map": {},
                 })
+                out.update(self._init_marks_payload())   # P2-5：启动三小件并入
                 return _clean(out)
             return {"date": date, "error": f"无 {date} 复盘数据"}
 
@@ -3969,6 +4176,7 @@ class Api:
         out["name_map"] = self._build_name_map(
             out["sig_stat"], out["position_builder"], out["positions"]["current"]
         )
+        out.update(self._init_marks_payload())   # P2-5：启动三小件并入（见该方法说明）
         return _clean(out)
 
     def _build_name_map(self, sig_stat, pb, current):
@@ -4083,13 +4291,25 @@ class Api:
 
         返回 {available, amount, base, delta, pct, projected, hm, day, prev_day, src,
               label, bse_included, fetched_at}。
+
+        P0-4（2026-11-22）：原先**无任何缓存**，前端 10s 一拍每拍都直连腾讯三腿快照。
+        加 6s 实例内存缓存（与 `_quotes_cache` 同款 getattr 惰性模式；实例级而非类级——
+        类级会让逐用例新建 Api() 的离线测试串档），命中直接回**深拷贝**
+        （防调用方改缓存；pywebview 序列化侧本来就不改，双保险）。失败结果同样缓存，
+        腾讯挂掉时不打网络风暴。
         """
+        _now_ts = _time_mod.time()
+        _mem = getattr(self, "_turnover_live_mem", None)
+        if _mem and (_now_ts - float(_mem.get("ts") or 0.0)) < 6.0:
+            return copy.deepcopy(_mem["payload"])      # 命中直接回（深拷贝防改缓存）
         from core.turnover_base import interp_prev_base
         pay = self.load_market_turnover() or {}
         legs = _tx_index_amount()
         live = sum(legs.get(c, 0.0) for c in _TX_INDEX_LEGS) if legs else 0.0
         if not (live > 0):
-            return _clean({"available": False, "error": "腾讯指数快照不可用（三腿全缺）"})
+            out = _clean({"available": False, "error": "腾讯指数快照不可用（三腿全缺）"})
+            self._turnover_live_mem = {"ts": _now_ts, "payload": copy.deepcopy(out)}
+            return out
         now = datetime.now()
         hm = now.strftime("%H:%M")
         in_session = now.weekday() < 5 and "09:15" <= hm <= "15:00"
@@ -4112,7 +4332,9 @@ class Api:
             frac = pay.get("proj_frac")
             if isinstance(frac, (int, float)) and 0 < frac <= 1:
                 out["projected"] = live / frac
-        return _clean(out)
+        out = _clean(out)
+        self._turnover_live_mem = {"ts": _now_ts, "payload": copy.deepcopy(out)}
+        return out
 
     # 证券/银行/保险 涨幅 + 涨跌家数（2026-11-21 owner）：多窗口看盘标题栏、10 秒级。
     _SECTOR_PCT_MEM: dict = {"ts": 0.0, "val": None}
@@ -4123,13 +4345,15 @@ class Api:
         两个轻请求：
           · 腾讯指数快照三腿 → 证券公司 399975 / 中证银行 399986 / 保险主题 399809（~50ms）；
           · 东财 ulist 沪深两指数 → 上涨/下跌/平盘家数（f104/f105/f106，~200ms）。
-        **8 秒内存缓存**（前端 10 秒轮询 ⇒ 每拍都是新值，失败也不打网络风暴）。
+        **12 秒内存缓存**（2026-11-22 P0-3：8.0 → 12.0。TTL 8s < 前端 10s 轮询 ⇒ 每拍穿透
+        缓存、每拍双网络 avg 4.1s。错位论证同 `_INDICES_TTL`：TTL 必须**大于**轮询周期，
+        隔拍命中内存热缓存，读数最多陈旧 ~12s 可接受，网络减半）。
         返回 {available, items:[{name,price,pct}], up, down, flat, ts}；板块全缺 → available=False
         （家数单独缺失时对应字段为 None，前端显示 —）。
         """
         now = _time_mod.time()
         mem = self._SECTOR_PCT_MEM
-        if mem.get("val") and (now - float(mem.get("ts") or 0.0)) < 8.0:
+        if mem.get("val") and (now - float(mem.get("ts") or 0.0)) < 12.0:
             return mem["val"]
         rows = _ths_sector_pcts()
         items = [{"name": n, "price": p, "pct": c} for n, p, c in rows if c is not None]
@@ -5059,7 +5283,11 @@ class Api:
         if not (_in_sess or _lunch or _after_close):
             return _clean({"available": False, "intraday": False})
         mem = self._SENT_LIVE_MEM
-        _ttl = 60 if _in_sess else 600          # 午休/收盘后数字不再变 ⇒ 少打网络
+        # 2026-11-22 P0-5（二次修正）：盘中 60 → 75 —— TTL 与前端 60s 轮询**等长**即相位对齐，
+        # 每拍都穿透缓存打网络（同 `_INDICES_TTL` 错位论证）。注意前端是「完成后才排下一次」，
+        # 到达时缓存年龄恒 >60s ⇒ TTL≤60 时每拍必穿透（首版 55s 无效，守卫批次实测指出）；
+        # TTL 75s ⇒ 隔拍命中内存热缓存、读数最多陈旧 ~75s，网络减半。
+        _ttl = 75 if _in_sess else 600          # 午休/收盘后数字不再变 ⇒ 少打网络
         fresh = (mem.get("date") == today and mem.get("ts")
                  and (now - mem.get("ts")).total_seconds() < _ttl)
         if not fresh:
@@ -5784,7 +6012,6 @@ class Api:
         """
         import os as _os
         import time as _t
-        import urllib.request as _ur
         # 短缓存：本函数在 10s 轮询里被调，若东财持续风控，
         # 每次都跑「4 次实时重试 + 2×8 次 K 线重试」会把界面拖死。
         # 成功缓存 120s，**失败也缓存 60s**（负缓存）——否则东财一挂，每轮都白等几秒。
@@ -5799,15 +6026,18 @@ class Api:
                    "ALL_PROXY", "all_proxy"]:
             _os.environ.pop(_k, None)
         _os.environ["NO_PROXY"] = "*"
+        # 2026-11-22 P1-6：收编进 `core.market_data.http_pool` 共享 keep-alive 会话
+        # （raw http.client 天然不走环境代理，与上面清代理语义一致；原来每次新建 TLS ≈290ms）。
+        from core.market_data.http_pool import pooled_get
         # 1) 实时（带重试）——2026-10-07：重试 4→2、超时 5→3s（东财风控时原设置首拉要 ~14s，冻界面）
         for _ in range(2):
             try:
-                url = (f"https://push2delay.eastmoney.com/api/qt/stock/get?"
-                       f"secid={secid}&fields=f43,f44,f45,f57,f58")
-                req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                "Referer": "https://quote.eastmoney.com/"})
-                ed = (json.loads(_ur.urlopen(req, timeout=3).read()
-                                 .decode("utf-8", errors="ignore")).get("data") or {})
+                ed = (json.loads(pooled_get(
+                    "push2delay.eastmoney.com",
+                    f"/api/qt/stock/get?secid={secid}&fields=f43,f44,f45,f57,f58",
+                    3, {"User-Agent": "Mozilla/5.0",
+                        "Referer": "https://quote.eastmoney.com/"},
+                    encoding="utf-8", errors="ignore")).get("data") or {})
                 px, pc = (ed.get("f43") or 0) / 100.0, (ed.get("f44") or 0) / 100.0
                 if px and pc:
                     _cache[secid] = (_t.time(), px, pc, "em")
@@ -5977,33 +6207,25 @@ class Api:
             return {"ok": False, "error": str(e)}
 
     # ---------- 实时行情（顶部行情条） ----------
-    # 行情刷新：SWR（stale-while-revalidate）。实测 snapshot_auction(49 只) 约 230ms，
-    # 前端每 10s 轮询一次，这 230ms 全卡在 pywebview 线程上（K线弹窗卡顿排查 2026-10-04）。
-    # 改为：命中新鲜窗口直接返回；略旧则**立即返回旧值 + 后台线程刷新**；过旧才阻塞重拉。
-    _QUOTES_SWR_FRESH = 8.0     # 新鲜期：直接返回，连后台刷新都不触发
-    _QUOTES_SWR_MAX = 90.0      # 超过此年龄宁可阻塞也拉一次（防后台长期失败把价格冻住）
+    # P0-2（2026-11-22）：弃用「略旧立返旧值 + 后台刷新」的 SWR——fresh=8s vs 前端 10s
+    # 轮询相位错开，每拍到达时缓存年龄 11~13s > 8s ⇒ 恒走旧值分支，盘面价结构性滞后
+    # 10~25s（相位病，同 `_INDICES_TTL` 论证：TTL ≈ 轮询周期即每拍穿透）。
+    # 现改为：stale 即**同步**走 `_load_quotes_sync` —— 其内部已走 QuoteBus（共享档
+    # max_age=8s），命中是本征毫秒级、只有 bus 也 stale 才真出网（~230ms）；
+    # 异常时返回旧值（fail-open，不抛）。显示值年龄从「上一拍」降到「本拍」。
+    _QUOTES_SWR_FRESH = 8.0     # 新鲜期：直接返回（与 QuoteBus 共享档 max_age 同档）
 
     def load_quotes(self):
-        """腾讯实时行情（SWR 包装；首次调用仍为阻塞拉取）。"""
+        """腾讯实时行情（新鲜直返；stale 同步走 QuoteBus，异常回旧值不抛）。"""
         c = getattr(self, "_quotes_cache", None)
         if c is not None:
             _ts, _val = c
-            _age = _time_mod.time() - _ts
-            if _age < self._QUOTES_SWR_FRESH:
+            if _time_mod.time() - _ts < self._QUOTES_SWR_FRESH:
                 return _val
-            if _age < self._QUOTES_SWR_MAX and not getattr(self, "_quotes_refreshing", False):
-                self._quotes_refreshing = True
-
-                def _bg():
-                    try:
-                        self._load_quotes_sync()
-                    except Exception:
-                        pass
-                    finally:
-                        self._quotes_refreshing = False
-
-                _th.Thread(target=_bg, name="quotes-refresh", daemon=True).start()
-                return _val
+            try:
+                return self._load_quotes_sync()
+            except Exception:
+                return _val          # fail-open：刷新失败回旧值，不抛
         return self._load_quotes_sync()
 
     def _load_quotes_sync(self):
@@ -7292,16 +7514,24 @@ class Api:
                 # 2026-10-26 owner：「平均股价请使用通达信进行读取修复」——卡片已经改读通达信，
                 # 点开 K 线却还走东财 push2his（风控时 8 次重试 × 10s 才报「东财拉取日线失败」）。
                 # 这里**通达信本地优先**：磁盘读、毫秒级；读不到才退回东财那套重试。
+                # 2026-11-22 P1-6：东财请求收编 `http_pool` 共享 keep-alive 会话
+                # （原来每次新建 TLS ≈290ms），并加 60s 负缓存：风控/连续失败时 60s 内
+                # 不再重试，直接走兜底报错（成功结果本就落当日磁盘缓存，见下）。
                 rows = self._tdx_index_rows(code_str)
-                for _att in range(0 if rows else 8):
+                _neg_k = f"kline:{code_str}"
+                _neg_hit = _em_neg_fresh(_neg_k)
+                for _att in range(0 if (rows or _neg_hit) else 8):
                     try:
                         secid = code_str[2:]
-                        url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}"
-                               f"&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57"
-                               f"&klt=101&fqt=1&beg=0&end=20500101&lmt=400")
-                        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                        "Referer": "https://quote.eastmoney.com/"})
-                        raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                        from core.market_data.http_pool import pooled_get
+                        raw = pooled_get(
+                            "push2his.eastmoney.com",
+                            f"/api/qt/stock/kline/get?secid={secid}"
+                            f"&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57"
+                            f"&klt=101&fqt=1&beg=0&end=20500101&lmt=400",
+                            10, {"User-Agent": "Mozilla/5.0",
+                                 "Referer": "https://quote.eastmoney.com/"},
+                            encoding="utf-8", errors="ignore")
                         data = json.loads(raw)
                         klines = (data.get("data") or {}).get("klines") or []
                         if not klines:
@@ -7319,6 +7549,9 @@ class Api:
                     except Exception:
                         import time as _t
                         _t.sleep(1)
+                if not rows and not _neg_hit:
+                    # 本轮真打过仍失败才记负缓存（命中负缓存跳过的轮次不续期，否则永不过期）
+                    _em_neg_store(_neg_k)
                 if rows:
                     _nm = (data.get("data") or {}).get("name")
                     if not _nm:      # 走的是通达信本地 ⇒ 东财那边没返回，名字从指数板条目取
@@ -8062,10 +8295,23 @@ class Api:
                 _CHART_LIVE_STATE[ck] = _st
 
     def _fetch_live_quote(self, base):
-        """单只实时快照 → quote dict（连接复用后实测 ≈43ms）。失败回 {}。"""
+        """单只实时快照 → quote dict。失败回 {}。
+
+        2026-11-22 P1-5：改走进程级 **QuoteBus**（共享档+跨进程锁+stale 兜底）——
+        九宫格 9 格 × 4s 轮询原来每格直连腾讯（≈2 rps），现与 gui/main.py/猎手 watcher
+        共用同一份快照。`max_age=4s` 与 `_MW_TTL=4.6` 协调（一拍内 9 格共享一跳）。
+        bus 异常/取空 ⇒ 回退腾讯直调（fail-open，同 P0-6 ma5_pullback 的模式：
+        core/ma5_pullback.py 的 snapshot_fn）。
+        """
         try:
-            from core.market_data.tencent_provider import TencentProvider
-            _snaps = TencentProvider().snapshot_auction([base]) or {}
+            try:
+                from core.market_data.quote_bus import get_quotes as _bus_get_quotes
+                _snaps = _bus_get_quotes([base], max_age_sec=4.0) or {}
+            except Exception:
+                _snaps = {}
+            if not _snaps:
+                from core.market_data.tencent_provider import TencentProvider
+                _snaps = TencentProvider().snapshot_auction([base]) or {}
             # `snapshot_auction` 的返回键是**裸 6 位码**（它把 v_sh000001 统一剥了前缀）；
             # 指数的 K 线弹窗传的是 sh000001 ⇒ 两个键都试。
             _q = _snaps.get(base) or _snaps.get(base[2:] if base[:2].lower() in
@@ -8533,23 +8779,30 @@ class Api:
         """
         import os as _os
         import time as _t
-        import urllib.request as _ur
         c = str(code).split("_")[0]
         _hit = Api._profile_cache.get(c)
-        if _hit and (_t.time() - _hit[0]) < Api._PROFILE_TTL:
+        # 2026-11-22 P1-6：正缓存仍 600s（_PROFILE_TTL），**负缓存收窄到 60s**——
+        # 东财风控一缓过来就能自愈，不用等满 10 分钟。
+        if _hit and (_t.time() - _hit[0]) < (Api._PROFILE_TTL if _hit[1] else 60.0):
             return _hit[1]
+        if _em_neg_fresh(f"boards:{c}"):
+            return []                            # 60s 内刚失败过 ⇒ 直接兜底，别再 8 次重试
         for _k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
                    "ALL_PROXY", "all_proxy"):
             _os.environ.pop(_k, None)
         _os.environ["NO_PROXY"] = "*"
-        url = ("https://push2.eastmoney.com/api/qt/slist/get?spt=3&fltt=2&invt=2"
-               f"&fields=f12,f14&secid={self._em_secid(c)}&pn=1&np=1&pz=100")
+        # 2026-11-22 P1-6：收编 `core.market_data.http_pool` 共享 keep-alive 会话
+        # （raw http.client 不走环境代理，与上面清代理语义一致；原来每次新建 TLS ≈290ms）。
+        from core.market_data.http_pool import pooled_get
+        _path = ("/api/qt/slist/get?spt=3&fltt=2&invt=2"
+                 f"&fields=f12,f14&secid={self._em_secid(c)}&pn=1&np=1&pz=100")
         for _ in range(8):                       # 东财间歇风控，仓库既有对策=8 次重试
             try:
-                req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                "Referer": "https://quote.eastmoney.com/"})
-                data = (json.loads(_ur.urlopen(req, timeout=6).read()
-                                   .decode("utf-8", errors="ignore")).get("data") or {})
+                data = (json.loads(pooled_get(
+                    "push2.eastmoney.com", _path, 6,
+                    {"User-Agent": "Mozilla/5.0",
+                     "Referer": "https://quote.eastmoney.com/"},
+                    encoding="utf-8", errors="ignore")).get("data") or {})
                 diff = data.get("diff") or []
                 boards = []
                 for x in diff:
@@ -8569,6 +8822,7 @@ class Api:
             except Exception:
                 _t.sleep(0.6)
         Api._profile_cache[c] = (_t.time(), [])   # 负缓存：别让每次点开都等 8 次重试
+        _em_neg_store(f"boards:{c}")
         return []
 
     # ---------- 公司简介（2026-10-17）：东财 F10「核心题材」补全 ----------
@@ -9286,27 +9540,98 @@ class Api:
 
     # ---------- 选股猎手（概念评分，与 Excel 报告一致） ----------
     def run_hunter(self, date=None, auto=False):
-        """后台运行选股猎手（拉取+评分），立即返回；前端轮询 hunter_progress 看进度。
+        """后台运行选股猎手（**子进程**，2026-11-22 P2-4），立即返回；前端轮询 hunter_progress 看进度。
 
+        子进程 = `sys.executable core/hunter_worker.py --date <date>`，管线本体复用
+        `_load_hunter_impl` 唯一真源；stdout/stderr 落 t_io/logs/hunter_run_{ts}.log，
+        进度走 hunter_run_status.json、结果走 hunter_run_result.json（monitor 线程回收）。
         auto=True 为保留参数（原定时自动运行已删，见 2026-10-10 owner 需求6）：
         该分支只在候选集变化时才推飞书；手动运行(auto=False)每次都推。
         """
         date = date or datetime.now().strftime("%Y-%m-%d")
-        if HUNTER_RUN_STATE.get("running") and HUNTER_RUN_STATE.get("date") == date:
-            return {"started": True, "running": True, "date": date}
-        # 清除旧结果，防读到上一个日期的缓存
-        HUNTER_RUN_STATE["date"] = date
-        HUNTER_RUN_STATE["running"] = True
-        HUNTER_RUN_STATE["result"] = None
-        try:
-            from modules.market_data import MARKET_PROGRESS as _MP
-            _MP.update({"running": True, "phase": "准备", "done": 0, "total": 0, "msg": "启动中"})
-        except Exception:
-            pass
+        with _HUNTER_PROC_LOCK:
+            if HUNTER_RUN_STATE.get("running") and HUNTER_RUN_STATE.get("date") == date:
+                return {"started": True, "running": True, "date": date}
+            if HUNTER_RUN_STATE.get("running"):
+                # 另一日期正在跑：两个子进程会写**同一份**状态/结果档 ⇒ 拒跑（防重入）。
+                # 原线程版这里会叠加起跑、互相覆盖 HUNTER_RUN_STATE，子进程化必须收紧。
+                return {"started": False, "running": True,
+                        "date": HUNTER_RUN_STATE.get("date"),
+                        "error": f"选股猎手正在运行（{HUNTER_RUN_STATE.get('date')}），结束后重试"}
+            # 残留子进程（状态未标 running 但进程还活着，理论上 monitor 会收尾，兜底）⇒
+            # 先收尸再起跑，防两个 worker 同时写状态档。
+            _old = _HUNTER_PROC.get("proc")
+            if _old is not None:
+                try:
+                    if _old.poll() is None:
+                        _old.terminate()
+                except Exception:
+                    pass
+                _HUNTER_PROC["proc"] = None
+            _fp_old = _HUNTER_PROC.get("log_fp")
+            if _fp_old is not None:
+                try:
+                    _fp_old.close()
+                except Exception:
+                    pass
+                _HUNTER_PROC["log_fp"] = None
+            # 清除旧结果，防读到上一个日期的缓存
+            HUNTER_RUN_STATE["date"] = date
+            HUNTER_RUN_STATE["running"] = True
+            HUNTER_RUN_STATE["result"] = None
+            _log_fp = None
+            try:
+                LOGS_DIR.mkdir(parents=True, exist_ok=True)
+                _log_fp = open(LOGS_DIR / f"hunter_run_{datetime.now():%Y%m%d_%H%M%S}.log", "a",
+                               encoding="utf-8", errors="replace")
+                _log_fp.write(f"\n===== {datetime.now():%Y-%m-%d %H:%M:%S} 猎手子进程启动 "
+                              f"date={date} =====\n")
+                _log_fp.flush()
+                # 首拍进度（worker 首写前的空窗）：父进程先落一份，前端立即有画面
+                _write_json_atomic(_HUNTER_STATUS_FP,
+                                   {"running": True, "date": date, "pid": None,
+                                    "phase": "启动子进程", "done": 0, "total": 0,
+                                    "msg": "", "ts": _time_mod.time()})
+                proc = subprocess.Popen(
+                    [sys.executable, str(_HUNTER_WORKER), "--date", date,
+                     "--parent-pid", str(os.getpid()),
+                     "--status-file", str(_HUNTER_STATUS_FP),
+                     "--result-file", str(_HUNTER_RESULT_FP)],
+                    cwd=str(BASE),
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    stdout=_log_fp, stderr=subprocess.STDOUT)
+                _HUNTER_PROC["proc"] = proc
+                _HUNTER_PROC["log_fp"] = _log_fp
+                _t0 = _time_mod.time()
+            except Exception as e:
+                if _log_fp is not None:
+                    try:
+                        _log_fp.close()
+                    except Exception:
+                        pass
+                HUNTER_RUN_STATE["running"] = False
+                HUNTER_RUN_STATE["result"] = {"available": False,
+                                              "error": f"猎手子进程启动失败: {e}"}
+                return {"started": False, "running": False, "date": date,
+                        "error": str(e)[:150]}
 
         def _work():
+            """子进程回收线程：wait → 读结果档 → 推送 → 复位状态（与原线程版同序同契约）。"""
             try:
-                res = self._load_hunter_impl(date)
+                _rc = proc.wait()
+                res = None
+                try:
+                    _d = json.loads(_HUNTER_RESULT_FP.read_text(encoding="utf-8"))
+                    # 日期匹配 + 文件新于本次起跑（防吃到上一轮的残留结果档）
+                    if (isinstance(_d, dict) and str(_d.get("date")) == str(date)
+                            and _HUNTER_RESULT_FP.stat().st_mtime >= _t0 - 1):
+                        res = _d.get("result")
+                except Exception:
+                    res = None
+                if not isinstance(res, dict):
+                    res = {"available": False,
+                           "error": f"猎手子进程异常退出（code={_rc}），"
+                                    f"详见 t_io/logs/hunter_run_*.log"}
                 HUNTER_RUN_STATE["result"] = res
                 # 2026-09-29 owner 拍板：**盘中手动运行只算不推**。
                 # 背景：盘中 GO 列现在会算出候选（见 _hunter_build_conformance），而手动运行是
@@ -9318,8 +9643,16 @@ class Api:
                 HUNTER_RUN_STATE["result"] = {"available": False, "error": f"选股猎手运行失败: {e}"}
             finally:
                 HUNTER_RUN_STATE["running"] = False
+                with _HUNTER_PROC_LOCK:
+                    if _HUNTER_PROC.get("proc") is proc:
+                        _HUNTER_PROC["proc"] = None
+                        _HUNTER_PROC["log_fp"] = None
+                try:
+                    _log_fp.close()
+                except Exception:
+                    pass
 
-        _th.Thread(target=_work, daemon=True).start()
+        _th.Thread(target=_work, daemon=True, name="hunter-proc-mon").start()
         return {"started": True, "running": True, "date": date}
 
     def _push_hunter_build_candidates(self, res, date, dedup=False):
@@ -9375,12 +9708,25 @@ class Api:
             print(f"[建仓推送] 失败（已忽略，不影响猎手）: {str(e)[:150]}")
 
     def hunter_progress(self):
-        """返回选股猎手运行进度（供前端进度条轮询）。"""
+        """返回选股猎手运行进度（供前端进度条轮询）。
+
+        2026-11-22（P2-4）：管线在**子进程**里跑，进度经 `hunter_run_status.json`
+        回传（worker ~0.8s 一写）；文件缺失/日期不符时回落进程内 MARKET_PROGRESS
+        （兼容旧路径与单测），返回结构与前端契约完全不变。
+        """
+        mp = None
         try:
-            from modules.market_data import MARKET_PROGRESS as _MP
-            mp = dict(_MP)
+            _d = json.loads(_HUNTER_STATUS_FP.read_text(encoding="utf-8"))
+            if isinstance(_d, dict) and str(_d.get("date")) == str(HUNTER_RUN_STATE.get("date")):
+                mp = _d
         except Exception:
-            mp = {"running": False, "phase": "", "done": 0, "total": 0, "msg": ""}
+            mp = None
+        if mp is None:
+            try:
+                from modules.market_data import MARKET_PROGRESS as _MP
+                mp = dict(_MP)
+            except Exception:
+                mp = {"running": False, "phase": "", "done": 0, "total": 0, "msg": ""}
         return {
             "running": bool(HUNTER_RUN_STATE.get("running")),
             "ready": bool(HUNTER_RUN_STATE.get("result")),
@@ -10191,7 +10537,7 @@ class Api:
         _th.Thread(target=_run, daemon=True, name="pb-m30-warm").start()
 
     # ---------------- 仓位结构（30min/10min 结构参考）----------------
-    def load_market_beacon(self, date=None, top_n=None):
+    def load_market_beacon(self, date=None, top_n=None, client_ver=None):
         """**市场风向标**：人气概念板块 × 该板块的代表公司（龙头 + 中军），列沿用建仓信号扫描。
 
         ⚠️⚠️ **纯描述性看盘，不是信号**。`_tier_sector_stocks` 的实测结论是
@@ -10212,7 +10558,11 @@ class Api:
         冻死的老形状。量级实测：
           · **骨架**（成分 → 涨幅/成交额 → 分档 → 龙头/中军）：全部板块要读 ~1300 个日线缓存 ≈ **6s**
           · **重列**（建仓判定/得分/通过/阶段 + 技术标签）：~330 只 ≈ **18s**
-        主线程只做**缓存读**（骨架/重列命中 + 仓位结构 + 30min 判定），稳态实测 **~50ms**。
+        主线程只做**缓存读**（骨架/重列命中 + 仓位结构 + 30min 判定）。
+        2026-11-22 P1-2：组包产物按指纹**记忆化**（骨架ts/重列ts/tags ts/30min 时段/预热进度），
+        指纹没变直接回上次结果（此前每拍都逐行重组 200~400KB，慢日志 13,785 次 avg 1.8s，
+        自称"稳态 ~50ms"名不副实）；另支持可选 `client_ver` 版本握手——前端回传上次的
+        `ver` 且指纹未变 ⇒ 只回 `{"unchanged": true, "ver": ...}`（几百字节）。
         前端按"齐没齐"切 TTL：未齐 3s 短轮询、齐了 60s（见 `web/app.js::_beaconReady`）。
         """
         # 键里带 daily_summary.json 的 mtime：猎手跑完重写该文件 ⇒ 骨架缓存立即失效、
@@ -10276,6 +10626,47 @@ class Api:
             threading.Thread(target=_bg_en, name="beacon-enrich", daemon=True).start()
         # ── 主线程只做缓存读 ──
         try:
+            self._kick_pb_m30_warm(all_codes)      # 每 30min 时段节流一次
+            # 仓位结构列（日线阶段/仓位结构/30m MA5 同源）：原来只读不预热 ⇒ 风向标本面板
+            # 这三列永远 ⏳。2026-10-13 预热队列化（按 code 去重、60只/轮×2线程渐进排干、
+            # 磁盘优先）后补上路，不再抢闸/饿死。
+            self._kick_pb_struct_warm(all_codes)
+        except Exception:
+            pass
+        # ── 组包记忆化 + 版本握手（2026-11-22 P1-2）──
+        # 指纹 = (骨架key+ts, 重列ts, 重列是否就绪, tags缓存ts, 30min时段, 结构/m30缓存规模)。
+        # 结构/m30 缓存规模反映**预热进度**（懒列自填中指纹持续变 ⇒ 逐拍重组包=旧行为；
+        # 预热齐了规模稳定 ⇒ 直接回上次组包产物）。指纹没变时 tags 缓存若已过期，
+        # 顺手踢一脚它的后台重算（不阻塞、不取结果），新 ts 落地后指纹自然变 ⇒ 重组包。
+        import hashlib as _hl
+        _today_s = datetime.now().strftime("%Y-%m-%d")
+        _codes_fp = _hl.md5(",".join(sorted({str(c) for c in all_codes})).encode()).hexdigest()[:12]
+        with _TAGS_LOCK:
+            _tags_ent = _TAGS_CACHE.get(f"{_today_s}::{_codes_fp}")
+        _tags_ts = float((_tags_ent or {}).get("ts") or 0.0)
+        _tags_stale = (_tags_ent is None
+                       or (_time_mod.time() - _tags_ts) >= _tags_ttl_now())
+        with _BEACON_LOCK:
+            _sk_ts = float(_BEACON_SKELETON.get("ts") or 0.0)
+            _en_ts = float(_BEACON_ENRICH.get("ts") or 0.0)
+        with _PB_STRUCT_LOCK:
+            _n_struct = len(_PB_STRUCT_CACHE)
+        with _PB_M30_LOCK:
+            _n_m30 = len(_PB_M30_CACHE)
+        ver = _hl.md5(repr((key, _sk_ts, _en_ts, rows is None, _tags_ts,
+                            _min_bars_slot(), _n_struct, _n_m30)).encode()).hexdigest()[:16]
+        with _BEACON_PKG_LOCK:
+            _pkg_pay = _BEACON_PKG.get("payload") if _BEACON_PKG.get("ver") == ver else None
+        if _pkg_pay is not None:
+            if _tags_stale:
+                try:
+                    self.load_stock_tags_batch(all_codes, offline=True)   # 踢 SWR，不取结果
+                except Exception:
+                    pass
+            if client_ver and str(client_ver) == ver:
+                return _clean({"unchanged": True, "ver": ver})
+            return _pkg_pay          # ⚠️ 下游（pywebview 串行化）只读不改，无需深拷贝
+        try:
             # 2026-10-18：**offline=True**（批量视图铁律）。288 只代表股若走在线路径，每只都会
             # `_append_today_forming_bar` → 单只快照（2s 超时）⇒ 恢复/盘后高峰把 6 个工作线程
             # 全压在网络上，是卡顿大户；且风向标只做展示，日线缓存 + 批量快照已够。
@@ -10289,20 +10680,19 @@ class Api:
                 m["m30_verdict"] = self._m30_verdict_pb(m["code"])
                 # ma5_streak 由后台 `_beacon_enrich` 一并算好（288 只，别在主线程读 288 个日线文件）
                 m["tags"] = (_tags_map.get(m["code"]) or {}).get("tags") or []
-        try:
-            self._kick_pb_m30_warm(all_codes)      # 每 30min 时段节流一次
-            # 仓位结构列（日线阶段/仓位结构/30m MA5 同源）：原来只读不预热 ⇒ 风向标本面板
-            # 这三列永远 ⏳。2026-10-13 预热队列化（按 code 去重、60只/轮×2线程渐进排干、
-            # 磁盘优先）后补上路，不再抢闸/饿死。
-            self._kick_pb_struct_warm(all_codes)
-        except Exception:
-            pass
-        return _clean({"available": True, "date": _day, "trade_date": str(date or ""),
-                       "pending": False, "top_n": int(top_n or 0), "sectors": sectors,
-                       "n_codes": len(all_codes), "enrich_pending": rows is None,
-                       # 2026-10-16：时机条件列的**标签真源**（同猎手表 payload）。本表列沿用
-                       # 「建仓信号扫描」那套，该列也必须同源，否则同一只票三张表三种圆点数。
-                       "cond_labels": COND_LABELS})
+        payload = _clean({"available": True, "date": _day, "trade_date": str(date or ""),
+                          "pending": False, "top_n": int(top_n or 0), "sectors": sectors,
+                          "n_codes": len(all_codes), "enrich_pending": rows is None,
+                          # 2026-10-16：时机条件列的**标签真源**（同猎手表 payload）。本表列沿用
+                          # 「建仓信号扫描」那套，该列也必须同源，否则同一只票三张表三种圆点数。
+                          "cond_labels": COND_LABELS,
+                          "ver": ver})
+        with _BEACON_PKG_LOCK:
+            _BEACON_PKG["ver"] = ver
+            _BEACON_PKG["payload"] = payload
+        if client_ver and str(client_ver) == ver:
+            return _clean({"unchanged": True, "ver": ver})
+        return payload
 
     def _beacon_skeleton(self, date, top_n):
         """（**只许后台线程调**）人气板块 + 成分 + 分档 → `(day, sectors, all_codes)`。
@@ -12102,9 +12492,10 @@ class Api:
         """返回可选日期（降序）：heat history 日期 + 最近 120 个工作日，支持扫描任意日期。"""
         dates = set()
         try:
-            from modules.heat_tracker import load_history as load_heat_history
-            hist = load_heat_history()
-            dates.update(hist.keys())
+            # 2026-11-22 P1-8：原来每次全量 json.load 8.3MB `daily_summary.json` 只为取
+            # keys（实测 0.21s/次）⇒ 改走按 (mtime,size) 记忆化的共享产物（`_dsum_keys`）。
+            _keys, _ = _dsum_keys()
+            dates.update(_keys)
         except Exception:
             pass
         from datetime import timedelta
@@ -12172,15 +12563,12 @@ class Api:
     @staticmethod
     def _sector_ma_payload(rec, days, end="", stale=False):
         # 网格顺序 = 该日板块排名（daily_summary 与星轨图同一份；不重复维护第二套排序）
-        rank = {}
+        # 2026-11-22 P1-8：8.3MB `daily_summary.json` 原来每次组包都全量重读重解析只为
+        # 排名映射 ⇒ 改走按 (mtime,size) 记忆化的共享产物（`_dsum_keys`/`_dsum_rank_for`）。
         try:
-            _d = json.loads((BASE / "stock_hunter" / "history" / "daily_summary.json")
-                            .read_text(encoding="utf-8"))
-            _ks = sorted(k for k, v in _d.items()
-                         if isinstance(v, list) and v and (not end or k <= end))
-            if _ks:
-                rank = {str(r.get("板块") or "").strip(): int(r.get("排名") or 9999)
-                        for r in _d[_ks[-1]]}
+            _, _vdays = _dsum_keys()
+            _ks = [k for k in _vdays if not end or k <= end]
+            rank = _dsum_rank_for(_ks[-1]) if _ks else {}
         except Exception:
             rank = {}
         secs = []
@@ -12987,12 +13375,34 @@ class Api:
             }
         date_str = datetime.now().strftime("%Y%m%d")
         ep = BRIDGE_DIR / f"events_{date_str}.jsonl"
-        latest = []
-        if ep.exists():
+        # 2026-11-22 P1-7：按 (offset,size) 增量读（模式同 `poll_new_position_signals`）。
+        # 原来每 10s 全量逐行 json.loads 当日 events（只为计数 + latest-10），
+        # 随当日 fill 数线性恶化（10-26 P0-1 的同型模式）。
+        # 文件被截断/换日（size 变小或文件名变）⇒ 全量重读重建基线。
+        ev_st = getattr(self, "_auto_events_st", None)
+        if ev_st is None:
+            ev_st = self._auto_events_st = {
+                "path": None, "offset": 0,
+                "counts": {"order": 0, "fill": 0, "reject": 0, "risk": 0}, "latest": []}
+        try:
+            size = ep.stat().st_size if ep.exists() else 0
+        except Exception:
+            size = 0
+        if ev_st["path"] != str(ep) or size < ev_st["offset"]:
+            ev_st.update({"path": str(ep), "offset": 0,
+                          "counts": {"order": 0, "fill": 0, "reject": 0, "risk": 0},
+                          "latest": []})
+        if size > ev_st["offset"]:
             try:
-                with open(ep, encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
+                with open(ep, "rb") as f:
+                    f.seek(ev_st["offset"])
+                    data = f.read()
+                # 末行可能只写了一半：只消费到最后一个换行，剩下的下轮再读
+                cut = data.rfind(b"\n")
+                if cut >= 0:
+                    ev_st["offset"] += cut + 1
+                    for raw in data[:cut].split(b"\n"):
+                        line = raw.decode("utf-8", errors="replace").strip()
                         if not line:
                             continue
                         try:
@@ -13000,33 +13410,85 @@ class Api:
                         except Exception:
                             continue
                         ev = e.get("event")
-                        if ev in out["events"]:
-                            out["events"][ev] += 1
-                            latest.append(e)
+                        if ev in ev_st["counts"]:
+                            ev_st["counts"][ev] += 1
+                            ev_st["latest"].append(e)
+                    ev_st["latest"] = ev_st["latest"][-10:]
             except Exception:
                 pass
-        out["latest"] = latest[-10:]
+        out["events"] = dict(ev_st["counts"])
+        out["latest"] = list(ev_st["latest"])
         return _clean(out)
 
-    def load_auto_pnl(self):
+    def load_auto_pnl(self, fills_sig=None, fills_limit=None):
         """自动盘盈亏账单（2026-10-10 需求5）：按 code 用 fill.pos_after 归零切分
         「建仓→清仓」周期，汇总每周期已实现盈亏；未平仓周期用日线缓存最新收盘算浮盈。
         同一只票清仓后再次建仓 → 新周期（重新计算）。
 
-        纯磁盘（t_io/bridge/events_*.jsonl + t_io/cache/daily_kline），零网络，SWR 缓存 30s。
+        纯磁盘（t_io/bridge/events_*.jsonl + t_io/cache/daily_kline），零网络，SWR 缓存 120s。
         名称缺失问题一并修（holdings_auto.json → NAMES 兜底）。
+
+        2026-11-22 P1-3：
+          ① **重算 SWR 化**：TTL 到期且有旧值 ⇒ 立返旧值 + 后台单飞重算（到期那拍不再在
+             pywebview 调用线程上同步压 3~5s）；无旧值（冷启动/跨天）才同步算。
+          ② **流水增量瘦帧**：可选 `fills_sig`/`fills_limit`（不传 = 现状全量，其他调用方
+             不受影响）。fills 是 append-only，指纹 = md5(条数 + 最新一条)；前端回传的 sig
+             与当前一致 ⇒ 响应**省略 fills 字段**并带 `fills_unchanged: true`（~1MB → KB 级）；
+             不一致且给了 limit ⇒ 只回**尾 limit 条**（disp_fills 已按时间倒序）+ `fills_total`。
         """
         import time as _t
         today = datetime.now().strftime("%Y-%m-%d")
         c = _AUTO_PNL_CACHE
-        if c["data"] is not None and c["date"] == today and (_t.time() - c["ts"] < _AUTO_PNL_TTL):
-            return c["data"]
-        try:
-            data = self._compute_auto_pnl(today)
-        except Exception as e:
-            return {"error": str(e)[:200], "stocks": [], "summary": {}}
-        c.update({"ts": _t.time(), "date": today, "data": data})
-        return data
+        hit = c["data"] if (c["data"] is not None and c["date"] == today) else None
+        fresh = hit is not None and (_t.time() - c["ts"] < _AUTO_PNL_TTL)
+        if not fresh:
+            if hit is not None:
+                # SWR：有旧值 ⇒ 立返旧值 + 后台单飞重算（沿用 load_index_divergence 的模板）
+                if not c.get("running"):
+                    c["running"] = True
+
+                    def _bg(_d=today):
+                        try:
+                            data = self._compute_auto_pnl(_d)
+                            c.update({"ts": _t.time(), "date": _d, "data": data})
+                        except Exception:
+                            pass          # 重算失败保留旧值，下一拍再试
+                        finally:
+                            c["running"] = False
+                    threading.Thread(target=_bg, name="auto-pnl-swr", daemon=True).start()
+            else:
+                # 无旧值（冷启动/跨天）⇒ 同步算（现状行为）
+                try:
+                    hit = self._compute_auto_pnl(today)
+                except Exception as e:
+                    return {"error": str(e)[:200], "stocks": [], "summary": {}}
+                c.update({"ts": _t.time(), "date": today, "data": hit})
+        return self._auto_pnl_trim(hit, fills_sig, fills_limit)
+
+    @staticmethod
+    def _auto_pnl_trim(data, fills_sig, fills_limit):
+        """按 fills 指纹/条数瘦帧（见 load_auto_pnl ②）；两个参数都不传 ⇒ 原样返回。"""
+        if data is None or "fills" not in data or (fills_sig is None and fills_limit is None):
+            return data
+        import hashlib as _hl
+        fills = data.get("fills") or []
+        # disp_fills 已按 (date,time) 倒序 ⇒ [0] 即最新一笔；append-only ⇒ 条数+末条即稳定指纹
+        cur_sig = _hl.md5(repr((len(fills), fills[0] if fills else None)).encode()).hexdigest()[:16]
+        if fills_sig is not None and str(fills_sig) == cur_sig:
+            out = {k: v for k, v in data.items() if k != "fills"}
+            out["fills_unchanged"] = True
+            out["fills_sig"] = cur_sig
+            out["fills_total"] = len(fills)
+            return out
+        out = dict(data)                        # 浅拷贝：绝不原位改写缓存里的 data
+        out["fills_sig"] = cur_sig
+        out["fills_total"] = len(fills)
+        if fills_limit:
+            try:
+                out["fills"] = fills[:max(1, int(fills_limit))]
+            except Exception:
+                pass                            # limit 非法 ⇒ 全量（与不传参一致）
+        return out
 
     def _compute_auto_pnl(self, today):
         """账本体（纯函数式磁盘读，无副作用）。"""
@@ -14399,16 +14861,18 @@ class Api:
             out[c] = _ph
         return out
 
-    def _pool_rows(self, stocks, date, note):
+    def _pool_rows(self, stocks, date, note, src_fp=None):
         """「建仓表同款」行构造 —— **异常监控池 / 避风港湾共用**（两表的列与样式必须一模一样）。
 
         `stocks`: {code: {name, added_at, reason?, ...}}；`note`: 表尾那句说明。
+        `src_fp`: 池子状态档路径（指纹失效用；不传则只按 30s TTL 过期）。
         行字段刻意做成**建仓表的形状**（verdict/composite_score/conditions/…），
         前端直接复用同一套单元格渲染（色阶、圆点、阶段徽章），不另写一份样式。
 
-        ⚠️ 外层这层只负责**单飞 + 上一拍兜底**（见 `_POOL_ROWS_RUN` 注释）：整表算一次
-        在池子 571 只时要 30~50s，而前端在 pending>0 时每 15s 就来一发；不挡住的话两三个
-        整表计算互相抢 CPU，谁都被拖过前端超时、结果全被扔掉。真正的行构造在
+        ⚠️ 外层这层只做**缓存读 + 单飞调度**（2026-11-22 P1-1 整表 SWR 化，语义见
+        `_POOL_ROWS_MEM` 注释）：整表算一次在池子 571 只时要 30~50s，而前端在 pending>0
+        时每 15s 就来一发；原来每发都同步重算，慢日志 avg 6.6s / max 84s。现在重算挪
+        后台线程（`_POOL_ROWS_RUN` 单飞，防并发羊群），请求路径只读缓存。真正的行构造在
         `_pool_rows_compute`。
         """
         date = str(date or datetime.now().strftime("%Y-%m-%d"))
@@ -14418,16 +14882,48 @@ class Api:
                            "cond_labels": COND_LABELS, "note": "", "pending": 0})
         import hashlib
         key = (date, hashlib.md5(",".join(sorted(codes)).encode()).hexdigest()[:12])
+        # 输入文件指纹 (mtime,size)：池子被改（加票/删票/改理由）⇒ 立即判过期触发后台重算，
+        # 不等 30s TTL。文件读不到 ⇒ fp=None，退化成纯 TTL 语义。
+        fp = None
+        if src_fp is not None:
+            try:
+                _st = src_fp.stat()
+                fp = (_st.st_mtime, _st.st_size)
+            except OSError:
+                fp = None
+        now = _time_mod.time()
         with _POOL_ROWS_LOCK:
-            if key in _POOL_ROWS_RUN and key in _POOL_ROWS_MEM:
-                return _POOL_ROWS_MEM[key]        # 上一拍结果，别再叠加一份计算
-            _POOL_ROWS_RUN.add(key)
+            ent = _POOL_ROWS_MEM.get(key)
+            if (ent is not None and (now - ent.get("ts", 0.0)) < _POOL_ROWS_TTL
+                    and (fp is None or ent.get("fp") == fp)):
+                return ent["payload"]                       # ① 新鲜直返
+            if ent is not None and key not in _POOL_ROWS_RUN:
+                # ② 过期/指纹变但有旧值 ⇒ 立返旧值，后台单飞重算（SWR）
+                _POOL_ROWS_RUN.add(key)
+
+                def _bg(_stocks=stocks, _date=date, _note=note, _key=key, _fp=fp):
+                    try:
+                        payload = self._pool_rows_compute(_stocks, _date, _note)
+                        with _POOL_ROWS_LOCK:
+                            if len(_POOL_ROWS_MEM) > 8:
+                                _POOL_ROWS_MEM.clear()
+                            _POOL_ROWS_MEM[_key] = {"payload": payload,
+                                                    "ts": _time_mod.time(), "fp": _fp}
+                    except Exception:
+                        pass                                # 下轮轮询再试，旧值继续兜底
+                    finally:
+                        with _POOL_ROWS_LOCK:
+                            _POOL_ROWS_RUN.discard(_key)
+                threading.Thread(target=_bg, daemon=True, name="pool-rows-swr").start()
+            if ent is not None:
+                return ent["payload"]
+            _POOL_ROWS_RUN.add(key)                         # ③ 无旧值（首次）⇒ 同步算
         try:
             payload = self._pool_rows_compute(stocks, date, note)
             with _POOL_ROWS_LOCK:
                 if len(_POOL_ROWS_MEM) > 8:
                     _POOL_ROWS_MEM.clear()
-                _POOL_ROWS_MEM[key] = payload
+                _POOL_ROWS_MEM[key] = {"payload": payload, "ts": _time_mod.time(), "fp": fp}
             return payload
         finally:
             with _POOL_ROWS_LOCK:
@@ -14773,7 +15269,7 @@ class Api:
         """异常监控池 → 与「建仓信号扫描」同列的数据（行构造见 `_pool_rows`）。"""
         return self._pool_rows(self._abn_read(), date,
                                "判定/得分与建仓信号扫描同源（build_decision）；"
-                               "未在本地日线缓存里的票显示 —")
+                               "未在本地日线缓存里的票显示 —", src_fp=self._ABN_FP)
 
     # ---------- 多窗口看盘：记忆上次的股票与布局（2026-11-04 owner）----------
     # 为什么落到后端而不是只用 localStorage：多窗口常用**独立原生窗口**，它与主窗口
@@ -14840,7 +15336,8 @@ class Api:
         """避风港湾 → 与「建仓信号扫描」同列的数据（行构造与异常监控池共用）。"""
         return self._pool_rows(self._shelter_read(), date,
                                "判定/得分与建仓信号扫描同源（build_decision）；"
-                               "手动池，自己往里加票；未在本地日线缓存里的票显示 —")
+                               "手动池，自己往里加票；未在本地日线缓存里的票显示 —",
+                               src_fp=self._SHELTER_FP)
 
     def load_pool_members(self):
         """各手动池的**成员名单**（只读状态档，零计算/零网络/毫秒级）。
@@ -15558,8 +16055,13 @@ class Api:
             pass
         return result
 
-    def poll_live_bundle(self, date=None):
+    def poll_live_bundle(self, date=None, pb_sig=None):
         """10 秒实时刷新的**合并端点**（2026-10-28）：6 次桥往返 → 1 次。
+
+        2026-11-22 P1-4：可选 `pb_sig`（不传 = 现状全量）。pb 大表（数百行 ≈100-300KB）
+        每拍全量过串行桥太亏 ⇒ 对 pb rows 内容算 md5 指纹：与前端回传一致 ⇒ pb 键只回
+        `{sig, unchanged: true}`（几百字节）；不一致 ⇒ 全量 rows + 新 sig。指纹按**内容**
+        派生（含后台自填的技术标签/均线突破），与后端重启、切日期天然兼容。
 
         为什么（实测）：pywebview 每次 js_api 调用都要在 **UI 线程**上 `Thread.start()`，
         返回时还要抢同一个全局 semaphore —— **空端点 `ping` 都要 0.4~3.8s**，
@@ -15582,7 +16084,8 @@ class Api:
             "turnover": lambda: self.load_market_turnover(),
             "divergence": lambda: self.load_index_divergence(),
             "quotes": lambda: self.load_quotes(),
-            "pb": lambda: self.refresh_pb(_d),
+            # P1-4：pb 瘦帧（pb_sig 命中 ⇒ 不带 rows，只回 {sig, unchanged}）
+            "pb": lambda: self._pb_slim(self.refresh_pb(_d), pb_sig),
             # 2026-10-28 第二批并入：这两个原本各自挂在一个 10s / 5s 的轮询器上，
             # 后端只是「读小文件 + 比对增量」（本征 <5ms），却各付一次 0.5~3s 的桥往返。
             "signals": lambda: self.poll_new_position_signals(_d),
@@ -15603,6 +16106,26 @@ class Api:
         finally:
             ex.shutdown(wait=False, cancel_futures=True)
         return _clean(out)
+
+    @staticmethod
+    def _pb_slim(result, pb_sig):
+        """P1-4 pb 瘦帧：rows 内容指纹命中 ⇒ 只回 {sig, unchanged: true}（不传 pb_sig ⇒ 原样全量）。
+        指纹取 rows 全内容（含后台自填的 tags/trend/ma_reclaim 等懒列）⇒ 懒列落地时 sig 变、
+        自动补发一次全量；md5(数百行×~1KB) 本征 ~1ms，远小于 deepcopy+桥序列化。"""
+        if pb_sig is None or not isinstance(result, dict):
+            return result
+        import hashlib as _hl
+        try:
+            sig = _hl.md5(json.dumps(result.get("rows") or [], sort_keys=True,
+                                     ensure_ascii=False, default=str).encode("utf-8")
+                          ).hexdigest()[:16]
+        except Exception:
+            return result                          # 指纹算不出来 ⇒ 全量（与不传参一致）
+        if str(pb_sig) == sig:
+            return {"sig": sig, "unchanged": True}
+        out = dict(result)
+        out["sig"] = sig
+        return out
 
     # ---------- 轻量 PB 刷新（盘中实时） ----------
     def refresh_pb(self, date):

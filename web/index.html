@@ -859,9 +859,10 @@
   </div>
 </div>
 
-<script src="vendor/echarts.min.js"></script>
+<!-- 2026-11-22（P2-5）：echarts.min.js（~1MB）不再同步阻塞首屏，改由 app.js 的
+     `_ensureEcharts()` 在首次真正画图时动态注入（单飞 + 排队补画，见 app.js ECharts 辅助段）。 -->
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261122a"></script>
+<script src="app.js?v=20261122c"></script>
 </body>
 </html>

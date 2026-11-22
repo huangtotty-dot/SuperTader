@@ -1,7 +1,9 @@
 # P0-4(2026-08-31): 补齐 V3.0 迁移遗漏——本模块此前仅经 main.py exec 共享命名空间注入依赖，
 # 作为独立模块 import（如 src/data_fetcher 引入）时 NameError。补模块级 import/常量使其自包含。
+import hashlib
 import os
 import json
+import threading
 import time
 import pandas as pd
 from datetime import datetime
@@ -23,6 +25,27 @@ def get_today_str() -> str:
 AI_REVIEW_STATS: Dict[str, dict] = {}
 DAILY_DECISION_STATS: Dict[str, dict] = {}
 _ORPHAN_TMP_COUNT = 0
+
+# P2-1(2026-11-22): 分钟快照写放大收敛（诊断 doc/solutions/2026-11-22_UI实时性深度诊断与架构优化.md）。
+# 主循环 15s/只「读旧档+合并+全量重写 ~34KB」（~4,800 次写/日），而分钟K 一分钟才一根新 bar，
+# 3/4 的拍子合并结果不变（非交易时段全重复）⇒ 进程内按路径记上次写出的 {末根bar时间, bars数,
+# 内容md5} 与合并基（完整 rec），本轮合并结果与上次一致 ⇒ 跳过读盘与写盘；
+# 指纹缺失（首写/重启/超帽清理）走原路径（读+合并+写）并重建指纹。
+# 安全性：本函数是 t_io/minute_snapshots 的唯一生产写入方（唯一调用点 core/scan.py:301），
+# 进程外无人改这些文件 ⇒ 内存合并基与磁盘等价。
+_SNAPSHOT_CACHE: Dict[str, dict] = {}
+_SNAPSHOT_CACHE_LOCK = threading.Lock()
+_SNAPSHOT_CACHE_CAP = 64   # 持仓数 × 当日；防跨日无限累积
+
+
+def _prune_snapshot_cache() -> None:
+    """超帽清理：先丢非当日条目，仍超帽则全清（下一拍走原路径重建指纹）。调用方须持锁。"""
+    today = get_today_str()
+    for k in [k for k, v in _SNAPSHOT_CACHE.items()
+              if str((v.get("rec") or {}).get("date", "")) != today]:
+        _SNAPSHOT_CACHE.pop(k, None)
+    if len(_SNAPSHOT_CACHE) > _SNAPSHOT_CACHE_CAP:
+        _SNAPSHOT_CACHE.clear()
 
 
 def _ensure_ai_review_stats(code: str, holding: dict) -> dict:
@@ -144,15 +167,23 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
     if len(day) != 10:
         return
     path = _snapshot_file(code, day)
-    existing = {}
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                existing = json.load(f) or {}
-        except Exception:
-            existing = {}
-    old_bars = existing.get("bars", []) if isinstance(existing, dict) else []
     new_bars = df[[c for c in ["time", "open", "high", "low", "close", "volume", "amount"] if c in df.columns]].to_dict(orient="records")
+    # P2-1: 缓存命中 ⇒ 用上次写出的 rec 作合并基，**免读盘**；未命中（首写/重启）走原读盘路径。
+    with _SNAPSHOT_CACHE_LOCK:
+        ent = _SNAPSHOT_CACHE.get(path)
+        if len(_SNAPSHOT_CACHE) > _SNAPSHOT_CACHE_CAP:
+            _prune_snapshot_cache()
+    if ent is not None:
+        existing = ent.get("rec") or {}
+    else:
+        existing = {}
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    existing = json.load(f) or {}
+            except Exception:
+                existing = {}
+    old_bars = existing.get("bars", []) if isinstance(existing, dict) else []
     merged_bars: Dict[str, dict] = {}
     for row in old_bars + new_bars:
         ts = str(row.get("time", ""))
@@ -178,6 +209,18 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
         "daily_context": daily_context or (existing.get("daily_context", {}) if isinstance(existing, dict) else {}),
         "bars": bars,
     }
+    # P2-1: 内容指纹 = 剔除 saved_at（每拍必变）后的全记录 sort_keys 定序序列化。
+    # 覆盖 bars 之外的 signal/daily_context/market_state 等字段 ⇒ 信号变化也会自然打破指纹、照常落盘。
+    try:
+        _fp_payload = dict(rec)
+        _fp_payload.pop("saved_at", None)
+        fingerprint = hashlib.md5(json.dumps(
+            _json_safe(_fp_payload), ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+    except Exception:
+        fingerprint = None   # 指纹算不出就退化原路径（必写），绝不因指纹丢数据
+    if ent is not None and fingerprint is not None and ent.get("fp") == fingerprint:
+        return   # 本轮合并结果与上次一致：跳过写盘（分钟K 一分钟才一根新 bar）
     # C19-1/2/3 修复(2026-08-18): 唯一 tmp 名 + os.replace 指数退避重试 + 故障隔离
     # 案发：杀软/Windows 索引器定时扫描锁文件 → WinError 5；原 os.replace 无重试且异常上抛打断信号主流程。
     tmp = f"{path}.{os.getpid()}.{int(time.time() * 1000)}.tmp"
@@ -200,6 +243,12 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
     for _attempt in range(5):  # 指数退避 0.2/0.4/0.8/1.6/3.2s，覆盖 AV 秒级锁窗
         try:
             os.replace(tmp, path)
+            if fingerprint is not None:
+                with _SNAPSHOT_CACHE_LOCK:
+                    _SNAPSHOT_CACHE[path] = {
+                        "fp": fingerprint, "rec": rec,
+                        "last_time": rec.get("last_time", ""), "n_bars": len(bars),
+                    }
             return
         except OSError:
             if _attempt < 4:

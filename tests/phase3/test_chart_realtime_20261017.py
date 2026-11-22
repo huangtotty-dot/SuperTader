@@ -168,6 +168,14 @@ class TestChartRealtime(unittest.TestCase):
         self._orig_daily_display = cc.load_daily_display
         self._orig_raw_daily = TP.daily_kline_raw
         self._orig_snap = TP.TencentProvider.snapshot_auction
+        # 2026-11-22 P1-5 后 `_fetch_live_quote` 先走 QuoteBus（含跨进程共享磁盘档）——
+        # 不封掉它，bus 里可能躺着真实生产的当日快照，假数据测试被真实时钟/日期带跑
+        # （49!=48、'2026-11-22' != '2026-10-15'），且 snapshot_auction 的调用计数失真。
+        # 让 bus 抛异常 ⇒ `_fetch_live_quote` fail-open 回退到各用例 mock 的 snapshot_auction。
+        from core.market_data import quote_bus as _qb
+        self._qb = _qb
+        self._orig_bus_get = _qb.get_quotes
+        _qb.get_quotes = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("test: bus sealed"))
         gui._in_trading_session = lambda now=None: True
         self.today = datetime.now().strftime("%Y-%m-%d")
         self.api = gui.Api()
@@ -177,6 +185,7 @@ class TestChartRealtime(unittest.TestCase):
         cc.load_daily_display = self._orig_daily_display
         TP.daily_kline_raw = self._orig_raw_daily
         TP.TencentProvider.snapshot_auction = self._orig_snap
+        self._qb.get_quotes = self._orig_bus_get
         gui._CHART_LIVE_CACHE.clear()
         gui._CHART_LIVE_STATE.clear()
         gui._CHART_LIVE_TTL = 2.0

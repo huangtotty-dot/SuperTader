@@ -386,6 +386,21 @@ def run_once(now: datetime = None, dry_run: bool = False, top_n: int = None,
 
     if snapshot_fn is None:
         def snapshot_fn(codes):
+            # P0-6(2026-11-22)：默认走进程级 **QuoteBus**（共享档+跨进程锁+stale 兜底，
+            # 与 gui/main.py/hunter_ma5_alert 共用同一份腾讯快照）——原先每 30min 对
+            # ~1669 只**绕过总线直连** qt.gtimg.cn，是腾讯侧最大单次突发。
+            # 返回结构与 snapshot_auction_many 完全同口径（bus 的 quote_dict 就是它的
+            # 每只返回值，键同为裸 6 位码；名单侧 `holdings_codes/pb_codes` 已归一），
+            # 故不需要适配层。先例见 hunter_ma5_alert.scan_live_once（max_age=10s）。
+            try:
+                from core.market_data.quote_bus import get_quotes as _bus_get_quotes
+                got = _bus_get_quotes(list(codes), max_age_sec=10.0) or {}
+            except Exception:
+                got = {}
+            if got:
+                return got
+            # fail-open 兜底：bus 模块缺失/整体取空 ⇒ 回退直调腾讯（接入前原行为）。
+            # 注意：bus 部分命中属正常（停牌/休市票本就无快照），不为它重复出网。
             from core.market_data.tencent_provider import TencentProvider
             return TencentProvider().snapshot_auction_many(codes) or {}
     try:
