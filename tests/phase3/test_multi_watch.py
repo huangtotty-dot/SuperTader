@@ -656,6 +656,64 @@ class TestDailyMaFallback:
         assert d and d["ma5"] > 0 and d["ma55"] > 0
 
 
+class TestSectorPcts:
+    """2026-11-21 owner：「多窗口成交额旁边显示 证券/保险/银行 涨幅，10 秒刷新」。"""
+
+    def test_sector_codes_are_ths(self):
+        """2026-11-21 owner：「银行保险证券用同花顺 881155/881156/881157」。"""
+        assert gui._SECTOR_PCT_CODES == (("证券", "881157"), ("银行", "881155"), ("保险", "881156"))
+        assert "d.10jqka.com.cn/v6/realhead/48_" in gui._THS_SECTOR_URL
+
+    def test_backend_items_breadth_and_cache(self, monkeypatch):
+        api = gui.Api()
+        gui.Api._SECTOR_PCT_MEM = {"ts": 0.0, "val": None}
+        calls = {"n": 0}
+
+        def _fake():
+            calls["n"] += 1
+            return [("证券", None, -1.32), ("银行", None, 0.22), ("保险", None, 0.39)]
+
+        monkeypatch.setattr(gui, "_ths_sector_pcts", _fake)
+        monkeypatch.setattr(gui, "_em_market_breadth", lambda: (301, 4961, 31, "eastmoney"))
+        r = api.load_mw_head_stats()
+        assert r["available"] is True
+        assert [x["name"] for x in r["items"]] == ["证券", "银行", "保险"]
+        assert abs(r["items"][1]["pct"] - 0.22) < 1e-9 and r.get("ts")
+        assert (r["up"], r["down"], r["flat"]) == (301, 4961, 31)
+        assert r.get("src") == "eastmoney"
+        # 8 秒内命中内存缓存，不再打网络
+        api.load_mw_head_stats()
+        assert calls["n"] == 1
+
+    def test_backend_all_missing_is_unavailable(self, monkeypatch):
+        api = gui.Api()
+        gui.Api._SECTOR_PCT_MEM = {"ts": 0.0, "val": None}
+        monkeypatch.setattr(gui, "_ths_sector_pcts", lambda: [("证券", None, None)])
+        monkeypatch.setattr(gui, "_em_market_breadth", lambda: (None, None, None, None))
+        r = api.load_mw_head_stats()
+        assert r["available"] is False
+
+    def test_breadth_only_still_available(self, monkeypatch):
+        """板块全缺但家数在 ⇒ 仍可显示（前端只显示 ⬆⬇）。"""
+        api = gui.Api()
+        gui.Api._SECTOR_PCT_MEM = {"ts": 0.0, "val": None}
+        monkeypatch.setattr(gui, "_ths_sector_pcts", lambda: [])
+        monkeypatch.setattr(gui, "_em_market_breadth", lambda: (300, 5000, 10, "xgb"))
+        r = api.load_mw_head_stats()
+        assert r["available"] is True and r["up"] == 300 and r["items"] == []
+        assert r.get("src") == "xgb", "兜底来源要透传，前端据此标注韭研口径"
+
+    def test_frontend_wiring(self):
+        html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+        assert 'id="mwSectorCard"' in html, "标题栏缺证券/银行/保险读数位"
+        assert "⬆" in _JS and "⬇" in _JS, "标题栏要显示涨跌家数"
+        assert "mwSectorTick()" in _JS and "mwSectorTimer = setInterval(mwSectorTick, 10000)" in _JS
+        assert 'apiCall("load_mw_head_stats")' in _JS
+        css = (_ROOT / "web" / "style.css").read_text(encoding="utf-8")
+        assert ".mw-sector {" in css
+        # 关窗两条路径都要清掉定时器（独立窗口 / 浮层）
+        assert _JS.count("clearInterval(mwSectorTimer)") >= 2
+
 class TestMwRsi:
     """2026-11-20 owner：「多窗口看盘中提供 RSI，分别 6/12/24」。"""
 

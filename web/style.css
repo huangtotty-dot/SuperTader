@@ -354,6 +354,12 @@ body.mw-winmode #multiWatchWin {
 .mw-turn-foot { color: var(--text-faint); font-size: 10px; flex: 0 1 auto;
   overflow: hidden; text-overflow: ellipsis; }
 .mw-turn-x { flex: none; padding: 0 5px; line-height: 15px; }
+/* 证券/银行/保险 涨幅（2026-11-21 owner）：成交额小卡右侧，10 秒刷新。
+   颜色在 JS 里按涨跌写死（红涨绿跌，A 股口径）；这里只管排版。 */
+.mw-sector { display: flex; align-items: center; gap: 7px; flex: none;
+  margin-right: 10px; font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.mw-sector b { font-size: 12px; font-weight: 700; }
+.mw-sector .mw-sep { color: var(--text-faint); }
 .mw-title { display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 6px 10px; background: #161b22;
   border-bottom: 1px solid #30363d; font-size: 13px; font-weight: 700;

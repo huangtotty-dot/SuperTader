@@ -13641,7 +13641,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261120d", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261121d", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -14132,6 +14132,10 @@ async function openMultiWatch() {
   mwTurnTick();
   if (mwTurnTimer) clearInterval(mwTurnTimer);
   mwTurnTimer = setInterval(mwTurnTick, 10000);
+  // 证券/银行/保险 涨幅：同样 10 秒（2026-11-21 owner）
+  mwSectorTick();
+  if (mwSectorTimer) clearInterval(mwSectorTimer);
+  mwSectorTimer = setInterval(mwSectorTick, 10000);
 }
 
 /* ===== 多窗口看盘 · 标题栏「两市成交额」行内读数（2026-11-17 owner：
@@ -14143,6 +14147,44 @@ async function openMultiWatch() {
    ⚠️ 不能拿 `load_market_turnover` 的 `amount` 当分子：那是 5 分钟粒度，最多落后一根 bar，
       与实时分子混用正是 2026-11-17 那次"-61 亿 vs -661 亿"的成因。 */
 let mwTurnTimer = null, mwTurnInflight = false;
+/* 证券/银行/保险 涨幅（2026-11-21 owner：「成交额旁边显示，最好 10 秒刷新」）——
+   后端 `load_sector_pcts`（腾讯指数快照三腿，8s 内存缓存）⇒ 10 秒轮询每拍都是新值。 */
+let mwSectorTimer = null, mwSectorInflight = false;
+
+async function mwSectorTick() {
+  if (mwSectorInflight) return;
+  const el = document.getElementById("mwSectorCard");
+  if (!el) return;
+  mwSectorInflight = true;
+  try {
+    const d = await apiCall("load_mw_head_stats");
+    if (!d || !d.available || (!(d.items || []).length && d.up == null && d.down == null)) {
+      el.innerHTML = '<span class="cell-dim">🏦 证券/银行/保险 —</span>';
+      return;
+    }
+    const parts = (d.items || []).map(it => {
+      const v = Number(it.pct);
+      const up = v >= 0;
+      return `<span>${esc(it.name)} <b style="color:${up ? "#f85149" : "#3fb950"}">`
+        + `${up ? "+" : ""}${v.toFixed(2)}%</b></span>`;
+    });
+    // 涨跌家数（2026-11-21 owner）：沪深北合计，红涨绿跌
+    if (d.up != null || d.down != null) {
+      parts.push(`<span>⬆ <b style="color:#f85149">${d.up == null ? "—" : d.up}</b></span>`);
+      parts.push(`<span>⬇ <b style="color:#3fb950">${d.down == null ? "—" : d.down}</b></span>`);
+      // 东财（沪深北全A）是主口径；被限流时后端退到韭研口径（不含北交所），如实标注
+      if (d.src && d.src !== "eastmoney") {
+        parts.push(`<span class="mw-sep" style="font-size:10px" title="东财接口暂不可用，暂用韭研口径（不含北交所，较东财全A略小）">韭研口径</span>`);
+      }
+    }
+    el.innerHTML = "🏦 " + parts.join('<span class="mw-sep">｜</span>')
+      + `<span class="mw-sep" style="font-size:10px">${esc(d.ts || "")}</span>`;
+  } catch (e) {
+    el.innerHTML = '<span class="cell-dim">🏦 证券/银行/保险 —</span>';
+  } finally {
+    mwSectorInflight = false;
+  }
+}
 let mwTurnOn = (() => { try { return localStorage.getItem("mw_turn_on") !== "0"; } catch (e) { return true; } })();
 
 function _mwFmtYi(v) {
@@ -14285,6 +14327,7 @@ function closeMultiWatch() {
   if (MW_WINDOW_MODE) {                 // 独立窗口里 × = 关窗口（不是隐藏浮层）
     if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
     if (mwTurnTimer) { clearInterval(mwTurnTimer); mwTurnTimer = null; }
+    if (mwSectorTimer) { clearInterval(mwSectorTimer); mwSectorTimer = null; }
     try { window.pywebview.api.close_multi_window(); } catch (e) { /* 忽略 */ }
     return;
   }
@@ -14292,6 +14335,7 @@ function closeMultiWatch() {
   if (win) win.style.display = "none";
   if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
   if (mwTurnTimer) { clearInterval(mwTurnTimer); mwTurnTimer = null; }
+  if (mwSectorTimer) { clearInterval(mwSectorTimer); mwSectorTimer = null; }
   if (mwRO) { try { mwRO.disconnect(); } catch (e) { /* 忽略 */ } mwRO = null; }
   mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
   mwInsts = [];

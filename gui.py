@@ -652,6 +652,102 @@ def _tx_index_amount():
     return out
 
 
+# 证券/银行/保险 三大板块（2026-11-21 owner：「用同花顺的 881155/881156/881157」）。
+# 同花顺行业板块实时：JSONP `d.10jqka.com.cn/v6/realhead/48_<code>/last.js`，
+# items["199112"] = 涨跌幅(%)、["264648"] = 涨跌额（两者自洽，页面同口径）。
+# 与中证行业指数（399975/399986/399809）不是一个口径 —— owner 以同花顺 App 为准。
+_SECTOR_PCT_CODES = (("证券", "881157"), ("银行", "881155"), ("保险", "881156"))
+_THS_SECTOR_URL = "https://d.10jqka.com.cn/v6/realhead/48_{code}/last.js"
+
+
+def _ths_sector_pcts():
+    """同花顺三大行业板块 → [(名称, None, 涨跌幅%), ...]（顺序同 `_SECTOR_PCT_CODES`）。
+
+    逐码单个 JSONP（每码 ~1.2KB，10 秒一轮三请求，量级与涨停池接口同一档）；
+    失败/解析不出就跳过该项，**绝不抛**。
+    """
+    import random as _random
+    import re
+    import requests
+    headers = {"User-Agent": (_random.choice(_THS_LIMIT_UAS) if _THS_LIMIT_UAS else "Mozilla/5.0"),
+               "Referer": "http://q.10jqka.com.cn/",
+               "cookie": "v=AaBb1234567890abcdefghijklmnopqrstuv"}
+    out = []
+    for name, code in _SECTOR_PCT_CODES:
+        try:
+            r = requests.get(_THS_SECTOR_URL.format(code=code), headers=headers, timeout=4.0)
+            m = re.search(r"\((.*)\)\s*$", r.text, re.S)
+            items = (json.loads(m.group(1)) if m else {}).get("items") or {}
+            pct = float(items.get("199112"))
+            out.append((name, None, pct))
+        except Exception:
+            continue
+    return out
+
+
+def _em_market_breadth():
+    """东财 ulist 快照 → (上涨, 下跌, 平盘, src)，沪深北合计；东财不可用 → 韭研兜底(src="xgb")。
+
+    **为什么不用 clist 逐只数**：`clist/get` 的 pz 上限 100 行，全市场 5900 只需翻 60 页
+    （10 秒一轮根本扛不住）；指数快照的 `f104/f105/f106` 直接就是该市场全体的涨/跌/平家数
+    （实测上证 159/2176/20、深市 142/2785/11），一次两行、~200ms。
+    ⚠️ 只有 `ulist.np`（多标的）回这三列；`stock/get` 单标的对指数回的是 `-`。
+    """
+    try:
+        import requests
+        # 三腿 = 上证指数 + 深证综指 + 北证50（0.899050）——2026-11-21 实报「家数和东财页面
+        # 对不上」：只算沪深会少掉北交所 270+ 只（当天 涨301/跌4961 vs 页面 313/5236）。
+        # ⚠️ 东财对高频请求会直接断连（RemoteDisconnected）⇒ 这里 2 次重试 + 换 UA。
+        diff = []
+        for _attempt in range(2):
+            try:
+                r = requests.get("https://push2.eastmoney.com/api/qt/ulist.np/get",
+                                 params={"fltt": "2", "invt": "2",
+                                         "secids": "1.000001,0.399106,0.899050",
+                                         "fields": "f12,f14,f104,f105,f106"},
+                                 headers={"User-Agent": _random.choice(_THS_LIMIT_UAS) if _THS_LIMIT_UAS else "Mozilla/5.0",
+                                          "Referer": "https://quote.eastmoney.com/"},
+                                 timeout=4.0)
+                diff = ((r.json() or {}).get("data") or {}).get("diff") or []
+                break
+            except Exception:
+                if _attempt:
+                    break          # 两次都失败 → 走韭研兜底（不再直接返回 None）
+    except Exception:
+        return (None, None, None)
+    up = dn = fl = None
+    for x in diff:
+        try:
+            _u, _d, _f = int(x.get("f104")), int(x.get("f105")), int(x.get("f106"))
+        except Exception:
+            continue
+        up = (_u if up is None else up + _u)
+        dn = (_d if dn is None else dn + _d)
+        fl = (_f if fl is None else fl + _f)
+    if up is None:
+        u2, d2, _f2 = _xgb_market_breadth()   # 东财被限流/断连时的兜底（口径略小：不含北交所/部分 ST）
+        return (u2, d2, None, "xgb")
+    return (up, dn, fl, "eastmoney")
+
+
+def _xgb_market_breadth():
+    """韭研(xuangubao) 涨跌家数兜底 → (上涨, 下跌, None)。
+
+    实测 11-20 收盘：rise 297 / fall 4897（东财全A 313/5236 —— 其口径略小），
+    仅在东财不可用时兜底，正常以东财为准。
+    """
+    try:
+        import requests
+        r = requests.get("https://flash-api.xuangubao.cn/api/market_indicator/line"
+                         "?fields=rise_count,fall_count",
+                         headers={"User-Agent": "Mozilla/5.0"}, timeout=4.0)
+        arr = (r.json() or {}).get("data") or []
+        x = arr[-1] if arr else {}
+        return (int(x.get("rise_count")), int(x.get("fall_count")), None)
+    except Exception:
+        return (None, None, None)
+
+
 def _sent_roll_pct(vals, w=60, min_n=20):
     """滚动分位（**含当日**，窗口 w，最少 min_n 个有效样本）；不足 → None。
 
@@ -4016,6 +4112,37 @@ class Api:
             frac = pay.get("proj_frac")
             if isinstance(frac, (int, float)) and 0 < frac <= 1:
                 out["projected"] = live / frac
+        return _clean(out)
+
+    # 证券/银行/保险 涨幅 + 涨跌家数（2026-11-21 owner）：多窗口看盘标题栏、10 秒级。
+    _SECTOR_PCT_MEM: dict = {"ts": 0.0, "val": None}
+
+    def load_mw_head_stats(self):
+        """多窗口标题栏：证券/银行/保险 涨幅 + 沪深涨跌家数（10 秒刷新）。
+
+        两个轻请求：
+          · 腾讯指数快照三腿 → 证券公司 399975 / 中证银行 399986 / 保险主题 399809（~50ms）；
+          · 东财 ulist 沪深两指数 → 上涨/下跌/平盘家数（f104/f105/f106，~200ms）。
+        **8 秒内存缓存**（前端 10 秒轮询 ⇒ 每拍都是新值，失败也不打网络风暴）。
+        返回 {available, items:[{name,price,pct}], up, down, flat, ts}；板块全缺 → available=False
+        （家数单独缺失时对应字段为 None，前端显示 —）。
+        """
+        now = _time_mod.time()
+        mem = self._SECTOR_PCT_MEM
+        if mem.get("val") and (now - float(mem.get("ts") or 0.0)) < 8.0:
+            return mem["val"]
+        rows = _ths_sector_pcts()
+        items = [{"name": n, "price": p, "pct": c} for n, p, c in rows if c is not None]
+        up, dn, fl, _src = _em_market_breadth()
+        if items:
+            out = {"available": True, "items": items, "up": up, "down": dn, "flat": fl,
+                   "src": _src, "ts": datetime.now().strftime("%H:%M:%S")}
+        elif up is not None:
+            out = {"available": True, "items": [], "up": up, "down": dn, "flat": fl,
+                   "src": _src, "ts": datetime.now().strftime("%H:%M:%S")}
+        else:
+            out = {"available": False}
+        self._SECTOR_PCT_MEM.update({"ts": now, "val": out})
         return _clean(out)
 
     def _market_turnover_impl(self):

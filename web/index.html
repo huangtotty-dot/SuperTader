@@ -808,6 +808,9 @@
       <button class="mini-btn mw-turn-x" onclick="mwToggleTurn()"
               title="收起（标题栏「💹 成交额」可再展开）">—</button>
     </span>
+    <!-- 2026-11-21 owner：「成交额旁边显示 证券 / 保险 / 银行 涨幅，最好 10 秒刷新」。
+         数据 = `load_sector_pcts`（证券公司 399975 / 中证银行 399986 / 保险主题 399809 的腾讯快照）。 -->
+    <span id="mwSectorCard" class="mw-sector"><span class="cell-dim">🏦 证券/银行/保险 —</span></span>
     <span style="display:flex;gap:6px;align-items:center;flex:none">
       <!-- 2026-10-26 owner：「需要有按钮我可以选择 3×3 / 3×2」。
            切换会重建格子（3×2 只画前 6 只、也只请求这 6 只），选择存 localStorage。 -->
@@ -858,6 +861,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261120d"></script>
+<script src="app.js?v=20261121d"></script>
 </body>
 </html>
