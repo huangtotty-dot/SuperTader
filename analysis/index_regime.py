@@ -841,7 +841,15 @@ def _ir_fetch_limit_counts_ths(date_yyyymmdd: str, timeout: float = 12.0,
                 cache = json.load(f)
             hit = cache.get(date_yyyymmdd)
             if isinstance(hit, dict) and hit.get("zt_count") is not None:
-                return hit
+                # 2026-11-22 实报（owner：「和同花顺对不上」）：14:30 尾盘快照写进的是**盘中数**
+                # （11-20 实测 涨停26/跌停25，收盘真值 28/58 —— 尾盘 30 分钟跌停潮 +33），
+                # 而这份缓存是 append-only ⇒ 15:30 的 eod 直接命中盘中数、面板钉死一整天。
+                # 规则：**当天且已过收盘（≥15:00）⇒ 无视缓存重取**，让收盘数覆盖尾盘数。
+                _now = time.localtime()
+                _is_today = time.strftime("%Y%m%d", _now) == date_yyyymmdd
+                _after_close = time.strftime("%H:%M", _now) >= "15:00"
+                if not (_is_today and _after_close):
+                    return hit
         except Exception:
             cache = {}
 
