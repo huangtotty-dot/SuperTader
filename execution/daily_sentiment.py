@@ -48,8 +48,7 @@ import statistics
 import sys
 import threading
 import time as _time_mod
-import urllib.request
-from datetime import datetime, timedelta, time as dtime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 # ============================================================================
@@ -63,7 +62,6 @@ from analysis.index_regime import (
 )
 from config import (
     FEISHU_KEYWORD as _FEISHU_KEYWORD,
-    FEISHU_WEBHOOK as _FEISHU_WEBHOOK,
     HOLDINGS,
     SENTIMENT_PARAMS,
     log as _log,

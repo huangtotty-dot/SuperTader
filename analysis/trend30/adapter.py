@@ -251,8 +251,6 @@ def prefetch_30min(codes, workers: int = 8) -> int:
     ⇒ 一个 50 只的板块要 30~40 秒才出标签。拆出来 8 路并发后，每只只剩 ~80ms 的计算。
     返回实际发起取数的只数（同 30min 时段内已有的跳过）。
     """
-    import threading as _th
-
     slot = _slot()
     _snap_load(slot)          # 先把本 slot 的磁盘快照灌进 _CACHE（每个 slot 只读一次盘）
     todo = []

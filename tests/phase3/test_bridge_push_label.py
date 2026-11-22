@@ -33,7 +33,7 @@ if str(_ROOT) not in sys.path:
 _WATCHER_FP = _ROOT / "execution" / "auto" / "_gm" / "gm_bridge" / "watcher.py"
 _SRC = _WATCHER_FP.read_text(encoding="utf-8")
 _A = _SRC.index("# ── 股票「名称 + 代码 + 所属行业」标签")
-_B = _SRC.index("def _events_path")
+_B = _SRC.index("# ── 飞书推送")
 
 
 def _load_label_block(env_root=None):

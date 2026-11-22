@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import datetime, timedelta, time as dtime
 
-from config import HOLDINGS, INDEX_REGIME_CONTEXT, load_runtime_config, log, send_feishu_payload
+from config import INDEX_REGIME_CONTEXT, load_runtime_config, log, send_feishu_payload
 from analysis.index_regime import detect_index_regime, push_index_regime_context
 from analysis.index_regime_intraday import (
     IRI_DEFAULT_PARAMS, detect_intraday_alert, fetch_index_minutes_live,

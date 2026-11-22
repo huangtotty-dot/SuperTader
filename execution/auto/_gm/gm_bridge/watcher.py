@@ -22,9 +22,9 @@ from typing import Dict, Set, Optional
 
 # ── 桥路径（0806 迁移：与手工做T系统分离，统一由 writer 决定） ──
 try:
-    from writer import BRIDGE_DIR
+    from writer import BRIDGE_DIR, _events_path, _heartbeat_path
 except ImportError:  # python -m gm_bridge.watcher 方式启动
-    from gm_bridge.writer import BRIDGE_DIR
+    from gm_bridge.writer import BRIDGE_DIR, _events_path, _heartbeat_path
 
 # ── 股票「名称 + 代码 + 所属行业」标签（2026-10-16 owner 要求）──────────────
 # owner：「发送的飞书消息，要有股票代码同时要有股票的中文名称以及所属行业」。
@@ -108,16 +108,6 @@ def _stock_label(code: str) -> str:
     if _name:
         return f"{_name}({_c})"
     return _c
-
-
-def _events_path(date_str: str = None) -> str:
-    if date_str is None:
-        date_str = datetime.now().strftime("%Y%m%d")
-    return os.path.join(BRIDGE_DIR, f"events_{date_str}.jsonl")
-
-
-def _heartbeat_path() -> str:
-    return os.path.join(BRIDGE_DIR, "heartbeat.json")
 
 
 # ── 飞书推送（0817 内移：项目内 gm_bridge/feishu.py 优先，去除 E:\06_T 硬依赖） ──

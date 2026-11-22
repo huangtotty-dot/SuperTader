@@ -8,7 +8,7 @@ import os
 import json
 import pandas as pd
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 
 # 板块合并（2026-09-21 owner 需求）：把细分板块并入父板块，原板块名降为「子概念」。
 #   中药 / 创新药 → 医药，在「医药」下以「创新药」「中药」两个子概念呈现；
@@ -85,7 +85,6 @@ class WatchlistLoader(DataLoaderBase):
 
             # 收集所有 category/concept 对（精确对应）
             pairs = []
-            has_multi_fields = False
             for i in range(1, 10):  # 最多支持 9 个 category
                 cat_key = f"category{i}"
                 concept_key = f"concept{i}"
@@ -99,7 +98,6 @@ class WatchlistLoader(DataLoaderBase):
                     for _i, _c in enumerate(_cats):
                         _v = _cons[_i] if _i < len(_cons) else ""
                         pairs.append((_c, _v))
-                    has_multi_fields = True
 
             if not pairs:
                 # 回退到旧字段：单个 category / concept
@@ -290,29 +288,18 @@ class DataLoader:
                               for m in _mem if m[2] or m[3]]
             sub_details[category] = _lst
 
-            stock_count = len(cat_df)
-
             # 使用总得分（D1-D8评分规则）计算平均分
             if "总得分" in cat_df.columns and cat_df["总得分"].notna().any():
-                total_score = int(cat_df["总得分"].fillna(0).sum())
                 avg_score = round(cat_df["总得分"].fillna(0).mean(), 2)
-                max_score = int(cat_df["总得分"].fillna(0).max())
                 limit_up_count = int(cat_df["涨停"].fillna(0).sum()) if "涨停" in cat_df.columns else 0
-                avg_amount = round(cat_df["成交额"].fillna(0).mean(), 2) if "成交额" in cat_df.columns else 0
             elif "涨跌幅" in cat_df.columns and cat_df["涨跌幅"].notna().any():
                 # 回退：无总得分时使用涨跌幅*10（兼容旧数据）
-                total_score = int(cat_df["涨跌幅"].fillna(0).sum() * 10)
                 avg_score = round(cat_df["涨跌幅"].fillna(0).mean() * 10, 2)
-                max_score = int(cat_df["涨跌幅"].fillna(0).max() * 10)
                 limit_up_count = int(cat_df["涨停"].fillna(0).sum()) if "涨停" in cat_df.columns else 0
-                avg_amount = round(cat_df["成交额"].fillna(0).mean(), 2) if "成交额" in cat_df.columns else 0
             else:
                 # 无行情数据时回退到基础分
-                total_score = stock_count * 10
                 avg_score = 10.0
-                max_score = 10
                 limit_up_count = 0
-                avg_amount = 0
 
             # 找到最强细分（按总得分）
             if "总得分" in cat_df.columns and cat_df["总得分"].notna().any():
@@ -434,13 +421,9 @@ class DataLoader:
                 if "涨跌幅" in row and pd.notna(row.get("涨跌幅")):
                     _change = row.get("涨跌幅", 0)
                     score = int(0 if pd.isna(_change) else float(_change) * 10)
-                    top_score = score
-                    limit_up = int(row.get("涨停", 0)) if pd.notna(row.get("涨停")) else 0
                     amount = row.get("成交额", 0) if pd.notna(row.get("成交额")) else 0
                 else:
                     score = 10
-                    top_score = 0
-                    limit_up = 0
                     amount = 0
 
                 # 使用拆分后的 concept 前半部分作为子概念分类（如"算力芯片-GPU"→"算力芯片"）

@@ -7,7 +7,7 @@
 import os
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import Dict, List
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment
@@ -235,7 +235,7 @@ class ExcelReporter(ReporterBase):
         data_start_row = current_info_row + 1
 
         # ---- 写入数据表 ----
-        next_row = self._write_dataframe(ws, df_summary, start_row=data_start_row)
+        self._write_dataframe(ws, df_summary, start_row=data_start_row)
 
         # ---- P0: 热度分列色阶（白→黄→红）----
         if has_heat:

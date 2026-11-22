@@ -14,9 +14,9 @@ universal_precise_entry.py — 摩恩三点逻辑的通用化实现
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -26,8 +26,8 @@ import sys
 sys.path.insert(0, str(BASE))
 
 from core.position_builder import fetch_daily_kline, load_snapshot_df
-from core.timing_gate import timing_verdict, _regime
-from analysis.indicators import resample_to_5min, resample_to_15min, add_5min_indicators, add_15min_indicators
+from core.timing_gate import timing_verdict
+from analysis.indicators import resample_to_15min, add_15min_indicators
 
 
 class UniversalPreciseEntry:

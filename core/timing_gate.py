@@ -17,14 +17,10 @@ CLI：
     python timing_gate.py --code 000988 --date 2026-08-14
 """
 import argparse
-import json
-import os
 import sys
-import urllib.request as _ur
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 # ── Windows 终端 UTF-8 编码修复 ──

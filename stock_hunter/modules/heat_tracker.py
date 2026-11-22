@@ -16,7 +16,7 @@ v2 改动（vs v1 fix1 审核）：
 import os
 import json
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict
 
 
 def _avg(values: list) -> float:

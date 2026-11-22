@@ -10,7 +10,6 @@ indicators.py — V3.0 指标计算模块
 """
 import numpy as np
 import pandas as pd
-from typing import Optional
 
 try:
     from config import PARAMS

@@ -4,10 +4,8 @@
 职责：生成报告后执行 5 项交叉验证
 扩展接口：继承 ValidatorBase 可新增验证规则
 """
-import os
-import json
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Dict
+from typing import List, Tuple
 from openpyxl import load_workbook
 
 from .data_loader import load_config
@@ -37,7 +35,6 @@ class Top5CountValidator(ValidatorBase):
     name = "top5_count"
 
     def validate(self, workbook) -> Tuple[bool, str]:
-        sheet_names = [s.title for s in workbook.worksheets]
         top5_sheet = None
         for s in workbook.worksheets:
             if "TOP5" in s.title or "top5" in s.title:

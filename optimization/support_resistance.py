@@ -12,7 +12,6 @@ support_resistance.py — 支撑位/压力位（简化版）
 from typing import Dict, Any, List, Optional
 from datetime import datetime, time as dtime
 import json
-import logging
 import os
 import pandas as pd
 

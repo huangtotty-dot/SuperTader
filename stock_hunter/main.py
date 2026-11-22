@@ -9,7 +9,6 @@ import sys
 import json
 import argparse
 from datetime import datetime
-from pathlib import Path
 
 # Windows 终端 UTF-8 修复（与 gui.py 同款）：趋势标签含 ➡️/🔥 等字符，
 # GBK 控制台下 print 会直接 UnicodeEncodeError 崩在热度 TOP3 打印处（2026-09-21 实测）
@@ -26,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from modules.data_loader import DataLoader
 from modules.market_data import MarketDataFetcher
 from modules.scorer import ConceptScorer
-from modules.ranker import Top5Ranker, SectorRanker, DetailRanker
+from modules.ranker import Top5Ranker
 from modules.reporter import ReportBuilder
 from modules.validator import ReportValidator
 from modules.push_feishu import send_report_summary, send_error_alert
@@ -82,7 +81,7 @@ def prepare_data(config: dict, date_str: str, save_spot: bool = False,
     print(f"  打分池: {len(df_pool)} 行数据，{len(codes)} 只不重复标的")
 
     # 2. 日期防呆：检查传入日期是否为今天，并记录实际数据日期
-    from datetime import datetime, timedelta
+    from datetime import datetime
     today_str = datetime.now().strftime("%Y-%m-%d")
     if date_str != today_str:
         gap_days = (datetime.strptime(date_str, "%Y-%m-%d") - datetime.strptime(today_str, "%Y-%m-%d")).days

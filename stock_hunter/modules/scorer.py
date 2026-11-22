@@ -234,7 +234,7 @@ class ConceptScorer:
         details = {}
         detail_strs = []
         for scorer in self.scorers:
-            score, detail = scorer.compute(stock_data)
+            score, _ = scorer.compute(stock_data)
             details[scorer.name] = score
             stock_data[scorer.name] = score  # 写入供后续 scorer 读取（D6依赖D5）
             total += score

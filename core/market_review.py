@@ -79,7 +79,7 @@ def _resample_minutes(df, freq: str) -> list:
 def save_daily_index_minutes(date: str | None = None) -> None:
     """大盘分时落盘（2026-08-23）：并发拉 6 指数当日 1min → 聚合 5/15/30/60 → 缓存，
     供当日复盘直接使用（tushare 分钟只到 T-1，当日拉不到）。每指数 20s 超时跳过。"""
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTO
+    from concurrent.futures import ThreadPoolExecutor
     date = date or datetime.now().strftime("%Y-%m-%d")
 
     def _one(item):
@@ -285,7 +285,7 @@ def fetch_index_minutes(ts_code: str, freq: str, date: str) -> list:
     if cached:
         return cached
     # 2) tushare 历史分钟（T-1 及更早）
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTO
+    from concurrent.futures import ThreadPoolExecutor
 
     def _fetch():
         from analysis.index_regime_intraday import _iri_fetch_stk_mins_one_day

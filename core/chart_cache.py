@@ -21,7 +21,7 @@ import sys
 import threading
 import time
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 _BASE = Path(__file__).resolve().parents[1]

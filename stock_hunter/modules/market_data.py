@@ -9,10 +9,9 @@
 import os
 import time
 import json
-import subprocess
 import threading
 import pandas as pd
-from typing import List, Dict, Optional
+from typing import List, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core.market_data.http_pool import pooled_get
@@ -352,19 +351,12 @@ class MarketDataFetcher:
             price = float(fields[3] or 0)
         except Exception:
             price = 0.0
-        try:
-            volume = float(fields[6] or 0)
-        except Exception:
-            volume = 0.0
-
         amount = 0.0
-        turnover_raw = ""
         for field in fields:
             parts = str(field).strip().split("/")
             if len(parts) == 3:
                 try:
                     amount = float(parts[2] or 0)
-                    turnover_raw = parts[2].strip()
                     break
                 except Exception:
                     continue
@@ -372,10 +364,8 @@ class MarketDataFetcher:
             try:
                 # 腾讯快照 fields[7] 单位为元，无需再乘 10000
                 amount = float(fields[7] or 0)
-                turnover_raw = str(fields[7]).strip()
             except Exception:
                 amount = 0.0
-                turnover_raw = ""
 
         try:
             change_pct = float(fields[32] or 0)   # 腾讯快照 [31]=涨跌额, [32]=涨跌幅

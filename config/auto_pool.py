@@ -99,7 +99,6 @@ def validate_pool_split(watchlist_path: str) -> list:
 
 
 if __name__ == "__main__":
-    import sys
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     wl = root / "t_io" / "state" / "watchlist_buy.json"

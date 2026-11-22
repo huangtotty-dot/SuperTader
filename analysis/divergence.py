@@ -10,9 +10,7 @@ divergence.py — 30/60 分钟线顶背离/底背离检测（2026-08-19 新增�
   - 底背离：价格创新低，但 MACD dif 未创新低（看涨）
 """
 import json
-import os
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
 

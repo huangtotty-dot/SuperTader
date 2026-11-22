@@ -133,6 +133,33 @@ class TestEnhancedTop5Ranker(unittest.TestCase):
     def test_empty_returns_empty(self):
         self.assertEqual(EnhancedTop5Ranker().select([]), [])
 
+    def test_zero_weights_match_base_selection_pipeline(self):
+        """权重全零时，增强版必须与基础版走完全一致的去重和筛选流程。"""
+        stocks = [
+            _stock("1", 100, "X"),
+            _stock("1", 90, "X"),  # 重复代码：保留高分记录
+            _stock("2", 90, "X"),
+            _stock("3", 80, "X"),  # 板块限额：进入备选
+            _stock("4", 70, "Y"),
+            _stock("5", 60, "Z"),
+        ]
+        base = Top5Ranker().select([dict(s) for s in stocks])
+        enhanced = EnhancedTop5Ranker(
+            heat_weight=0, scarcity_weight=0, volume_weight=0,
+        ).select([dict(s) for s in stocks])
+        self.assertEqual([s["代码"] for s in enhanced], [s["代码"] for s in base])
+        self.assertEqual([s["排名"] for s in enhanced], [s["排名"] for s in base])
+        self.assertEqual([s["总得分"] for s in enhanced], [s["总得分"] for s in base])
+
+    def test_legacy_category_stats_does_not_change_scores(self):
+        """历史参数仍可传入，但不会覆盖个股自身的“暗线概念数”。"""
+        stocks = [_stock("1", 100, "X", 暗线概念数=3, 成交额=0)]
+        baseline = EnhancedTop5Ranker().select([dict(s) for s in stocks])
+        with_legacy_arg = EnhancedTop5Ranker().select(
+            [dict(s) for s in stocks], category_stats={"X": 999},
+        )
+        self.assertEqual(with_legacy_arg, baseline)
+
     def test_enhanced_score_math_and_original_preserved(self):
         """无热度表时热度默认 30/100=0.3，稀缺 1/10=0.1，成交额 0 → 精确加权数学。"""
         stocks = [_stock("1", 100, "X", 暗线概念数=1, 成交额=0)]

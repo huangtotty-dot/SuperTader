@@ -8,25 +8,6 @@ import requests
 import os
 import time
 import pandas as pd
-from datetime import datetime, timedelta
-
-from .heat_tracker import load_history
-
-
-# ==================== 历史数据管理 ====================
-
-def _history_path() -> str:
-    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base, "history", "daily_summary.json")
-
-
-def _save_history_entry(date_str: str, sectors: list) -> None:
-    path = _history_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    history = load_history()
-    history[date_str] = sectors
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
 
 
 def _find_5_days_ago(history: dict, today: str) -> str:

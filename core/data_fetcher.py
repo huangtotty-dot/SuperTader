@@ -1,19 +1,17 @@
 # === V3.0: 显式导入，替代 exec() 共享命名空间 ===
-import numpy as np
 import pandas as pd
 import json
 import os
 import time
 import logging
-import urllib.request
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta, time as dtime
 from dataclasses import dataclass, field
 
 try:
-    from config import PARAMS, STOCK_PARAMS, CACHE_DIR
+    from config import PARAMS, CACHE_DIR
 except ImportError:
-    PARAMS = {}; STOCK_PARAMS = {}; CACHE_DIR = "./cache"
+    PARAMS = {}; CACHE_DIR = "./cache"
 
 # P0-4(2026-08-31): 补缺失常量——V3.0 显式导入迁移时漏掉，导致 load_holdings→load_strategy_memory
 # 抛 NameError(LEARNING_FILE)、load_watchlist 抛 NameError(WATCHLIST_FILE) →
