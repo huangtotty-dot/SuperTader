@@ -6098,38 +6098,96 @@ function renderAutoLedger(d) {
         + `卖出净流入 <span class="up mono">+${fmt(realSum, 0)}</span> · 收盘快照 ${daily.length} 日`;
     }
   }
-  // 每日权益 / 累计已实现 / 现金
+  // 2026-11-22 owner：掘金式绩效指标网格（数据源=equity_daily 官方净值序列，rf=2%）
+  const perfEl = document.getElementById("autoPerfGrid");
+  if (perfEl) {
+    const p = (d && d.summary && d.summary.perf) || null;
+    if (!p) {
+      perfEl.innerHTML = "";
+    } else {
+      const pc = v => (v == null ? "#8b949e" : pnlColor(v));
+      const pctTxt = (v, digits = 2) => v == null ? "—" : (v * 100).toFixed(digits) + "%";
+      const numTxt = (v, digits = 2) => v == null ? "—" : fmt(v, digits);
+      const cell = (label, valHtml, tip) =>
+        `<div class="card" style="padding:8px 10px;margin:0" title="${esc(tip || "")}">
+           <div class="cell-dim" style="font-size:11px">${label}</div>
+           <div class="mono" style="font-size:15px;margin-top:2px">${valHtml}</div>
+         </div>`;
+      const colored = (txt, v) => `<span style="color:${pc(v)}">${txt}</span>`;
+      perfEl.innerHTML = [
+        cell("期初资产", numTxt(p.equity_start, 0) + " 元", "净值序列首日(prev_equity) 起算，资金流调整口径"),
+        cell("期末资金", numTxt(p.equity_end, 0) + " 元", "最新官方净值"),
+        cell("累计盈亏", colored(numTxt(p.cum_pnl, 0) + " 元", p.cum_pnl), "期末-期初-资金流调整"),
+        cell("累计手续费", numTxt(p.fees_total, 0) + " 元", "逐笔流水费用合计"),
+        cell("累计收益率", colored(pctTxt(p.cum_ret), p.cum_ret), "复利累计（日收益连乘）"),
+        cell("基准收益率", colored(pctTxt(p.cum_bench), p.cum_bench), "沪深300 同期累计"),
+        cell("超额收益率", colored(pctTxt(p.excess_ret), p.excess_ret), "累计收益率 − 基准收益率"),
+        cell("年化收益率", colored(pctTxt(p.ann_ret), p.ann_ret), "按 244 个交易日年化"),
+        cell("最大回撤", colored(pctTxt(p.max_drawdown), p.max_drawdown), "净值序列峰谷最大跌幅"),
+        cell("胜率", pctTxt(p.win_rate, 1), "日收益为正的交易日占比"),
+        cell("年化波动率", pctTxt(p.volatility), "日收益标准差 × √244"),
+        cell("Alpha(年化)", colored(numTxt(p.alpha, 2), p.alpha), "CAPM：对沪深300 日收益回归，年化"),
+        cell("Beta", numTxt(p.beta, 2), "对沪深300 的收益弹性"),
+        cell("夏普比率", colored(numTxt(p.sharpe, 2), p.sharpe), "(日收益−无风险)/波动率，年化"),
+        cell("索提诺比率", colored(numTxt(p.sortino, 2), p.sortino), "只计下行波动率的夏普"),
+        cell("卡玛比率", colored(numTxt(p.calmar, 2), p.calmar), "年化收益 ÷ |最大回撤|"),
+        cell("信息比率", colored(numTxt(p.info_ratio, 2), p.info_ratio), "超额收益 ÷ 超额波动，年化"),
+        cell("特雷诺比率", colored(numTxt(p.treynor, 2), p.treynor), "(年化−无风险) ÷ Beta"),
+        cell("无风险利率", pctTxt(p.risk_free, 1), "固定口径"),
+        cell("统计天数", String(p.days) + " 天", "equity_daily 有效净值日数"),
+      ].join("");
+    }
+  }
+  // 每日权益 / 累计已实现 / 现金 / 当日α（右轴）
+  // 2026-11-22 口径修正：equity/cash/市值来自 equity_daily 官方口径（收盘后经资金事件处理），
+  // α=相对沪深300 当日超额收益（equity_daily.alpha，小数→%）。
   if (!daily.length) {
     echClear("echAutoEquity");
   } else {
     const dates = daily.map(r => r.date.slice(5));
     const suspectIdx = daily.map((r, i) => (r.suspect ? i : -1)).filter(i => i >= 0);
+    const flowIdx = daily.map((r, i) => (r.suspect_flow ? i : -1)).filter(i => i >= 0);
+    const pct = v => v == null ? null : +(v * 100).toFixed(2);
     echRender("echAutoEquity", {
       ...ECH_BASE,
+      grid: { ...ECH_BASE.grid, right: 52 },   // 右轴 α% 标签占位
       tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: p => {
         const i = p[0].dataIndex, r = daily[i];
         const line = (n, v, c) => v == null ? "" :
           `<br>${n}: <span style="color:${c}">${(v >= 0 ? "+" : "") + fmt(v, 0)}</span>`;
+        const pctLine = (n, v) => v == null ? "" :
+          `<br>${n}: <span style="color:${pnlColor(v)}">${(v >= 0 ? "+" : "") + (v * 100).toFixed(2)}%</span>`;
         return `${r.date}` + line("权益", r.equity, "#8ad4ff")
           + line("现金", r.cash, "#8b949e") + line("市值", r.market_value, "#8b949e")
           + line("当日盈亏", r.day_pnl, pnlColor(r.day_pnl))
+          + pctLine("当日收益率", r.account_ret)
+          + pctLine("当日α(对沪深300)", r.alpha)
           + line("累计已实现", r.realized_cum, pnlColor(r.realized_cum))
-          + (r.suspect ? '<br><span style="color:#ffb454">⚠ 当日权益跳变 &gt;15%：现金变动与策略成交流水对不上（常见成因＝仿真终端手工单/孤儿成交）</span>' : "");
+          + (r.hb_diff ? `<br><span style="color:#d29922">⤴ 资金事件：冻结态快照与官方口径差 ${fmt(r.hb_diff, 0)}（收盘后拒单解冻/资金调整，已按官方口径修正）</span>` : "")
+          + (r.suspect ? '<br><span style="color:#ffb454">⚠ 当日权益跳变 &gt;15%：疑似入金/出金/资金重置（非策略盈亏）</span>' : "");
       } },
-      legend: { data: ["权益", "累计已实现", "现金"], textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
+      legend: { data: ["权益", "累计已实现", "现金", "当日α(右轴%)"], textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
       xAxis: { ...ECH_BASE.xAxis, type: "category", data: dates },
-      yAxis: { ...ECH_BASE.yAxis },
+      yAxis: [ { ...ECH_BASE.yAxis },
+               { ...ECH_BASE.yAxis, splitLine: { show: false },
+                 axisLabel: { color: "#d29922", formatter: "{value}%" } } ],
       series: [
         { name: "权益", type: "line", smooth: true, symbolSize: 5, data: daily.map(r => r.equity),
           lineStyle: { color: "#8ad4ff" }, itemStyle: { color: "#8ad4ff" },
           markPoint: suspectIdx.length ? { symbol: "pin", symbolSize: 34,
             itemStyle: { color: "#ffb454" }, label: { formatter: "⚠", color: "#111" },
-            data: suspectIdx.map(i => ({ coord: [dates[i], daily[i].equity], name: "记账异常" })) } : undefined },
+            data: suspectIdx.map(i => ({ coord: [dates[i], daily[i].equity], name: "资金流动" })) } : undefined,
+          markLine: flowIdx.length ? { symbol: "none", label: { formatter: "资金事件", color: "#d29922", fontSize: 10 },
+            lineStyle: { color: "#d29922", type: "dotted" },
+            data: flowIdx.map(i => ({ xAxis: dates[i] })) } : undefined },
         { name: "累计已实现", type: "line", smooth: true, symbolSize: 5,
           data: daily.map(r => r.realized_cum), lineStyle: { color: "#3fb950" }, itemStyle: { color: "#3fb950" } },
         { name: "现金", type: "line", smooth: true, symbolSize: 0, showSymbol: false,
           data: daily.map(r => r.cash), lineStyle: { color: "#8b949e", type: "dashed", width: 1 },
           itemStyle: { color: "#8b949e" } },
+        { name: "当日α(右轴%)", type: "bar", yAxisIndex: 1, barMaxWidth: 10,
+          data: daily.map(r => pct(r.alpha)),
+          itemStyle: { color: p => (p.value >= 0 ? "#b5803a" : "#4a6a8a"), opacity: 0.55 } },
       ],
     });
   }

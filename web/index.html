@@ -597,11 +597,12 @@
 
     <div class="section" id="auto-ledger">
       <h2>自动盘成交流水 · 每日盈亏
-        <span class="cell-dim" style="font-size:12px;font-weight:normal">自动盘为仿真盘、无券商交割单 ⇒ 逐笔取自 events_*.jsonl（引擎不写名称/净发生金额，读取端补齐）· 每日取自 heartbeat_*.jsonl 末条心跳</span>
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">自动盘为仿真盘、无券商交割单 ⇒ 逐笔取自 events_*.jsonl（引擎不写名称/净发生金额，读取端补齐）· 每日权益/α 取自 equity_daily 官方净值（收盘后经资金事件处理口径）</span>
       </h2>
       <div id="autoLedgerSummary" class="cell-dim" style="font-size:12px;margin-bottom:8px"></div>
+      <div id="autoPerfGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px"></div>
       <div class="card">
-        <div class="card-title">每日账户权益 / 累计已实现盈亏 / 现金</div>
+        <div class="card-title">每日账户权益 / 累计已实现盈亏 / 现金 / 当日α(右轴)</div>
         <div id="echAutoEquity" class="echart"></div>
       </div>
       <div id="autoFillsBody" style="margin-top:10px"><div class="empty">加载中…</div></div>

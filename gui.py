@@ -13276,6 +13276,25 @@ class Api:
             prior = [d0 for d0 in m if d0 <= ds]
             return m[max(prior)] if prior else m[min(m)]
 
+        # ---- 2026-11-22 口径修正：每日序列以 equity_daily 官方口径为准 ----
+        # 背景：心跳末条是 14:58 冻结态（收盘后拒单解冻/资金事件不回写心跳文件），
+        # 用末条现算会把「冻结现金」画成权益深坑（10-30 差 -20 万）、把入金画成暴涨
+        # （10-15 +19.8 万）。equity_daily 是收盘后唯一经完整资金事件处理的净值口径
+        # （equity/cash/market_value/alpha/account_ret），每日复盘 α/β 也用它。
+        # 心跳口径留 hb_diff 作对照，差异 >2% 前端标注。
+        _ed_map = {}
+        try:
+            _met_dir = BASE / "t_io" / "metrics"
+            for _ef in _met_dir.glob("equity_daily_*.json"):
+                try:
+                    _ed = _load_json(_ef, {})
+                    if isinstance(_ed, dict) and _ed.get("date"):
+                        _ed_map[str(_ed["date"])] = _ed
+                except Exception:
+                    continue
+        except Exception:
+            _ed_map = {}
+
         _real_dates = sorted(realized_by_date)
         daily = []
         prev_equity = None
@@ -13304,26 +13323,43 @@ class Api:
                 cost_tot += q * cst
                 mv += q * _close_on(c6, ds)
             csh = hb.get("cash")
-            equity = (float(csh) if isinstance(csh, (int, float)) else 0.0) + mv
+            equity_hb = (float(csh) if isinstance(csh, (int, float)) else 0.0) + mv
+            # ---- 官方口径优先：equity_daily 是收盘后经完整资金事件处理的净值 ----
+            _ed = _ed_map.get(ds) or {}
+            _ed_eq = _ed.get("equity")
+            equity = float(_ed_eq) if isinstance(_ed_eq, (int, float)) else equity_hb
+            _cash_ed = _ed.get("cash") if isinstance(_ed.get("cash"), (int, float)) else None
+            _mv_ed = _ed.get("market_value") if isinstance(_ed.get("market_value"), (int, float)) else None
+            cash_show = float(_cash_ed) if _cash_ed is not None else (float(csh) if isinstance(csh, (int, float)) else None)
+            mv_show = float(_mv_ed) if _mv_ed is not None else mv
+            # 心跳口径与官方口径的偏差（拒单解冻/入金等资金事件的量）
+            hb_diff = round(equity_hb - equity, 2)
             # 累计已实现：把 ds（含）之前所有成交日的已实现全部算入（含无心跳的交易日）
             for d0 in _real_dates:
                 if d0 <= ds:
                     cum_realized += realized_by_date[d0]
             _real_dates = [d0 for d0 in _real_dates if d0 > ds]
             day_pnl = round(equity - prev_equity, 2) if prev_equity is not None else None
+            _flow = _ed.get("flow_adjust") if isinstance(_ed.get("flow_adjust"), (int, float)) else 0.0
             daily.append({
                 "date": ds,
-                "cash": round(float(csh), 2) if isinstance(csh, (int, float)) else None,
-                "market_value": round(mv, 2),
+                "cash": round(cash_show, 2) if cash_show is not None else None,
+                "market_value": round(mv_show, 2),
                 "cost": round(cost_tot, 2),
                 "equity": round(equity, 2),
-                "unreal_pnl": round(mv - cost_tot, 2),
+                "unreal_pnl": round(mv_show - cost_tot, 2),
                 "day_pnl": day_pnl,
                 "realized_cum": round(cum_realized, 2),
-                # 权益日间跳变 >15% ⇒ 该日现金变动与策略成交流水对不上。实测成因是仿真终端
-                # 手工单/孤儿成交（只在 risk.orphan_fill 里，不进 fill 流也不进持仓快照）。
+                # 2026-11-22：挂接官方净值序列的 α / 当日收益率 / 资金流调整（前端叠加显示）
+                "alpha": _ed.get("alpha") if isinstance(_ed.get("alpha"), (int, float)) else None,
+                "account_ret": _ed.get("account_ret") if isinstance(_ed.get("account_ret"), (int, float)) else None,
+                "flow_adjust": round(float(_flow), 2) if _flow else 0.0,
+                # 心跳 14:58 冻结态口径与官方口径的偏差；>2% 视为资金事件日（拒单解冻/入金）
+                "hb_diff": hb_diff if abs(hb_diff) > 1 else 0.0,
+                # 权益日间跳变 >15%（官方口径）⇒ 资金流动或记账异常，前端打标。
                 "suspect": bool(day_pnl is not None and prev_equity
                                 and abs(day_pnl) > 0.15 * abs(prev_equity)),
+                "suspect_flow": bool(abs(hb_diff) > 0.02 * abs(equity)),
             })
             prev_equity = equity
         daily.sort(key=lambda r: r["date"])
@@ -13333,6 +13369,99 @@ class Api:
         except Exception:
             pass
         _cash = round(float(cash), 2) if isinstance(cash, (int, float)) else None
+
+        # ---- 2026-11-22 owner：仿掘金绩效面板（18 项指标）----
+        # 口径：equity_daily 官方序列（资金流调整后的 account_ret），rf=2% 固定。
+        # 纯 Python 计算（gui.py 不引 numpy/pandas，防拖慢首帧）。掘金从 50 万建账日起算，
+        # 这里从净值序列首日（prev_equity）起算，天数口径不同 ⇒ 绝对值与掘金不完全一致。
+        def _perf():
+            recs = [x for x in (_ed_map.get(r["date"]) for r in daily)
+                    if isinstance(x, dict) and isinstance(x.get("account_ret"), (int, float))]
+            recs.sort(key=lambda x: str(x.get("date")))
+            n = len(recs)
+            if n < 5:
+                return None
+            rs = [float(x["account_ret"]) for x in recs]
+            bs = [float(x.get("benchmark_ret") or 0.0) for x in recs]
+            TD = 244.0
+            rf_y, rf_d = 0.02, 0.02 / TD
+
+            def mean(a):
+                return sum(a) / len(a) if a else 0.0
+
+            def std(a, ddof=1):
+                if len(a) <= ddof:
+                    return 0.0
+                m = mean(a)
+                return (sum((x - m) ** 2 for x in a) / (len(a) - ddof)) ** 0.5
+
+            cum = 1.0
+            navs = []
+            for r in rs:
+                cum *= (1 + r)
+                navs.append(cum)
+            cum_ret = cum - 1
+            cum_bench = 1.0
+            for b in bs:
+                cum_bench *= (1 + b)
+            cum_bench -= 1
+            peak, mdd = 1.0, 0.0
+            for v in navs:
+                peak = max(peak, v)
+                mdd = min(mdd, v / peak - 1)
+            ann = (1 + cum_ret) ** (TD / n) - 1 if cum_ret > -1 else -1.0
+            vol = std(rs) * TD ** 0.5
+            mb, mr = mean(bs), mean(rs)
+            var_b = sum((b - mb) ** 2 for b in bs) / (len(bs) - 1) if len(bs) > 1 else 0.0
+            cov_rb = sum((rs[i] - mr) * (bs[i] - mb) for i in range(n)) / (n - 1) if n > 1 else 0.0
+            beta = cov_rb / var_b if var_b > 0 else None
+            alpha_capm = ((mr - rf_d) - beta * (mb - rf_d)) * TD if beta is not None else None
+            sd = std(rs)
+            sharpe = (mr - rf_d) / sd * TD ** 0.5 if sd > 0 else None
+            downs = [r for r in rs if r < 0]
+            dsd = std(downs) if len(downs) > 1 else 0.0
+            sortino = (mr - rf_d) / dsd * TD ** 0.5 if dsd > 0 else None
+            calmar = ann / abs(mdd) if mdd < 0 else None
+            ex = [rs[i] - bs[i] for i in range(n)]
+            sex = std(ex)
+            ir = mean(ex) / sex * TD ** 0.5 if sex > 0 else None
+            treynor = (ann - rf_y) / beta if beta else None
+            win = sum(1 for r in rs if r > 0) / n
+            # 期初/期末与累计盈亏：序列首日 prev_equity → 末日 equity，减资金流调整
+            eq0 = recs[0].get("prev_equity")
+            eq1 = recs[-1].get("equity")
+            flow_sum = sum(float(x.get("flow_adjust") or 0.0) for x in recs)
+            fees_sum = sum(float(s.get("fees") or 0.0) for s in stocks)
+            return {
+                "days": n,
+                "equity_start": round(float(eq0), 2) if isinstance(eq0, (int, float)) else None,
+                "equity_end": round(float(eq1), 2) if isinstance(eq1, (int, float)) else None,
+                "cum_pnl": round((float(eq1) - float(eq0) - flow_sum), 2)
+                if isinstance(eq0, (int, float)) and isinstance(eq1, (int, float)) else None,
+                "fees_total": round(fees_sum, 2),
+                "cum_ret": round(cum_ret, 4),
+                "cum_bench": round(cum_bench, 4),
+                "excess_ret": round(cum_ret - cum_bench, 4),
+                "ann_ret": round(ann, 4),
+                "max_drawdown": round(mdd, 4),
+                "win_rate": round(win, 4),
+                "volatility": round(vol, 4),
+                "alpha": round(alpha_capm, 4) if alpha_capm is not None else None,
+                "beta": round(beta, 4) if beta is not None else None,
+                "sharpe": round(sharpe, 2) if sharpe is not None else None,
+                "sortino": round(sortino, 2) if sortino is not None else None,
+                "calmar": round(calmar, 2) if calmar is not None else None,
+                "info_ratio": round(ir, 2) if ir is not None else None,
+                "treynor": round(treynor, 2) if treynor is not None else None,
+                "risk_free": 0.02,
+            }
+
+        def _perf_safe():
+            try:
+                return _perf()
+            except Exception:
+                return None
+
         return _clean({
             "summary": {
                 "realized_pnl": round(tot_realized, 2),
@@ -13346,6 +13475,9 @@ class Api:
                 "day_pnl": (daily[-1].get("day_pnl") if daily else None),
                 "day_pnl_date": (daily[-1].get("date") if daily else None),
                 "positions_count": len([s for s in stocks if s["open_qty"] > 0]),
+                # 2026-11-22：掘金式 18 项绩效指标（equity_daily 官方口径）；
+                # 指标是增强不是地基，任何异常不许拖垮账本体（隔离后降级 None）。
+                "perf": _perf_safe(),
             },
             "stocks": stocks,
             "fills": disp_fills,
