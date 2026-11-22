@@ -6100,6 +6100,55 @@ function renderAutoLedger(d) {
   }
   // 2026-11-22 owner：掘金式绩效指标网格（数据源=equity_daily 官方净值序列，rf=2%）
   const perfEl = document.getElementById("autoPerfGrid");
+  // 2026-11-22 owner：指标卡点击看详解——PERF_DOC 字典 + 弹窗
+  const PERF_DOC = {
+    equity_start: { t: "期初资产", f: "统计窗口第一天开盘前的账户净资产", r: "一切的起点。本窗口从 2026-10-14（OSC 策略上线日）起算，与掘金「建账 50 万」口径不同——所以和掘金的百分比对不上是正常现象，比的是同一段行情的相对表现。", g: v => `本窗口起点 ${fmt(v, 0)} 元。` },
+    equity_end: { t: "期末资金", f: "最新收盘后的账户净资产 = 现金 + 持仓市值", r: "这是账户现在「值多少钱」。与掘金仿真后台分毫不差才算口径正确。", g: v => `当前 ${fmt(v, 0)} 元（掘金后台同值，口径已对齐 ✅）。` },
+    cum_pnl: { t: "累计盈亏", f: "期末 − 期初 − 资金流调整", r: "策略真实赚/亏的钱，已剔除入金、出金、拒单解冻这类「资金搬家」。这是所有指标里最诚实的一个——曲线可以骗人，它不会。", g: v => v >= 0 ? `策略累计真赚 ${fmt(v, 0)} 元。` : `策略累计真亏 ${fmt(v, 0)} 元——这是仿真盘存在的意义：用假钱买真教训。` },
+    fees_total: { t: "累计手续费", f: "全部成交的佣金 + 印花税 + 过户费合计", r: "高频/短周期策略的隐形杀手。如果累计利润 < 累计手续费，等于在给券商打工。做 T 类策略必须让「单笔预期利润」显著大于「双边费用」才有活路。", g: v => `已付出 ${fmt(v, 0)} 元。对照累计盈亏看：费用占毛利的比例越高，策略越「勤快但不赚钱」。` },
+    cum_ret: { t: "累计收益率", f: "每日收益连乘 − 1（复利口径）", r: "窗口总账。注意复利与单利的差别：每天 −1% 连亏 20 天不是 −20%，而是 −18.2%（复利亏得慢）；同理复利赚得也慢。", g: (v, p) => v >= 0 ? `窗口复利 +${(v*100).toFixed(1)}%。` : `窗口复利 ${(v*100).toFixed(1)}%——同期沪深300 是 ${(p.cum_bench*100).toFixed(1)}%，差距就是策略的「超额」。` },
+    cum_bench: { t: "基准收益率", f: "同期沪深300 指数涨跌幅", r: "回答一个问题：「这段时间闭眼买指数会怎样？」它是衡量策略的及格线——策略跑输指数，说明折腾不如不折腾。", g: v => `同期指数 ${(v*100).toFixed(1)}%。` },
+    excess_ret: { t: "超额收益率", f: "累计收益率 − 基准收益率", r: "策略相对指数的净贡献。>0 说明策略比指数强；<0 说明不如买指数躺平。这是「值不值得继续开发这套策略」的第一判据。", g: v => v >= 0 ? `+${(v*100).toFixed(1)}%：跑赢指数。` : `${(v*100).toFixed(1)}%：跑输指数 ${Math.abs(v*100).toFixed(1)} 个点——当前阶段指数躺平比策略强。` },
+    ann_ret: { t: "年化收益率", f: "(1+累计收益)^(244/天数) − 1", r: "把窗口表现折算成「保持这个节奏一年会怎样」。窗口只有几十天时年化会被极度放大（连亏 28 天年化 −93% 就是这么来的），只作节奏参考，不作预测。", g: v => `${(v*100).toFixed(1)}%。短窗口年化波动极大，别拿它外推明年。` },
+    max_drawdown: { t: "最大回撤", f: "净值从任一历史高点到其后最低点的最大跌幅", r: "「最惨的时候账户缩水多少」。这是心理承受力指标，也是你定的放行标准硬闸：≤5%。当前 −26% 意味着最高点入场的人最多亏掉四分之一。", g: v => `当前 ${(v*100).toFixed(1)}%，放行标准要求 ≥ −5%——超标 5 倍，这是离实盘最远的指标之一。` },
+    win_rate: { t: "胜率", f: "日收益为正的交易日占比", r: "胜率低 ≠ 烂策略（赔率可能很高），但「胜率低 + 盈亏比也低」就是双杀。当前 32% 胜率叠加 11:1 的到期亏损/pop 盈利倒挂，属于后者。", g: v => `当前 ${(v*100).toFixed(0)}% 的交易日赚钱。对照盈亏比看才有意义。` },
+    volatility: { t: "年化波动率", f: "日收益标准差 × √244", r: "账户每天上下颠簸的程度。波动率本身不是坏事（高收益往往伴随高波动），关键看波动换来了什么——那就是夏普比率。", g: v => `当前 ${(v*100).toFixed(1)}%。沪深300 通常 15~20%，本账户波动约为指数 1.8 倍。` },
+    alpha: { t: "Alpha（CAPM 年化）", f: "日收益对沪深300 回归后，剔除 β 部分的年化超额", r: "「剔除大盘影响后，策略自己的真本事」。>0 才有真 alpha；<0 说明连大盘都跑不赢。它和「超额收益率」的区别：超额是简单相减，Alpha 还剔除了 β 杠杆的影响（β>1 时大盘涨跌会被放大，Alpha 把这部分还回去）。", g: v => `当前 ${fmt(v, 2)}（年化 ${(v*100).toFixed(0)}%）：剔除大盘后策略自身仍在亏损，没有真 alpha。` },
+    beta: { t: "Beta", f: "账户收益对沪深300 收益的回归斜率", r: "「大盘涨 1%，账户平均涨多少」。β=1 同幅波动；>1 进攻型（涨时更猛跌时更狠）；<1 防御型。做 T/短炒策略理想状态是 β 显著 <1 且 α>0——赚自己的钱，不看大盘脸色。", g: v => `当前 ${fmt(v, 2)} ≈ 1：账户波动与大盘几乎同步，策略没有体现出「独立于大盘」的特性。` },
+    sharpe: { t: "夏普比率", f: "(日收益均值 − 无风险) ÷ 日收益标准差，年化", r: "「每承受一份波动，换来多少超额收益」。>1 合格、>2 优秀、<0 意味着波动换来的是亏损。你定的放行标准是 ≥1.5。", g: v => v >= 1 ? `当前 ${fmt(v, 2)}，合格线以上。` : `当前 ${fmt(v, 2)}：每颠簸一份就亏 7.45 份的钱——策略在「高效亏钱」，不是调参能救的级别，要改收益结构。` },
+    sortino: { t: "索提诺比率", f: "同夏普，但波动率只计「下行波动」（亏损日的波动）", r: "夏普的公平版：上涨波动不是风险，只有下跌才是。索提诺比夏普低得越多，说明亏损日越「扎实」（不是被少数大涨日平均掉的）。", g: (v, p) => `当前 ${fmt(v, 2)}，比夏普（${fmt(p.sharpe, 2)}）更低——亏损是持续性的，不是靠偶尔大涨遮丑。` },
+    calmar: { t: "卡玛比率", f: "年化收益率 ÷ |最大回撤|", r: "「每承受一份最惨亏损，换来多少年收益」。>1 才值得长期持有；<0 说明在回撤里越陷越深。这是趋势/CTA 策略最看重的指标。", g: v => `当前 ${fmt(v, 2)}：年化亏的钱是最大回撤的 ${Math.abs(v).toFixed(1)} 倍——投入产出完全倒挂。` },
+    info_ratio: { t: "信息比率", f: "超额收益均值 ÷ 超额收益波动，年化", r: "「跑赢大盘的稳定性」。主动管理的核心指标：>0.5 合格、>1 优秀。它惩罚「偶尔蒙对」——只有稳定跑赢才算数。", g: v => `当前 ${fmt(v, 2)}：跑输大盘这件事倒是很「稳定」。` },
+    treynor: { t: "特雷诺比率", f: "(年化收益 − 无风险) ÷ Beta", r: "「每承担一份系统性风险（β），换来多少收益」。和夏普的区别：夏普看总波动，特雷诺只看大盘联动的风险。适合评估组合中的一个子策略。", g: v => `当前 ${fmt(v, 2)}：承担大盘风险换来的是负回报。` },
+    risk_free: { t: "无风险利率", f: "固定 2%", r: "参考锚点，≈ 十年期国债/货币基金水平。夏普/特雷诺的计算基准——收益至少要超过它，承担风险才有意义。", g: () => "固定口径，不随市场变。" },
+    days: { t: "统计天数", f: "参与计算的有效净值日数", r: "样本量。28 天的指标只能看「方向」，不能看「结论」——统计上至少 60~120 天才有初步意义，放行标准要求的是滚动 8 周（≈40 天）起步。", g: v => `当前 ${v} 天：够看趋势，不够下结论。` },
+  };
+  window.showPerfDoc = function(key) {
+    const p = (window._lastAutoPnl && window._lastAutoPnl.summary && window._lastAutoPnl.summary.perf) || null;
+    const doc = PERF_DOC[key];
+    if (!doc || !p) return;
+    const overlay = document.createElement("div");
+    overlay.className = "modal-mask";
+    const val = p[key];
+    const valTxt = (typeof val === "number")
+      ? (Math.abs(val) < 10 && key !== "days" && key !== "fees_total" && !/equity|pnl/.test(key)
+          ? (["cum_ret","cum_bench","excess_ret","ann_ret","max_drawdown","win_rate","volatility","risk_free"].includes(key)
+              ? (val*100).toFixed(2) + "%" : val.toFixed(2))
+          : fmt(val, 0) + (["equity_start","equity_end","cum_pnl","fees_total"].includes(key) ? " 元" : ""))
+      : String(val);
+    overlay.innerHTML = `<div class="modal" style="width:560px;max-height:82vh">
+      <div class="modal-title"><span>${esc(doc.t)} <span class="cell-dim" style="font-size:12px">当前：${esc(valTxt)}</span></span>
+        <button class="mini-btn" onclick="this.closest('.modal-mask').remove()">×</button></div>
+      <div class="modal-body" style="font-size:13px;line-height:1.8">
+        <div style="margin-bottom:10px"><b style="color:#8ad4ff">是什么</b><br>${esc(doc.f)}</div>
+        <div style="margin-bottom:10px"><b style="color:#8ad4ff">怎么读</b><br>${esc(doc.r)}</div>
+        <div><b style="color:#d29922">当前值解读</b><br>${esc(doc.g(val, p))}</div>
+        <div class="cell-dim" style="margin-top:12px;font-size:11px">口径：equity_daily 官方净值序列（资金流调整后），无风险利率 2%，年化按 244 交易日。</div>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  };
   if (perfEl) {
     const p = (d && d.summary && d.summary.perf) || null;
     if (!p) {
@@ -6108,33 +6157,34 @@ function renderAutoLedger(d) {
       const pc = v => (v == null ? "#8b949e" : pnlColor(v));
       const pctTxt = (v, digits = 2) => v == null ? "—" : (v * 100).toFixed(digits) + "%";
       const numTxt = (v, digits = 2) => v == null ? "—" : fmt(v, digits);
-      const cell = (label, valHtml, tip) =>
-        `<div class="card" style="padding:8px 10px;margin:0" title="${esc(tip || "")}">
+      const cell = (key, label, valHtml) =>
+        `<div class="card" style="padding:8px 10px;margin:0;cursor:pointer" title="点击查看指标详解" onclick="showPerfDoc('${key}')">
            <div class="cell-dim" style="font-size:11px">${label}</div>
            <div class="mono" style="font-size:15px;margin-top:2px">${valHtml}</div>
          </div>`;
       const colored = (txt, v) => `<span style="color:${pc(v)}">${txt}</span>`;
+      window._lastAutoPnl = d;   // 供 showPerfDoc 取当前 perf 数据
       perfEl.innerHTML = [
-        cell("期初资产", numTxt(p.equity_start, 0) + " 元", "净值序列首日(prev_equity) 起算，资金流调整口径"),
-        cell("期末资金", numTxt(p.equity_end, 0) + " 元", "最新官方净值"),
-        cell("累计盈亏", colored(numTxt(p.cum_pnl, 0) + " 元", p.cum_pnl), "期末-期初-资金流调整"),
-        cell("累计手续费", numTxt(p.fees_total, 0) + " 元", "逐笔流水费用合计"),
-        cell("累计收益率", colored(pctTxt(p.cum_ret), p.cum_ret), "复利累计（日收益连乘）"),
-        cell("基准收益率", colored(pctTxt(p.cum_bench), p.cum_bench), "沪深300 同期累计"),
-        cell("超额收益率", colored(pctTxt(p.excess_ret), p.excess_ret), "累计收益率 − 基准收益率"),
-        cell("年化收益率", colored(pctTxt(p.ann_ret), p.ann_ret), "按 244 个交易日年化"),
-        cell("最大回撤", colored(pctTxt(p.max_drawdown), p.max_drawdown), "净值序列峰谷最大跌幅"),
-        cell("胜率", pctTxt(p.win_rate, 1), "日收益为正的交易日占比"),
-        cell("年化波动率", pctTxt(p.volatility), "日收益标准差 × √244"),
-        cell("Alpha(年化)", colored(numTxt(p.alpha, 2), p.alpha), "CAPM：对沪深300 日收益回归，年化"),
-        cell("Beta", numTxt(p.beta, 2), "对沪深300 的收益弹性"),
-        cell("夏普比率", colored(numTxt(p.sharpe, 2), p.sharpe), "(日收益−无风险)/波动率，年化"),
-        cell("索提诺比率", colored(numTxt(p.sortino, 2), p.sortino), "只计下行波动率的夏普"),
-        cell("卡玛比率", colored(numTxt(p.calmar, 2), p.calmar), "年化收益 ÷ |最大回撤|"),
-        cell("信息比率", colored(numTxt(p.info_ratio, 2), p.info_ratio), "超额收益 ÷ 超额波动，年化"),
-        cell("特雷诺比率", colored(numTxt(p.treynor, 2), p.treynor), "(年化−无风险) ÷ Beta"),
-        cell("无风险利率", pctTxt(p.risk_free, 1), "固定口径"),
-        cell("统计天数", String(p.days) + " 天", "equity_daily 有效净值日数"),
+        cell("equity_start", "期初资产", numTxt(p.equity_start, 0) + " 元"),
+        cell("equity_end", "期末资金", numTxt(p.equity_end, 0) + " 元"),
+        cell("cum_pnl", "累计盈亏", colored(numTxt(p.cum_pnl, 0) + " 元", p.cum_pnl)),
+        cell("fees_total", "累计手续费", numTxt(p.fees_total, 0) + " 元"),
+        cell("cum_ret", "累计收益率", colored(pctTxt(p.cum_ret), p.cum_ret)),
+        cell("cum_bench", "基准收益率", colored(pctTxt(p.cum_bench), p.cum_bench)),
+        cell("excess_ret", "超额收益率", colored(pctTxt(p.excess_ret), p.excess_ret)),
+        cell("ann_ret", "年化收益率", colored(pctTxt(p.ann_ret), p.ann_ret)),
+        cell("max_drawdown", "最大回撤", colored(pctTxt(p.max_drawdown), p.max_drawdown)),
+        cell("win_rate", "胜率", pctTxt(p.win_rate, 1)),
+        cell("volatility", "年化波动率", pctTxt(p.volatility)),
+        cell("alpha", "Alpha(年化)", colored(numTxt(p.alpha, 2), p.alpha)),
+        cell("beta", "Beta", numTxt(p.beta, 2)),
+        cell("sharpe", "夏普比率", colored(numTxt(p.sharpe, 2), p.sharpe)),
+        cell("sortino", "索提诺比率", colored(numTxt(p.sortino, 2), p.sortino)),
+        cell("calmar", "卡玛比率", colored(numTxt(p.calmar, 2), p.calmar)),
+        cell("info_ratio", "信息比率", colored(numTxt(p.info_ratio, 2), p.info_ratio)),
+        cell("treynor", "特雷诺比率", colored(numTxt(p.treynor, 2), p.treynor)),
+        cell("risk_free", "无风险利率", pctTxt(p.risk_free, 1)),
+        cell("days", "统计天数", String(p.days) + " 天"),
       ].join("");
     }
   }
@@ -13699,7 +13749,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261121d", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261122a", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
