@@ -10,9 +10,7 @@ import json
 import time
 import logging
 import importlib.util
-import traceback
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, time as dtime
+from datetime import datetime
 from typing import Dict, List, Optional, Any
 import urllib.request
 
@@ -38,8 +36,6 @@ _sys.modules['requests'].get = _req.get
 # 注：本模块**不使用 akshare**，其 `import akshare` 实测 ~5.6s（含 py_mini_racer V8 初始化），
 # 而本模块被几乎所有模块 import ⇒ 曾是启动冷路径最大单项。2026-10-10 移除（勿再加回）：
 # 需要 akshare 的模块各自 `import akshare as ak`；V8 主线程初始化由 core/v8guard.prewarm_akshare_v8 负责。
-import numpy as np
-import pandas as pd
 import requests
 import urllib.request
 import urllib.error
@@ -257,17 +253,9 @@ PARAMS = {
     "max_sell_times_per_stock": 3,
     # —— 早盘 ——
     "morning_no_sell_until": 940,
-    # —— V3.1 Renko买入+目标止盈做T (2026-08-26 集成, 全面取代旧布林+MACD) ——
-    # 依据: 39支×1年1min复验 — Renko向下砖+15分MACD金叉 买入择时39/39支>50%(+30min 60.6%);
-    #       baseline布林追跌 0/39(34.7%)。卖出侧 target+0.5% 止盈 胜率78.5% (vs 等MACD死叉 55.7%)
-    # 旧 swing 参数(swing_macd15_*/swing_sell_rsi/swing_buy_rsi/swing_bb_*/swing_min_5m_bars/
-    #   swing_sell_vol_ratio/swing_use_renko)已于 2026-08-27 删除, git 历史可恢复
-    # rsi_period_5m_swing 保留: analysis/indicators.py 计算 rsi_5m_p6, 被 index_resonance.py 依赖
+    # rsi_period_5m_swing: analysis/indicators.py 计算 rsi_5m_p6, 被 index_resonance.py 依赖。
+    # 其余 Renko 交易参数已于 2026-11-22 移除：全仓无运行代码读取，仅历史实验文档提及。
     "rsi_period_5m_swing": 6,   # 5分钟RSI周期(专用列 rsi_5m_p6, 不动 rsi_5m(14))
-    "swing_renko_brick_pct": 0.003,     # Renko砖高(0.3%, 已验证; 1min数据构建)
-    "swing_take_profit_pct": 0.005,     # 目标止盈: 相对做T买入价 +0.5%
-    "swing_t_max_hold_min": 0,          # 0=不启用时间止损; >0=买入后N分钟强制卖(可选)
-    "swing_force_exit_tval": 1455,      # 尾盘强制平仓时间(HHMM), 做T当日闭环
     # —— 通知阈值 ——
     # v1.1.0 X9 阈值阶梯实测采纳 t55 档（两组胜率+2.1~2.8pp、密度双升、无单股恶化，
     # 依据 t_io/validation/v109_threshold/阈值阶梯报告.md）；买侧 68 未实验不动
