@@ -9,8 +9,8 @@
   3) 共享字段一致：pre_close 相等、base 镜像相等
   4) auto 池码集 == auto_pool.AUTO_POOL == holdings_repo.load_auto_pool
   5) 每个自动条目 gm_symbol 非空
-  6) base>0 的码 ⊆ 自动文件
-  7) 无 _ 前缀被当条目；qty 非负整数、cost 非负
+  6) 无 _ 前缀被当条目；qty 非负整数、cost 非负
+     手动-only 条目允许 base>0；both 的 base 一致性由第 3 条校验
 
 用法：python scripts/check_holdings_consistency.py（退出码 0=通过，1=漂移）
 """
@@ -69,12 +69,7 @@ def main() -> int:
         if not h.get("gm_symbol"):
             errs.append(f"{c} 缺 gm_symbol")
 
-    # 6) base>0 ⊆ 自动文件
-    base_pos = {c for c, h in {**manual, **auto}.items() if int(h.get("base") or 0) > 0}
-    if not base_pos <= aset:
-        errs.append(f"base>0 的码不在自动文件: {sorted(base_pos - aset)}")
-
-    # 7) 数值合理性
+    # 6) 数值合理性
     for c, h in {**manual, **auto}.items():
         q = h.get("qty")
         if q is not None:
