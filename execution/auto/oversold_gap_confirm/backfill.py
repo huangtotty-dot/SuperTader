@@ -38,6 +38,11 @@ from __future__ import annotations
 
 import math
 import time
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # ── 涨跌停幅度（按代码前缀分档）──
 # 真源对照：`stock_hunter/modules/market_data.py:586-594`（唯一带 10/20/30cm 分档的实现，
@@ -73,6 +78,7 @@ def limit_up_price(prev_close, code):
     try:
         pc = float(prev_close)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.backfill.limit_up_price")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     if not math.isfinite(pc) or pc <= 0:
         return None
@@ -85,6 +91,7 @@ def day_vwap(cum_amount, cum_volume):
     try:
         a, v = float(cum_amount), float(cum_volume)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.backfill.day_vwap")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     if not (math.isfinite(a) and math.isfinite(v)) or v <= 0 or a <= 0:
         return None
@@ -100,6 +107,7 @@ def vwap_sane(vwap, price) -> bool:
     try:
         v, p = float(vwap), float(price)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.backfill.vwap_sane")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False
     if not (math.isfinite(v) and math.isfinite(p)) or v <= 0 or p <= 0:
         return False
@@ -116,6 +124,7 @@ def is_sealed(price, limit_up, ask_v) -> bool:
     try:
         p, lu = float(price), float(limit_up)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.backfill.is_sealed")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False
     if not (math.isfinite(p) and math.isfinite(lu)) or lu <= 0:
         return False
@@ -124,6 +133,7 @@ def is_sealed(price, limit_up, ask_v) -> bool:
     try:
         av = float(ask_v)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.backfill.is_sealed")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return True                      # 盘口缺失 ⇒ 保守：算封死
     return av <= 0
 
@@ -143,6 +153,7 @@ def recheck_ok(price, prev_close, vwap, ask_v, limit_up) -> tuple:
         p = float(price)
         pc = float(prev_close)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.backfill.recheck_ok")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False, "no_data"
     if not (math.isfinite(p) and math.isfinite(pc)) or p <= 0 or pc <= 0:
         return False, "no_data"
@@ -182,6 +193,7 @@ def build_spares(signals, pick_codes, done_codes, bars=None) -> list:
             out.append({"code": c, "gap": s.get("gap"), "board": s.get("board", ""),
                         "price": px})
         except Exception:
+            _swallow("exec.oversold_gap_confirm.backfill.build_spares")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
     return out
 
@@ -216,6 +228,7 @@ def pending_from_fills(fills) -> list:
                         "qty_placed": qp, "filled_qty": fq, "qty_remaining": rem,
                         "ref_price": float(ref or 0)})
         except Exception:
+            _swallow("exec.oversold_gap_confirm.backfill.pending_from_fills")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
     return [p for p in out if p["code"] and p["ref_price"] > 0]
 
@@ -231,7 +244,7 @@ def _execution_limit(rec) -> float | None:
                 and (rec or {}).get("budget_price_kind") != "exchange_limit_up":
             return ceiling
     except (TypeError, ValueError):
-        pass
+        _swallow("exec.oversold_gap_confirm.backfill._execution_limit")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return None
 
 
@@ -247,13 +260,13 @@ def _known_filled_notional(rec):
             if math.isfinite(value) and value > 0:
                 return value
         except (TypeError, ValueError):
-            pass
+            _swallow("exec.oversold_gap_confirm.backfill._known_filled_notional")  # 原静默吞点：计数化（P1-6 三批），行为等价
     try:
         px = float((rec or {}).get("filled_price") or 0)
         if math.isfinite(px) and px > 0:
             return qty * px
     except (TypeError, ValueError):
-        pass
+        _swallow("exec.oversold_gap_confirm.backfill._known_filled_notional")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return None
 
 
@@ -263,6 +276,7 @@ def filled_notional(rec) -> float:
         value = _known_filled_notional(rec)
         return float(value or 0.0)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.backfill.filled_notional")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return 0.0
 
 
@@ -340,6 +354,7 @@ def budget_for_round(daily_budget, single_budget, committed, cash_free, cash_hea
         cash = max(0.0, float(cash_free or 0))
         return min(remain, cash), float(single_budget)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.backfill.budget_for_round")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return 0.0, 0.0
 
 
@@ -358,7 +373,7 @@ def _raw_order_status(rep):
     try:
         return int(raw) if raw is not None else None
     except (TypeError, ValueError):
-        pass
+        _swallow("exec.oversold_gap_confirm.backfill._raw_order_status")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return {"rejected": 8, "cancelled": 5, "expired": 12,
             "pending_cancel": 6, "filled": 3}.get((rep or {}).get("status"))
 
@@ -394,6 +409,7 @@ def cancel_and_confirm(gateway, pending, poll_rounds=3, poll_sleep=2.0, sleep_fn
             try:
                 last = gateway.poll_order(oid, code) or {}
             except Exception:
+                _swallow("exec.oversold_gap_confirm.backfill.cancel_and_confirm")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 break
             st = _raw_order_status(last)
             filled_qty = int(last.get("filled_qty") or 0)
@@ -403,6 +419,7 @@ def cancel_and_confirm(gateway, pending, poll_rounds=3, poll_sleep=2.0, sleep_fn
             try:
                 sleep_fn(float(poll_sleep))
             except Exception:
+                _swallow("exec.oversold_gap_confirm.backfill.cancel_and_confirm")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 break
         detail = {"code": code, "order_id": oid, "raw_status": st,
                   "qty_placed": int(p.get("qty_placed") or p.get("qty") or 0),

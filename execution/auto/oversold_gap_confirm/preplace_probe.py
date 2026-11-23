@@ -20,6 +20,11 @@ import json
 import os
 
 import pandas as pd
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 TICK = 0.01          # A 股最小价位
 TARGET_DEFAULT = 0.03
@@ -38,6 +43,7 @@ def build_plan(book_open: dict, today: str, target_pct: float = TARGET_DEFAULT) 
         try:
             entry_price = float(rec.get("entry_price") or 0)
         except Exception:
+            _swallow("exec.oversold_gap_confirm.preplace_probe.build_plan")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
         if entry_date == str(today):
             continue
@@ -45,6 +51,7 @@ def build_plan(book_open: dict, today: str, target_pct: float = TARGET_DEFAULT) 
             if int(rec.get("days_held") or 0) != 0:
                 continue
         except Exception:
+            _swallow("exec.oversold_gap_confirm.preplace_probe.build_plan")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
         if entry_price <= 0:
             continue
@@ -68,7 +75,7 @@ def _norm_bars(df) -> pd.DataFrame:
         # （2026-10-21 生产事故：tz-aware vs naive 比较 TypeError，完成钩子整日断流）
         _eob = _eob.dt.tz_localize(None)
     except (TypeError, AttributeError):
-        pass                                            # 本来就是 naive：无需处理
+        _swallow("exec.oversold_gap_confirm.preplace_probe._norm_bars")                                            # 本来就是 naive：无需处理
     d["_eob"] = _eob
     for c in ("high", "low", "close"):
         d[c] = pd.to_numeric(d.get(c), errors="coerce")
@@ -138,4 +145,5 @@ def read(book_dir, date) -> dict | None:
             d = json.load(f)
         return d if isinstance(d, dict) else None
     except Exception:
+        _swallow("exec.oversold_gap_confirm.preplace_probe.read")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None

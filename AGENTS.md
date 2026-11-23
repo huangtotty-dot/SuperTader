@@ -14,4 +14,4 @@
 2. TTL 与前端轮询满足：`TTL > 周期`（隔拍命中）或 `TTL ≤ 0.8×周期`（拍内去重）或登记 SWR 豁免理由。
 3. 调用线程零同步网络、零秒级重算：旧值立返 + 后台单飞；出网走 `pooled_get`。
 4. 实时行情走 `core.market_data.quote_bus.get_quotes`，不新增 `TencentProvider()` 直实例化。
-5. 合并前跑 `python -m unittest tests.phase3.test_architecture_guards tests.phase3.test_http_pool_shared`，全绿才合。
+5. 合并前跑 `python scripts/run_regression.py --fast`（静态守卫层五件套，秒级），全绿才合；等价替代：`python -m unittest tests.phase3.test_architecture_guards tests.phase3.test_http_pool_shared`。全量回归用 `python scripts/run_regression.py`（失败集 ⊆ 脚本顶部既存基线 ⇒ 退出码 0，基线外新失败 ⇒ 1）。

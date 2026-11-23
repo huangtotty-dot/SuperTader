@@ -19,6 +19,11 @@ import numpy as np
 import pandas as pd
 
 from data.indicators import resample_to_5min, add_indicators
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 
 # ═══════════════════════════════════════════
@@ -196,6 +201,7 @@ def build_m5_df(rows):
             return None
         return add_indicators(df5)
     except Exception:
+        _swallow("exec.signals.position_builder.build_m5_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 

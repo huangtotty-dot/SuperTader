@@ -27,8 +27,11 @@ class TestChartOpenPerf(unittest.TestCase):
         self.assertIn("_DIV_SCHEMA", _PY)
 
     def test_frontend_reports_render_and_total(self):
-        self.assertIn('report_slow_call("chart_render"', _JS)
-        self.assertIn('report_slow_call("chart_open_total"', _JS)
+        # 2026-11-23（P2-3）：上报统一走 _reportSlow（带 tab+rid、吞 rejection）⇒ 钉 helper 调用点
+        self.assertIn('_reportSlow("chart_render"', _JS)
+        self.assertIn('_reportSlow("chart_open_total"', _JS)
+        # 且 helper 必须真落到后端 report_slow_call（4 参：name/ms/tab/rid）
+        self.assertIn('api.report_slow_call(name, Math.round(ms), _diagTab(), rid || _diagRid())', _JS)
 
     def test_minute_fetch_is_per_period(self):
         """分钟 Tab 只抓当前周期，不再为一个 Tab 抓三档。"""

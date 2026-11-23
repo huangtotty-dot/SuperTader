@@ -10,6 +10,11 @@ import json
 import os
 import uuid
 from datetime import datetime
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 VERSION = 1
 
@@ -65,7 +70,7 @@ def write_all(book_dir: str, date: str, rows: list) -> str:
             try:
                 os.remove(tmp)
             except OSError:
-                pass
+                _swallow("exec.oversold_gap_confirm.order_intents.write_all")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return fp
 
 

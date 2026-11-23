@@ -26,6 +26,11 @@ import sys
 import threading
 import time
 from datetime import datetime
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 _WATCHER_HB_NAME = "watcher_heartbeat.json"
 _STALE_SECONDS = 90          # watcher 心跳超过 90s 未刷新视为死亡
@@ -113,6 +118,7 @@ class _TeeStream:
             try:
                 data = self._q.get()
             except Exception:
+                _swallow("exec.gm_bridge.ops_guard._console_consumer")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 return
             try:
                 if data is not None and not self._console_dead:
@@ -120,7 +126,7 @@ class _TeeStream:
                     try:
                         self._stream.flush()
                     except Exception:
-                        pass
+                        _swallow("exec.gm_bridge.ops_guard._console_consumer")  # 原静默吞点：计数化（P1-6 三批），行为等价
             except Exception as e:
                 # 管道已断（BrokenPipeError 等）：标记死亡，write 侧不再入队；
                 # 降级告警落文件（此时控制台已不可达）。
@@ -131,7 +137,7 @@ class _TeeStream:
                 try:
                     self._q.task_done()
                 except Exception:
-                    pass
+                    _swallow("exec.gm_bridge.ops_guard._console_consumer")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     def _enqueue_console(self, data):
         """非阻塞入队；满 ⇒ 丢弃 + 计数（周期性落文件告警）。任何路径都不抛。"""
@@ -141,8 +147,9 @@ class _TeeStream:
             self._q.put_nowait(data)
             return
         except queue.Full:
-            pass
+            _swallow("exec.gm_bridge.ops_guard._enqueue_console")  # 原静默吞点：计数化（P1-6 三批），行为等价
         except Exception:
+            _swallow("exec.gm_bridge.ops_guard._enqueue_console")  # 原静默吞点：计数化（P1-6 三批），行为等价
             return
         with self._FH_LOCK:
             self._dropped += 1
@@ -160,7 +167,7 @@ class _TeeStream:
                                % (datetime.now().strftime("%H:%M:%S"), msg))
                 self._fh.flush()
         except Exception:
-            pass
+            _swallow("exec.gm_bridge.ops_guard._file_notice")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     def _roll_if_needed(self):
         today = datetime.now().strftime("%Y%m%d")
@@ -182,12 +189,12 @@ class _TeeStream:
             try:
                 old.close()
             except Exception:
-                pass
+                _swallow("exec.gm_bridge.ops_guard._roll_if_needed")  # 原静默吞点：计数化（P1-6 三批），行为等价
             # ⚠️ 2026-10-15：不再 `sys.__stdout__.write` —— 那正是会永久阻塞的坏管道。
             #    滚动通告走「文件 + 控制台队列」两条安全通道。
             self._enqueue_console("  [ops] 日志已跨日滚动: %s\n" % log_path)
         except Exception:
-            pass
+            _swallow("exec.gm_bridge.ops_guard._roll_if_needed")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     def write(self, data):
         # ① 文件先行：落盘可靠是第一优先级（控制台堵死也不许拖累文件）。
@@ -204,7 +211,7 @@ class _TeeStream:
                 self._fh.write(_ANSI_RE.sub("", data) if "\x1b" in data else data)
                 self._fh.flush()
         except Exception:
-            pass
+            _swallow("exec.gm_bridge.ops_guard.write")  # 原静默吞点：计数化（P1-6 三批），行为等价
         # ② 控制台：异步队列，满即丢，绝不阻塞主线程
         self._enqueue_console(data)
         return len(data)
@@ -216,7 +223,7 @@ class _TeeStream:
             with self._FH_LOCK:
                 self._fh.flush()
         except Exception:
-            pass
+            _swallow("exec.gm_bridge.ops_guard.flush")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     def __getattr__(self, name):
         # 透传 encoding/isatty/writelines 等属性到原流（print/file= 之外的鸭子接口）。
@@ -263,7 +270,7 @@ def bootstrap_logging(project_dir):
         try:
             sys.__stdout__.write("[ops] 日志落盘失败: %s\n" % e)
         except Exception:
-            pass
+            _swallow("exec.gm_bridge.ops_guard.bootstrap_logging")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def watcher_alive():
@@ -271,6 +278,7 @@ def watcher_alive():
     try:
         return (time.time() - os.path.getmtime(watcher_heartbeat_path())) <= _STALE_SECONDS
     except Exception:
+        _swallow("exec.gm_bridge.ops_guard.watcher_alive")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False
 
 

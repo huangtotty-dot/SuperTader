@@ -14,6 +14,9 @@
          `requests.get/post` 登记基线防新增（既有登记即可，不强制清零）。
 铁律③ 行情消费必走 QuoteBus：`TencentProvider()` 直实例化 = 冻结白名单；
          fail-open 回退位置必须在同一函数体内带 `quote_bus` 引用。
+         扫描范围（2026-11-23 P1-4 扩）：gui.py + core/ + analysis/ + stock_hunter/
+         + sector_rotation/ + scripts/；扩范围部分的首轮实例按裁决登记于
+         _TENCENT_EXEMPT_OUTER（带同文本行出现次数钉）。
 
 行号漂移说明：铁律②③的白名单按 (文件, 行号) 冻结。业务代码正常演进导致行号移动时，
 按失败信息**更新行号**即可（顺带核对理由仍成立）；**新增**位置则必须先「走 pooled_get /
@@ -218,10 +221,64 @@ _TENCENT_FREEZE = {
         "registered", "风格轮动指数日线补缺：盘后批算历史日线（index_daily），非实时快照消费"),
 }
 
+# ── 扩范围登记豁免表（2026-11-23 P1-4）────────────────────────────────
+# 扫描范围自 gui.py + core/ 扩至 analysis/、stock_hunter/、sector_rotation/、scripts/
+# 后的首轮盘点登记（审计逐处复核为活路径/离线批处理/人工工具，均非 QuoteBus 轮询
+# 实时行情消费语义，故全部为 registered 豁免，无 failopen）。
+# (文件相对路径, 行内容片段): (类别, 理由, 该片段在文件内的预期出现次数)
+#   片段冻结与 _TENCENT_FREEZE 同款（行号漂移免疫）；
+#   **次数钉**专门对付「同文件内多行同文本」的情形（equity_daily.py 两条各 2 处）——
+#   只按 (rel, 片段) 判存在性会漏掉同文本行的增删，次数不一致即失败。
+_TENCENT_EXEMPT_OUTER = {
+    ("analysis/index_regime_intraday.py", "df = TencentProvider().index_minute(code)"): (
+        "registered",
+        "盘中指数背离/共振分析链独立取数：index_minute 拉当日分时序列做规整，"
+        "非 QuoteBus 实时快照共享档语义（分析链自建通道，P1-4 裁决登记豁免）",
+        1),
+    ("stock_hunter/modules/market_data.py", "snap = TencentProvider().snapshot_auction(chunk)"): (
+        "registered",
+        "猎手管线跑在独立子进程：子进程内 QuoteBus 单飞无共享增益，"
+        "批量快照由 provider 内分块直取（P1-4 裁决登记豁免）",
+        1),
+    ("sector_rotation/data_fetch.py", "snap = TencentProvider().snapshot_auction(keep[i : i + SNAPSHOT_BATCH])"): (
+        "registered",
+        "gui 端点批量取数：板块轮动全市场快照按 SNAPSHOT_BATCH 分块拉取，"
+        "属批量快照非 QuoteBus 共享档轮询消费（P1-4 裁决登记豁免）",
+        1),
+    ("scripts/equity_daily.py", "df = TencentProvider().index_daily(idx)"): (
+        "registered",
+        "离线批处理（收盘后子进程）：指数日线强制刷新直取 + 网络失败回退旧缓存重取，"
+        "同函数内 2 处同文本行；历史日线非实时行情（P1-4 裁决登记豁免）",
+        2),
+    ("scripts/equity_daily.py", "df = TencentProvider().daily(code)"): (
+        "registered",
+        "离线批处理（收盘后子进程）：个股日线强制刷新 / _tencent_close 日线回退，"
+        "同文件 2 处同文本行；历史日线非实时行情（P1-4 裁决登记豁免）",
+        2),
+    ("scripts/data_source_parity.py", "gm, tx = GmProvider(), TencentProvider()"): (
+        "registered",
+        "人工工具：GM/腾讯数据源一致性对照脚本，两 provider 并排实例化即其本职，"
+        "非行情消费链（P1-4 裁决登记豁免）",
+        1),
+}
+
+
+def _tencent_freeze_all():
+    """原冻结表 + 扩范围豁免表的合并视图（值统一为 (类别, 理由)）。"""
+    merged = dict(_TENCENT_FREEZE)
+    for key, (kind, reason, _cnt) in _TENCENT_EXEMPT_OUTER.items():
+        merged[key] = (kind, reason)
+    return merged
+
 
 def _scan_tencent_provider():
-    """扫 gui.py + core/ 全部 .py 中 `TencentProvider()` 直实例化位置 → {(rel, 行文本): 行号}。"""
-    files = [_ROOT / "gui.py"] + sorted((_ROOT / "core").rglob("*.py"))
+    """扫 `TencentProvider()` 直实例化位置 → {(rel, 行文本): 行号}。
+
+    范围（2026-11-23 P1-4 扩）：gui.py + core/ + analysis/ + stock_hunter/
+    + sector_rotation/ + scripts/ 全部 .py（原仅 gui.py + core/）。"""
+    files = [_ROOT / "gui.py"]
+    for _sub in ("core", "analysis", "stock_hunter", "sector_rotation", "scripts"):
+        files += sorted((_ROOT / _sub).rglob("*.py"))
     found = {}
     for fp in files:
         try:
@@ -267,13 +324,16 @@ class TestQuoteBusConsumptionGuard(unittest.TestCase):
 
     def test_freeze_set_matches(self):
         found = _scan_tencent_provider()
-        new_ones = sorted(set(found) - set(_TENCENT_FREEZE))
-        gone = sorted(set(_TENCENT_FREEZE) - set(found))
+        registered_all = _tencent_freeze_all()
+        new_ones = sorted(set(found) - set(registered_all))
+        gone = sorted(set(registered_all) - set(found))
         msg = []
         if new_ones:
             msg.append(
                 "新增未登记的 TencentProvider() 直实例化 ⇒ 走 QuoteBus "
-                "（core.market_data.quote_bus.get_quotes）或在 _TENCENT_FREEZE 登记豁免：\n  "
+                "（core.market_data.quote_bus.get_quotes）或登记豁免"
+                "（gui.py/core/ 入 _TENCENT_FREEZE；analysis/、stock_hunter/、"
+                "sector_rotation/、scripts/ 入 _TENCENT_EXEMPT_OUTER）：\n  "
                 + "\n  ".join(f"{rel}:{found[(rel, snip)]}  {snip}" for rel, snip in new_ones)
             )
         if gone:
@@ -282,6 +342,26 @@ class TestQuoteBusConsumptionGuard(unittest.TestCase):
                 + "\n  ".join(f"{rel}  {snip}" for rel, snip in gone)
             )
         self.assertFalse(new_ones or gone, "铁律③违反：\n" + "\n".join(msg))
+
+    def test_outer_exemptions_still_present(self):
+        """反向断言（防豁免烂尾）：扩范围豁免表 _TENCENT_EXEMPT_OUTER 中每条登记的
+        位置必须**仍存在** TencentProvider()，且同文本行**出现次数**与登记一致——
+        equity_daily.py 两条豁免各 2 处同文本行，靠次数钉住增删。"""
+        found = _scan_tencent_provider()
+        for (rel, snip), (kind, reason, cnt) in sorted(_TENCENT_EXEMPT_OUTER.items()):
+            with self.subTest(at=f"{rel}  {snip[:40]}"):
+                fp = _ROOT / rel
+                self.assertTrue(fp.exists(), f"{rel} 不存在（豁免条目失效：{reason}）")
+                self.assertIn(
+                    (rel, snip), found,
+                    f"{rel} 中找不到豁免登记的 TencentProvider() 行（{reason}）：{snip}"
+                    "——代码已改请同步更新/删除豁免登记")
+                hits = sum(1 for ln in fp.read_text(encoding="utf-8").splitlines()
+                           if ln.strip() == snip)
+                self.assertEqual(
+                    hits, cnt,
+                    f"{rel} 中豁免行出现 {hits} 次 ≠ 登记 {cnt} 次（{reason}）——"
+                    "同文本行被增删：新增须改走 QuoteBus 或更新登记，删除须同步减计数")
 
     def test_failopen_has_bus_reference(self):
         """fail-open 回退位置：同一函数体内必须同时出现 `quote_bus` 引用

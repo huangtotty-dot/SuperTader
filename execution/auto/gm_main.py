@@ -89,7 +89,7 @@ def _gm_atexit_banner():
         write_risk(_ts, "strategy_exit", "策略进程退出(atexit 优雅路径)")
         print(f"\n===== strategy exit atexit {_ts} (pid={os.getpid()}) =====", flush=True)
     except Exception:
-        pass
+        _swallow("exec.gm_main._gm_atexit_banner")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 _atexit.register(_gm_atexit_banner)
@@ -151,7 +151,7 @@ def _mark_pending_recon(context, code, sym, side, qty, px, orders,
                      "order_price_kind": str(order_price_kind or "market_protection"),
                      "ts_dt": datetime.now(), "order_ids": _ids, "closed": False}
     except Exception:
-        pass
+        _swallow("exec.gm_main._mark_pending_recon")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def _pending_recon_close(context, sym, order_id="", side=None):
@@ -160,7 +160,7 @@ def _pending_recon_close(context, sym, order_id="", side=None):
         if rec is not None:
             rec["closed"] = True
     except Exception:
-        pass
+        _swallow("exec.gm_main._pending_recon_close")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def _poll_pending_recon(context, now):
@@ -199,6 +199,7 @@ def _poll_pending_recon(context, now):
                         if int(_o.get("status") or 0) == 3 and int(_o.get("volume") or 0) > 0:
                             _hits.append(_o)
                     except Exception:
+                        _swallow("exec.gm_main._poll_pending_recon")  # 原静默吞点：计数化（P1-6 三批），行为等价
                         continue
                 if len(_hits) != 1:
                     continue
@@ -210,11 +211,12 @@ def _poll_pending_recon(context, now):
                                f"{_sym} 回调失效,轮询补记 fill qty={_hit.get('volume')}",
                                code=_rec.get("code", ""))
                 except Exception:
-                    pass
+                    _swallow("exec.gm_main._poll_pending_recon")  # 原静默吞点：计数化（P1-6 三批），行为等价
             except Exception:
+                _swallow("exec.gm_main._poll_pending_recon")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
     except Exception:
-        pass
+        _swallow("exec.gm_main._poll_pending_recon")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 # P0-2 Fix A(2026-09-11 Q-20260911-2): gm SDK 同步直调（history_n/current/positions/account/order_volume）
@@ -223,6 +225,12 @@ def _poll_pending_recon(context, now):
 # 由各调用点既有 except 接住走拒单/告警/fail-open 路径。
 import concurrent.futures as _cfmod
 from functools import partial as _partial
+
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 _SDK_CALL_TIMEOUT = 15.0
 _SDK_POOL = _cfmod.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-sdk")
@@ -238,7 +246,7 @@ def _sdk_call(desc, fn, *a, **k):
         try:
             _SDK_POOL.shutdown(wait=False)
         except Exception:
-            pass
+            _swallow("exec.gm_main._sdk_call")  # 原静默吞点：计数化（P1-6 三批），行为等价
         _SDK_POOL = _cfmod.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-sdk")
         raise TimeoutError(f"gm SDK {desc} 超时>{_SDK_CALL_TIMEOUT}s（挂死，弃池）")
 
@@ -301,6 +309,7 @@ def _writeback_holdings(context) -> int:
         try:
             h = _get_holding(context, code, gm_sym)
         except Exception:
+            _swallow("exec.gm_main._writeback_holdings")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
         e = dict(disk[code])                          # 磁盘新值全保留
         e["qty"] = int(h.get("qty", 0) or 0)          # 唯一允许写的字段
@@ -357,7 +366,7 @@ def _maybe_clear_audit_log(context):
             os.remove(_AUDIT_LOG_PATH)
             return True
     except Exception:
-        pass
+        _swallow("exec.gm_main._maybe_clear_audit_log")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return False
 
 
@@ -434,7 +443,7 @@ def _get_holding(context, code: str, gm_symbol: str) -> dict:
                     _audit_write({"event": "reconcile_fix", "code": code, "time": str(now),
                                   "old_qty": _old_q, "new_qty": 0})
         except Exception:
-            pass
+            _swallow("exec.gm_main._get_holding")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     # 2. manual_position
     mp = context.manual_position.get(gm_symbol)
@@ -474,6 +483,7 @@ def _account_positions_all(context) -> dict:
                     continue
                 out[sym] = {"qty": vol, "cost": float(getattr(p, "vwap", 0) or 0)}
             except Exception:
+                _swallow("exec.gm_main._account_positions_all")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
     except Exception as _e:
         print(f"[hb] 全账户持仓查询失败（按池内口径继续）: {_e}")
@@ -505,7 +515,7 @@ def _audit_write(rec: dict):
         _audit_file.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
         _audit_file.flush()
     except Exception:
-        pass
+        _swallow("exec.gm_main._audit_write")  # 原静默吞点：计数化（P1-6 三批），行为等价
     # P0-2 镜像写：复盘清单路径（失败静默，不阻断主链）
     try:
         if _audit_mirror_file is None:
@@ -514,7 +524,7 @@ def _audit_write(rec: dict):
         _audit_mirror_file.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
         _audit_mirror_file.flush()
     except Exception:
-        pass
+        _swallow("exec.gm_main._audit_write")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 def _audit_close():
     global _audit_file, _audit_mirror_file
@@ -585,6 +595,7 @@ def _append_index_forming(idx_df, gm_symbol="SHSE.000001"):
     try:
         rows = _sdk_call("current", current, gm_symbol)
     except Exception:
+        _swallow("exec.gm_main._append_index_forming")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return idx_df
     if not rows:
         return idx_df
@@ -640,6 +651,7 @@ def _code_board_index(code):
         ic, _name = m.resolve_index(code)
         return ic, m.index_gm_symbol(ic)
     except Exception:
+        _swallow("exec.gm_main._code_board_index")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return "sh000001", "SHSE.000001"
 
 
@@ -671,7 +683,7 @@ def _needed_index_gm_symbols():
             _ic, _gm = _code_board_index(_c)
             out.add(_gm)
         except Exception:
-            pass
+            _swallow("exec.gm_main._needed_index_gm_symbols")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return sorted(out)
 
 
@@ -689,7 +701,7 @@ def init(context):
     try:
         osc.style.enable(ops_guard.ansi_enabled())
     except Exception:
-        pass
+        _swallow("exec.gm_main.init")  # 原静默吞点：计数化（P1-6 三批），行为等价
     # P3-2 池分管校验：manual 池与 auto 池交集冲突 → 拒绝启动（fail-closed）
     _wl = os.path.join(os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader"),
                        "t_io", "state", "watchlist_buy.json")
@@ -749,6 +761,7 @@ def init(context):
                 if int(_h.get("qty", 0) or 0) > 0:
                     _held[_c] = int(_h.get("qty", 0))
             except Exception:
+                _swallow("exec.gm_main.init")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
         # 2026-10-13 修复：补池外全账户真实持仓——否则旧引擎遗留单被报成
         # 「账户持有 0 只」，unclaimed（LEGACY 锁定）告警也不会触发。
@@ -786,7 +799,7 @@ def init(context):
                 write_risk(str(datetime.now()), "session_down",
                            f"启动自检: cash={_cashv}，交易会话可能未登录", code="")
             except Exception:
-                pass
+                _swallow("exec.gm_main.init")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     context._pending_recon = {}    # Fix B: 下单成功待对账 {sym: {...}}
     context._fills_done = set()    # Fix B: fill 防重 key 集合（回调/轮询共用）
@@ -922,14 +935,15 @@ def _safe_log(*a, **kw):
         print(msg, **kw)
         return
     except UnicodeEncodeError:
-        pass
+        _swallow("exec.gm_main._safe_log")  # 原静默吞点：计数化（P1-6 三批），行为等价
     except Exception:
+        _swallow("exec.gm_main._safe_log")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return
     try:
         enc = getattr(sys.stdout, "encoding", None) or "gbk"
         print(msg.encode(enc, "replace").decode(enc, "replace"), **kw)
     except Exception:
-        pass
+        _swallow("exec.gm_main._safe_log")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 SERVICES = GmServices(
@@ -1031,12 +1045,12 @@ def _ir_audit_input_degraded(now, symbol, ctx):
     try:
         _audit_write(rec)
     except Exception:
-        pass
+        _swallow("exec.gm_main._ir_audit_input_degraded")  # 原静默吞点：计数化（P1-6 三批），行为等价
     try:
         write_risk(str(now), "regime_degraded",
                    f"{symbol} degraded={list(degraded)} effective={rec['effective_date']}", code="")
     except Exception:
-        pass
+        _swallow("exec.gm_main._ir_audit_input_degraded")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def on_bar(context, bars):
@@ -1201,7 +1215,7 @@ def on_bar(context, bars):
     try:
         _poll_pending_recon(context, now)
     except Exception:
-        pass
+        _swallow("exec.gm_main.on_bar")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     # ── 心跳（每根 bar 写文件；账户/持仓快照每 5 分钟才经 SDK 刷新一次——P1-6 降频） ──
     try:
@@ -1219,6 +1233,7 @@ def on_bar(context, bars):
                 try:
                     _h = _get_holding(context, _hc, _hs)
                 except Exception:
+                    _swallow("exec.gm_main.on_bar")  # 原静默吞点：计数化（P1-6 三批），行为等价
                     continue
                 if int(_h.get("qty", 0) or 0) > 0:
                     _hb_positions[_hs] = {"qty": int(_h.get("qty", 0)),
@@ -1241,7 +1256,7 @@ def on_bar(context, bars):
                     else:
                         _hb_cash = float(_c)
             except Exception:
-                pass
+                _swallow("exec.gm_main.on_bar")  # 原静默吞点：计数化（P1-6 三批），行为等价
             _HB_CACHE["ts"] = _hb_now
             _HB_CACHE["positions"] = _hb_positions
             _HB_CACHE["cash"] = _hb_cash
@@ -1275,11 +1290,13 @@ def _strategy_ordered_today(code: str) -> bool:
             try:
                 _e = json.loads(_line)
             except Exception:
+                _swallow("exec.gm_main._strategy_ordered_today")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
             if _e.get("event") == "order" and str(_e.get("code")) == str(code):
                 return True
         return False
     except Exception:
+        _swallow("exec.gm_main._strategy_ordered_today")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return True
 
 
@@ -1317,7 +1334,7 @@ def on_order_status(context, order):
                            code=code)
                 print(f"[{datetime.now():%H:%M:%S}] ORPHAN_FILL {code} {_side} {volume}@{price} 不入台账")
             except Exception:
-                pass
+                _swallow("exec.gm_main.on_order_status")  # 原静默吞点：计数化（P1-6 三批），行为等价
             return
         # Fix B(2026-09-11): fill 防重闸——回调迟到与轮询补记共用 key，防二次入账
         _oid = order.get("id") or order.get("order_id") or ""
@@ -1359,7 +1376,7 @@ def on_order_status(context, order):
                        order_price_kind=_order_price_kind,
                        fill_vwap=(order.get("filled_vwap") or order.get("vwap") or None))
         except Exception:
-            pass
+            _swallow("exec.gm_main.on_order_status")  # 原静默吞点：计数化（P1-6 三批），行为等价
         _pending_recon_close(context, symbol, order_id=_event_oid, side=_side)
         if side == 1:  # 买入
             old = context.executed_orders.get(symbol, {"qty": 0, "available": 0, "cost": price})
@@ -1430,7 +1447,7 @@ def on_order_status(context, order):
                            f"{code} {_side} {volume}@{price} 回填异常: {str(_fbe)[:150]}",
                            code=code)
             except Exception:
-                pass
+                _swallow("exec.gm_main.on_order_status")  # 原静默吞点：计数化（P1-6 三批），行为等价
     elif status in (4, 5, 8, 12):  # 4/8 拒单；5 已撤；12 过期。6 已在上方单独早退。
         _terminal_filled = int(order.get("filled_volume") or order.get("filled_qty") or 0)
         # 同一柜台终态可能由回调与轮询重复送达；有真实 ID 时整条终态只应用一次。
@@ -1449,7 +1466,7 @@ def on_order_status(context, order):
         try:
             _rej_detail = order.get("ord_rej_reason_detail", "") or ""
         except Exception:
-            pass
+            _swallow("exec.gm_main.on_order_status")  # 原静默吞点：计数化（P1-6 三批），行为等价
         _r_code = code
         _r_side = "BUY" if side == 1 else "SELL"
         _is_reject = status in (4, 8)
@@ -1481,7 +1498,7 @@ def on_order_status(context, order):
                                      terminal=_terminal, raw_status=status,
                                      order_id=_event_oid, detail=_rej_detail)
         except Exception:
-            pass
+            _swallow("exec.gm_main.on_order_status")  # 原静默吞点：计数化（P1-6 三批），行为等价
         # 买侧回滚虚挂份额；卖侧先按终态累计量补对真实成交，再写终态并清余量。
         try:
             if getattr(context, "mode", None) == MODE_LIVE:
@@ -1509,7 +1526,7 @@ def on_order_status(context, order):
                            f"{code} {volume}股终态回填异常: {str(_rje)[:150]}",
                            code=code)
             except Exception:
-                pass
+                _swallow("exec.gm_main.on_order_status")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def on_backtest_finished(context, indicator):
@@ -1539,4 +1556,4 @@ if __name__ == "__main__":
         write_risk(datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                    "strategy_exit", "策略 run() 返回（优雅结束）")
     except Exception:
-        pass
+        _swallow("exec.gm_main.<module>")  # 原静默吞点：计数化（P1-6 三批），行为等价

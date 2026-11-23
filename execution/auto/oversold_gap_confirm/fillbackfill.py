@@ -62,6 +62,11 @@ import os
 from datetime import datetime
 
 from . import executor
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 JOURNAL_FILE = "fill_backfill_journal.jsonl"
 
@@ -98,6 +103,7 @@ def _load_json(fp: str):
         with open(fp, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
+        _swallow("exec.oversold_gap_confirm.fillbackfill._load_json")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 
@@ -118,9 +124,10 @@ def _journal_keys(book_dir: str) -> set:
                     if k:
                         keys.add(k)
                 except Exception:
+                    _swallow("exec.oversold_gap_confirm.fillbackfill._journal_keys")  # 原静默吞点：计数化（P1-6 三批），行为等价
                     continue
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.fillbackfill._journal_keys")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return keys
 
 
@@ -132,7 +139,7 @@ def _journal_append(book_dir: str, rec: dict) -> None:
         with open(fp, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.fillbackfill._journal_append")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def reconcile_day_state(book_dir: str, date: str, fills=None):
@@ -213,6 +220,7 @@ def _already_confirmed_buy_rec(fills: dict, code: str, qty: int, price: float) -
             if abs(float(_fp) - float(price)) < 1e-6:
                 return True
         except (TypeError, ValueError):
+            _swallow("exec.oversold_gap_confirm.fillbackfill._already_confirmed_buy_rec")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
     return False
 
@@ -266,7 +274,7 @@ def _fix_buy_fills_file(book_dir: str, date: str, code: str, qty: int,
         summary["fills_event_confirmed"] = int(summary.get("fills_event_confirmed") or 0) + 1
         fills["summary"] = summary
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.fillbackfill._fix_buy_fills_file")  # 原静默吞点：计数化（P1-6 三批），行为等价
     try:
         _atomic_dump(fills, fp)
         _rep_fp = os.path.join(book_dir, "exec_report_%s.json" % date)
@@ -391,6 +399,7 @@ def apply_fill(book_dir: str, event: dict, log=print) -> dict | None:
         qty = int(event.get("qty") or 0)
         price = float(event.get("fill_vwap") or event.get("price") or 0)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.fillbackfill.apply_fill")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     if not code or side not in ("BUY", "SELL") or qty <= 0 or price <= 0 or len(date) != 10:
         return None
@@ -601,6 +610,7 @@ def _terminal_semantics(status, detail=""):
     try:
         raw = int(status)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.fillbackfill._terminal_semantics")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     table = {
         4: ("rejected", "柜台拒单 status=4", "reject_confirmed_at"),
@@ -618,7 +628,8 @@ def _terminal_semantics(status, detail=""):
 
 
 def _reject_buy_fills_file(book_dir: str, date: str, code: str,
-                           status, rej_detail: str, order_id: str, log):
+                           status, rej_detail: str, order_id: str, log,
+                           filled_qty: int = 0, filled_vwap: float = 0.0, fee=None):
     """按原始状态修正买单留痕；部分成交保留，未成交余量才随终态释放。"""
     sem = _terminal_semantics(status, rej_detail)
     if sem is None:
@@ -636,6 +647,17 @@ def _reject_buy_fills_file(book_dir: str, date: str, code: str,
     if str(rec.get("status")) in _CONFIRMED_STATUS and placed > 0 and filled >= placed:
         log("[FB] BUY 终态 %s：留痕已全成 ⇒ 语义守卫跳过" % code)
         return None
+    # 2026-11-23 买侧终态写回（P1-5 修复）：终态事件携带的**累计**成交量先落留痕。
+    # 此前缺这一步 ⇒ rec.filled_qty 恒 0 ⇒ 下游回滚=booked−0 把真实成交份额随虚挂
+    # 整条误删（账本少记真实持仓）。写回必须在 `_settle_buy_budget_record` 之前，
+    # 让预算结算的 remaining=placed−filled 也算对（executor.py:314-319）。
+    if int(filled_qty or 0) > 0:
+        rec["filled_qty"] = max(int(rec.get("filled_qty") or 0), int(filled_qty))
+        if filled_vwap and float(filled_vwap) > 0:
+            rec["filled_price"] = float(filled_vwap)
+            rec["filled_notional"] = int(rec["filled_qty"]) * float(filled_vwap)
+        if fee is not None:
+            rec["fee"] = fee
     rec["status"] = terminal
     rec["message"] = message
     rec[confirmed_field] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -647,7 +669,7 @@ def _reject_buy_fills_file(book_dir: str, date: str, code: str,
         summary.update(executor._buys_summary(fills.get("buys") or []))
         fills["summary"] = summary
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.fillbackfill._reject_buy_fills_file")  # 原静默吞点：计数化（P1-6 三批），行为等价
     try:
         _atomic_dump(fills, fp)
         _rep_fp = os.path.join(book_dir, "exec_report_%s.json" % date)
@@ -709,6 +731,7 @@ def apply_reject(book_dir: str, event: dict, log=print) -> dict | None:
         qty = int(event.get("qty") or 0)
         filled_qty = int(event.get("filled_qty") or event.get("filled_volume") or 0)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.fillbackfill.apply_reject")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     if not code or side not in ("BUY", "SELL") or qty <= 0 or len(date) != 10:
         return None
@@ -765,7 +788,17 @@ def apply_reject(book_dir: str, event: dict, log=print) -> dict | None:
                       "code": code, "side": side, "qty": qty,
                       "detail": "无匹配在途卖单留痕（孤儿/手工单或已终态）"}
     else:
-        rec = _reject_buy_fills_file(book_dir, date, code, status, rej_detail, order_id, log)
+        # 2026-11-23（P1-5 修复）：买侧终态把事件携带的累计成交量/VWAP/费用透传进留痕，
+        # 让下游回滚按 booked−filled 只清未成交余量（此前 filled 恒 0，真实成交被整条误删）。
+        _bvwap = 0.0
+        if filled_qty > 0:
+            try:
+                _bvwap = float(event.get("filled_vwap") or event.get("fill_vwap") or 0)
+            except (TypeError, ValueError):
+                _bvwap = 0.0
+        rec = _reject_buy_fills_file(book_dir, date, code, status, rej_detail, order_id, log,
+                                     filled_qty=filled_qty, filled_vwap=_bvwap,
+                                     fee=event.get("fee"))
         if rec is None:
             result = {"action": "skipped", "reason": "semantic_guard",
                       "code": code, "side": side, "qty": qty,
@@ -886,6 +919,7 @@ def apply_race_fill(book_dir: str, date: str, code: str, qty: int,
         qty = int(qty or 0)
         px = float(price) if price is not None else 0.0
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.fillbackfill.apply_race_fill")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     if not code or qty <= 0:
         return None

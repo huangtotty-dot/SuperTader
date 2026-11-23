@@ -1,37 +1,29 @@
-# Core dependencies
+# ============================================================================
+# 运行时依赖（GUI + 自动盘 + 选股猎手 + 复盘链路的**生产**必需）
+# 2026-11-23（P2-4）依赖卫生：
+#   · 全仓 Grep 实查后删除 8 个死依赖：ta / PyQt6 / statsmodels / plotly /
+#     python-dotenv / pendulum / pydantic / tqdm（零 import，删除无影响）
+#   · 拆三组：本文件=runtime；研究环境再加 requirements-research.txt；
+#     开发工具再加 requirements-dev.txt
+#   · 补声明：pywebview（GUI 壳，import 名 webview）；gm SDK（掘金，import 名 gm）
+#     —— gm 随券商掘金终端安装，pip 装不到，仅注释声明不入清单
+# ============================================================================
+
+# 数据与计算
 pandas>=1.5.0
 numpy>=1.23.0
 akshare>=1.14.0
-pydantic>=2.0.0
 requests>=2.28.0
-ta>=0.10.0
-PyQt6>=6.4.0
-scikit-learn>=1.2.0
-optuna>=3.0.0
 
-# Data processing
-scipy>=1.9.0
-statsmodels>=0.13.0
+# GUI 桌面壳（import 名是 webview）
+pywebview>=4.4
 
-# Visualization
-matplotlib>=3.6.0
-plotly>=5.0.0
-
-# Utilities
-python-dotenv>=0.20.0
-tqdm>=4.64.0
-pendulum>=2.1.0
-pypdf>=6.0          # 券商历史成交/交割单解析（GUI「历史成交盈亏」，core/trade_history.py）
+# 券商历史成交/交割单解析（core/trade_history.py，GUI「历史成交盈亏」）
+pypdf>=6.0          # PDF 交割单
 openpyxl>=3.1       # .xlsx 历史成交
-xlrd>=2.0           # 老式 .xls（BIFF）历史成交
+xlrd>=2.0           # 老式 .xls（BIFF）
 beautifulsoup4>=4.12  # 伪 .xls（实为 HTML 表格的导出）
 
-# Development
-pytest>=7.0.0
-pytest-cov>=4.0.0
-pytest-mock>=3.10.0
-black>=23.0.0
-pylint>=2.15.0
-mypy>=0.990
-isort>=5.11.0
-flake8>=5.0.0
+# 掘金量化 SDK（gm）：自动盘策略必需。**不入 pip 清单** —— 由券商「掘金终端」
+# 安装包自带（装在终端目录的 Python 里），本仓通过 execution/auto/gm_main.py
+# 的 sys.path 治理引入；测试环境用 tests/ 的 gm 桩。

@@ -85,6 +85,11 @@ from gm.api import (                           # noqa: E402
     OrderSide_Buy, OrderSide_Sell, OrderType_Market,
     PositionEffect_Open, PositionEffect_Close, ADJUST_PREV,
 )
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 
 # ── 落盘（只写本探针自己的目录）─────────────────────────────────────────────
@@ -106,7 +111,7 @@ def _save_state(st: dict) -> None:
         with open(os.path.join(OUT_DIR, "state.json"), "w", encoding="utf-8") as f:
             json.dump(st, f, ensure_ascii=False, indent=1)
     except Exception:
-        pass
+        _swallow("exec.probe_slippage._save_state")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def _load_state() -> dict:
@@ -114,6 +119,7 @@ def _load_state() -> dict:
         with open(os.path.join(OUT_DIR, "state.json"), encoding="utf-8") as f:
             return json.load(f)
     except Exception:
+        _swallow("exec.probe_slippage._load_state")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {"base": {}, "days_done": 0, "legs": []}
 
 
@@ -150,6 +156,7 @@ def _positions(context) -> list:
             pos = attr
         return [p for p in (pos or []) if isinstance(p, dict)]
     except Exception:
+        _swallow("exec.probe_slippage._positions")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return []
 
 
@@ -216,7 +223,7 @@ def _px_prev_close(sym: str):
         if his:
             return float(his[-1]["close"])
     except Exception:
-        pass
+        _swallow("exec.probe_slippage._px_prev_close")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return 0.0
 
 
@@ -262,6 +269,7 @@ def on_bar(context, bars):
             if cd and op > 0 and t >= BUY_AT:
                 context._opens.setdefault(cd, op)
         except Exception:
+            _swallow("exec.probe_slippage.on_bar")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
 
     st = context._st

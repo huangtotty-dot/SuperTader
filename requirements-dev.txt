@@ -1,0 +1,12 @@
+# 开发/测试工具依赖（先装 requirements.txt）
+# 用途：本地跑测试与代码风格；生产链路不需要
+# 注：托管 Python 无 pytest，仓内统一 python -m unittest（见 AGENTS.md）；
+#     pytest 三件套仅为兼容 pytest 风格旧测试文件而保留
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+black>=23.0
+pylint>=2.15.0
+mypy>=0.990
+isort>=5.11.0
+flake8>=5.0.0

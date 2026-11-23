@@ -14,6 +14,11 @@ import json
 import os
 import re
 import subprocess
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 _TERM_PROC = "gmterm-serv.exe"
 _TOKEN_RE = re.compile(r"--token=([0-9a-fA-F]{32,64})")
@@ -33,9 +38,10 @@ def _terminal_token():
                 if p.info["name"] and p.info["name"].lower() == _TERM_PROC and p.info["cmdline"]:
                     return _parse_token(" ".join(p.info["cmdline"]))
             except Exception:
+                _swallow("exec.utils.gm_token._terminal_token")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
     except ImportError:
-        pass
+        _swallow("exec.utils.gm_token._terminal_token")  # 原静默吞点：计数化（P1-6 三批），行为等价
     # wmic（Windows 内置，可能已弃用但通用）
     try:
         out = subprocess.run(
@@ -46,7 +52,7 @@ def _terminal_token():
             if t:
                 return t
     except Exception:
-        pass
+        _swallow("exec.utils.gm_token._terminal_token")  # 原静默吞点：计数化（P1-6 三批），行为等价
     # PowerShell 兜底
     try:
         out = subprocess.run(
@@ -58,7 +64,7 @@ def _terminal_token():
             if t:
                 return t
     except Exception:
-        pass
+        _swallow("exec.utils.gm_token._terminal_token")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return None
 
 
@@ -69,6 +75,7 @@ def _config_token():
             "t_io", "state", "gm_config.json")
         return json.load(open(cfg, encoding="utf-8")).get("token")
     except Exception:
+        _swallow("exec.utils.gm_token._config_token")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 

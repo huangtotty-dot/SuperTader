@@ -41,8 +41,9 @@ from core.signal_gates import (
 )
 from core.total_equity import _compute_total_equity
 from core.eod_review import (
-    _maybe_record_daily_pnl, _maybe_run_chart_prefetch,
+    _maybe_flush_diag_metrics, _maybe_record_daily_pnl, _maybe_run_chart_prefetch,
     _maybe_run_daily_review, _maybe_run_freshness_patrol,
+    _maybe_run_retention_patrol,
 )
 from core.eod_tasks import _maybe_run_sentiment_eod, _maybe_run_tdx_calibrate
 from core.position_scan import _maybe_run_position_builder, _maybe_run_position_builder_intraday
@@ -91,10 +92,14 @@ def scan_once(engine):
             _maybe_run_position_builder(now)           # 15:05-15:15 建仓信号扫描（每日一次）
         with _ScanStage("⑥每日复盘"):
             _maybe_run_daily_review(now)               # P0-7(2026-09-01): 15:10 后自动每日复盘（子进程隔离）
+        with _ScanStage("⑥b诊断指标落盘"):
+            _maybe_flush_diag_metrics(now)             # 2026-11-23: 15:10 后本进程吞点计数 → metrics.jsonl
         with _ScanStage("⑦K线预下载"):
             _maybe_run_chart_prefetch(now)             # 2026-10-04: 15:10 后 K线缓存预下载（与 gui 幂等）
         with _ScanStage("⑧新鲜度巡检"):
             _maybe_run_freshness_patrol(now)           # 2026-10-12: 15:40 后产物新鲜度巡检 → 飞书（零网络）
+        with _ScanStage("⑧b保留策略巡检"):
+            _maybe_run_retention_patrol(now)           # 2026-11-23: 周六 15:50 后 t_io 保留巡检 dry-run → 飞书（周报，--apply 永远人工）
         with _ScanStage("⑨热度EOD"):
             _maybe_run_sentiment_eod(now)              # 2026-10-19: 15:30 后当日 EOD 落库（跨日 S 图当天更新）
         with _ScanStage("⑩通达信日线校准"):

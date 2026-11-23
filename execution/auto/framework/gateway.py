@@ -27,6 +27,11 @@ from __future__ import annotations
 import inspect
 from datetime import datetime
 from functools import partial
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 
 class GmGateway(object):
@@ -104,7 +109,7 @@ class GmGateway(object):
                 if _op > 0:
                     return _op
         except Exception:
-            pass
+            _swallow("exec.framework.gateway.get_open_price")  # 原静默吞点：计数化（P1-6 三批），行为等价
         try:
             _his = self.sv.sdk_call("%s_open_bar" % self.strategy_id, partial(
                 gm.history_n, symbol=sym, frequency="60s", count=8,
@@ -119,7 +124,7 @@ class GmGateway(object):
                 if _eob[:10] == _today and _op > 0:
                     return _op
         except Exception:
-            pass
+            _swallow("exec.framework.gateway.get_open_price")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
     # ── 归属硬锁（新增，2026-10-12）────────────────────────────
@@ -140,14 +145,14 @@ class GmGateway(object):
             if self.sv.risk:
                 self.sv.risk(str(now), "strategy_lock_conflict", det, code=str(code))
         except Exception:
-            pass
+            _swallow("exec.framework.gateway._report_lock")  # 原静默吞点：计数化（P1-6 三批），行为等价
         try:
             if self.sv.audit:
                 self.sv.audit({"event": "strategy_lock_conflict", "strategy": self.strategy_id,
                                "code": str(code), "side": "BUY", "qty": int(qty or 0),
                                "price": float(px or 0), "reason": why, "time": str(now)})
         except Exception:
-            pass
+            _swallow("exec.framework.gateway._report_lock")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     def _get_orders_for_symbol(self, code: str, desc: str):
         """读取并**强制按 symbol 过滤**当日委托。
@@ -172,6 +177,7 @@ class GmGateway(object):
                 if str(osym or "") == str(sym):
                     out.append(od)
             except Exception:
+                _swallow("exec.framework.gateway._get_orders_for_symbol")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
         return out
 
@@ -318,6 +324,7 @@ class GmGateway(object):
                         "filled_qty": 0, "filled_price": None,
                         "message": "status=%s" % _st}
             except Exception:
+                _swallow("exec.framework.gateway.poll_order")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
         return {"order_id": order_id, "status": "submitted", "raw_status": None,
                 "filled_qty": 0, "filled_price": None, "message": "order_not_found"}
@@ -335,6 +342,7 @@ class GmGateway(object):
         try:
             _orders = self._get_orders_for_symbol(code, "get_orders_find")
         except Exception:
+            _swallow("exec.framework.gateway._find_order_record")  # 原静默吞点：计数化（P1-6 三批），行为等价
             return None
         for _od in (_orders if isinstance(_orders, list) else [_orders]):
             if not isinstance(_od, dict):
@@ -350,6 +358,7 @@ class GmGateway(object):
         try:
             _orders = self._get_orders_for_symbol(code, "get_orders_resolve")
         except Exception:
+            _swallow("exec.framework.gateway._resolve_open_buy_order_id")  # 原静默吞点：计数化（P1-6 三批），行为等价
             return None, "resolve_error"
         # 终态不继承历史 reject_statuses（其中曾误含 6）；5/8/12 与 3 才可清，6 始终在途。
         terminal = {3, 4, 5, 8, 12}
@@ -368,6 +377,7 @@ class GmGateway(object):
                            else getattr(_od, "order_id", None)))
                 cands.append(_id)
             except Exception:
+                _swallow("exec.framework.gateway._resolve_open_buy_order_id")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
         if not cands:
             return None, "no_open_order"           # 已成交/已拒/已撤 ⇒ 不在途
@@ -427,6 +437,7 @@ class GmGateway(object):
                                       "account_id": _od.get("account_id") or ""})
             _rep = self.sv.sdk_call("%s_cancel" % self.strategy_id, _call)
         except Exception as _e:
+            _swallow("exec.framework.gateway.cancel_order", _e)  # 原静默吞点：计数化（P1-6 三批），行为等价
             return {"ok": False, "order_id": order_id,
                     "message": "%s: %s" % (type(_e).__name__, str(_e)[:80])}
         # 掘金撤单同步返回形态未定：列表/字典/对象都容忍，取到"有没有明确失败"即可；

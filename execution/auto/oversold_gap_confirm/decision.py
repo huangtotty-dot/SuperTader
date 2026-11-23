@@ -29,6 +29,11 @@ from collections import Counter
 from typing import Mapping, Sequence
 
 import numpy as np
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # ── 信号常量（冻结）──
 MIN_POOL = 3                # 有效候选下限，低于则 fail-closed 不下单
@@ -44,6 +49,7 @@ def _valid(x) -> bool:
     try:
         v = float(x)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.decision._valid")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False
     return bool(np.isfinite(v) and v > 0)
 
@@ -53,6 +59,7 @@ def _num(x):
     try:
         v = float(x)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.decision._num")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     return v if np.isfinite(v) else None
 
@@ -64,6 +71,7 @@ def _bar_field(bar, key: str):
     try:
         return float(v)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.decision._bar_field")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return float('nan')
 
 
@@ -154,7 +162,7 @@ def evaluate(prev_close: Mapping[str, float],
             gates['g3'] += int(_g3)
             gates['all'] += int(_weak and _g1 and _g2 and _g3)
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.decision.evaluate")  # 原静默吞点：计数化（P1-6 三批），行为等价
         ok, why, gap = signal_ok(pc_f, ma_f, bar)
         if not ok:
             reasons[why] += 1
@@ -166,7 +174,7 @@ def evaluate(prev_close: Mapping[str, float],
                         near.sort(key=lambda n: -n['gap'])
                         del near[NEAR_K:]
             except Exception:
-                pass
+                _swallow("exec.oversold_gap_confirm.decision.evaluate")  # 原静默吞点：计数化（P1-6 三批），行为等价
             try:
                 if len(failures) < _FAIL_K:
                     failures.append({'code': str(code), 'board': str(board.get(code) or ''),
@@ -178,7 +186,7 @@ def evaluate(prev_close: Mapping[str, float],
                                      'vwap': _num(_vwap), 'prev_close': pc_f,
                                      'ma20': _num(ma_f)})
             except Exception:
-                pass
+                _swallow("exec.oversold_gap_confirm.decision.evaluate")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
         b = str(board.get(code) or '')
         if allow is not None and b not in allow:
@@ -202,7 +210,7 @@ def evaluate(prev_close: Mapping[str, float],
                              'gates': None, 'low': None, 'close': None,
                              'vwap': None, 'prev_close': float(pc), 'ma20': None})
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.decision.evaluate")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     signals.sort(key=lambda s: (-(s['gap'] if np.isfinite(s['gap']) else -1e9), s['code']))
     tradable = [s for s in signals if s['decision'] == TRADE]

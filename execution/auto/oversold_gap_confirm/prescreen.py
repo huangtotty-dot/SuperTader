@@ -30,6 +30,11 @@ from __future__ import annotations
 
 import json
 import os
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # 仓库根：本文件在 execution/auto/oversold_gap_confirm/ ⇒ 上溯 3 层
 _ROOT = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
@@ -68,6 +73,7 @@ def sym2board_map() -> dict:
         with open(_WL_FP, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception:
+        _swallow("exec.oversold_gap_confirm.prescreen.sym2board_map")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {}
     m = {}
     for code, info in (data.items() if isinstance(data, dict) else []):
@@ -116,6 +122,7 @@ def full_market_meta() -> dict:
                     continue                                  # ST / 退市整理
                 out[code] = {"name": name, "sw": sw}
     except Exception:
+        _swallow("exec.oversold_gap_confirm.prescreen.full_market_meta")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {}
     return out
 
@@ -209,7 +216,7 @@ def premarket_candidates(top_n: int, date: str = None, provider=None,
         try:
             frames.update(provider.daily_many(codes[i:i + _BATCH], days=_DAYS) or {})
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.prescreen.premarket_candidates")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     # ① 前一日大涨家数 → 板块排名（复用各票 past 收盘序列）
     lu = Counter()
@@ -222,6 +229,7 @@ def premarket_candidates(top_n: int, date: str = None, provider=None,
             dates = fr["date"].astype(str)
             closes = fr["close"].astype(float)
         except Exception:
+            _swallow("exec.oversold_gap_confirm.prescreen.premarket_candidates")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
         # 昨收口径：取 date < 今日（盘中 forming bar 不参与）的最后一根完整日线收盘
         if date:
@@ -276,6 +284,7 @@ def ten_am_bars(codes, now, fetch_fn) -> dict:
     try:
         raw = fetch_fn(list(codes), now)
     except Exception:
+        _swallow("exec.oversold_gap_confirm.prescreen.ten_am_bars")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {}
     for c in list(codes):
         try:
@@ -290,6 +299,7 @@ def ten_am_bars(codes, now, fetch_fn) -> dict:
                 continue
             out[c] = {"low": low, "close": close, "amount": amount, "volume": volume}
         except Exception:
+            _swallow("exec.oversold_gap_confirm.prescreen.ten_am_bars")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
     return out
 

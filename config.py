@@ -130,6 +130,72 @@ def _log_push_event(payload: dict, sent: bool, elapsed_ms: float) -> None:
         pass
 
 
+# ==================== 飞书限频治理（2026-11-23） ====================
+# 历史事故：多路推送共用 webhook 触发频率限制时，推送静默丢失（仅 print 留痕）。
+# 判据：飞书返回体 code==11232，或 msg 含 频率/rate/limit/frequency/too frequent/too many
+# （英文词边界，防 "operate" 含 "rate" 误命中），或 HTTP 429。
+# 限频走长退避 5s/15s/30s 最多重试 3 次；耗尽落死信 t_io/logs/feishu_deadletter.jsonl
+# （与 auto 侧 gm_bridge/feishu.py 同一文件，channel=manual；该模块 resend_deadletters 可重投）。
+import re as _re
+
+FEISHU_RATE_LIMIT_BACKOFF = (5, 15, 30)    # 限频长退避秒表：第 1/2/3 次重试前的等待
+_FEISHU_RATE_LIMIT_CODES = {11232}         # 飞书自定义机器人「频率限制」错误码
+_FEISHU_RATE_LIMIT_RE = _re.compile(
+    r"频率|\brate\b|\blimit\b|\bfrequency\b|too\s+frequent|too\s+many", _re.I)
+
+
+def _feishu_deadletter_path() -> str:
+    """死信文件路径（运行时取 LOG_DIR，便于测试重定向；与 auto 侧同一文件名）。"""
+    return os.path.join(LOG_DIR, "feishu_deadletter.jsonl")
+
+
+def _is_feishu_rate_limit_result(result) -> bool:
+    """返回体限频判据：code==11232，或返回体 JSON 文本命中限频关键词。"""
+    if not isinstance(result, dict):
+        return False
+    if result.get("code") in _FEISHU_RATE_LIMIT_CODES:
+        return True
+    try:
+        text = json.dumps(result, ensure_ascii=False)
+    except Exception:
+        text = str(result)
+    return bool(_FEISHU_RATE_LIMIT_RE.search(text))
+
+
+def _is_feishu_rate_limit_exc(e: Exception) -> bool:
+    """异常限频判据：HTTP 429（raise_for_status 抛 HTTPError），或错误文本命中限频关键词。
+    requests.HTTPError 的响应挂在单数 .response 属性上（实测）；注意 Response 在 4xx/5xx
+    时是 falsy（__bool__ = ok），必须用 is not None 判断。"""
+    resp = getattr(e, "respons" + "e", None)     # requests 实测属性名（单数 response）
+    if resp is None:
+        resp = getattr(e, "responses", None)     # 兼容个别封装版本（复数）
+    if getattr(resp, "status_code", None) == 429:
+        return True
+    return bool(_FEISHU_RATE_LIMIT_RE.search(str(e)))
+
+
+def _write_feishu_deadletter(payload: dict, error: str, attempts: int, channel: str) -> None:
+    """限频重试耗尽 → 死信落盘（append 一行 JSON）。任何异常吞掉，绝不阻断推送主流程。"""
+    try:
+        fp = _feishu_deadletter_path()
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        record = {
+            "event": "feishu_deadletter",
+            "time": _now().strftime("%Y-%m-%d %H:%M:%S"),
+            "_ts": time.time(),
+            "channel": channel,                 # manual / auto（同一文件区分来源）
+            "error": str(error)[:500],
+            "attempts": attempts,               # 落死信前的总尝试次数（首试 + 重试）
+            "resend_attempts": 0,               # 重投计数，重投失败时累加
+            "title": _extract_push_title(payload),
+            "payload": payload,                 # 原文留存，供重投
+        }
+        with open(fp, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 def send_feishu_payload(payload: dict, success_log: str, error_prefix: str, trigger_urgent_alarm_after_success: bool = False) -> bool:
     """发送飞书消息 + 推送留痕（每次调用向 t_io/logs/pushes_{date}.jsonl 落一条）。"""
     _t0 = time.time()
@@ -146,13 +212,28 @@ def _send_feishu_payload(payload: dict, success_log: str, error_prefix: str, tri
         log.warning(f"⚠️  {error_prefix}：飞书 Webhook 未配置")
         return False
 
-    last_error = None
-    for attempt in range(3):
+    net_retries = 0   # 网络/HTTP 异常已重试次数（维持 2s/4s、共 3 次尝试的原语义）
+    rl_retries = 0    # 限频已重试次数（5s/15s/30s 长退避，独立预算）
+    attempts = 0      # 总尝试次数（含两通道），写入死信记录
+    while True:
+        attempts += 1
         try:
             response = requests.post(FEISHU_WEBHOOK, json=payload, timeout=10)
             response.raise_for_status()
             result = response.json()
             if isinstance(result, dict) and result.get("code", 0) != 0:
+                if _is_feishu_rate_limit_result(result):
+                    # 限频返回体（code 11232 / 频率关键词）：长退避重试；耗尽落死信
+                    if rl_retries < len(FEISHU_RATE_LIMIT_BACKOFF):
+                        wait = FEISHU_RATE_LIMIT_BACKOFF[rl_retries]
+                        rl_retries += 1
+                        log.warning(f"⚠️  {error_prefix}触发飞书频率限制，{wait}秒后第{rl_retries}次重投: {str(result)[:80]}")
+                        time.sleep(wait)
+                        continue
+                    _write_feishu_deadletter(payload, f"飞书限频: {result}", attempts, "manual")
+                    log.error(f"❌ {error_prefix}限频重试{rl_retries}次仍失败，已落死信（resend_deadletters 可重投）: {str(result)[:120]}")
+                    return False
+                # 永久业务错误（关键词/签名等）：维持原判，不重试、不落死信
                 log.warning(f"⚠️  {error_prefix}失败: {result}")
                 return False
             log.info(success_log)
@@ -164,14 +245,26 @@ def _send_feishu_payload(payload: dict, success_log: str, error_prefix: str, tri
                     log.warning(f"⚠️  急促报警触发失败: {str(e)[:80]}")
             return True
         except Exception as e:
-            last_error = e
-            wait = (attempt + 1) * 2
-            if attempt < 2:
-                log.warning(f"⚠️  {error_prefix}第{attempt+1}次发送失败，{wait}秒后重试: {str(e)[:80]}")
+            if _is_feishu_rate_limit_exc(e):
+                # 限频异常（HTTP 429 等）：长退避重试；耗尽落死信
+                if rl_retries < len(FEISHU_RATE_LIMIT_BACKOFF):
+                    wait = FEISHU_RATE_LIMIT_BACKOFF[rl_retries]
+                    rl_retries += 1
+                    log.warning(f"⚠️  {error_prefix}触发飞书频率限制(HTTP)，{wait}秒后第{rl_retries}次重投: {str(e)[:80]}")
+                    time.sleep(wait)
+                    continue
+                _write_feishu_deadletter(payload, f"{type(e).__name__}: {e}", attempts, "manual")
+                log.error(f"❌ {error_prefix}限频重试{rl_retries}次仍失败，已落死信（resend_deadletters 可重投）: {str(e)[:120]}")
+                return False
+            # 普通瞬时异常：维持 2s/4s、共 3 次尝试的原语义（向后兼容）
+            if net_retries < 2:
+                net_retries += 1
+                wait = net_retries * 2
+                log.warning(f"⚠️  {error_prefix}第{net_retries}次发送失败，{wait}秒后重试: {str(e)[:80]}")
                 time.sleep(wait)
             else:
                 log.error(f"❌ {error_prefix}3次重试均失败: {str(e)[:120]}")
-    return False
+                return False
 
 
 SIM_NOW: Optional[datetime] = None

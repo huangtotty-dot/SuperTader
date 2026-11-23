@@ -34,7 +34,7 @@ if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
-        pass
+        pass  # 刻意保留裸 pass：此处先于 _swallow 的 import 执行，计数化会 NameError（P1-6 唯一豁免点）
 
 BASE = Path(__file__).resolve().parent  # 自解析：生产机 E:\06_T 与本机仓库位置均正确（与 position_builder/config 一致）
 OUT = BASE / "t_io" / "validation" / "daily_review"
@@ -184,7 +184,7 @@ def _concept_board() -> dict:
             out[str(code)] = cats[0] if cats else ""
         _JY_BOARD_CACHE.update({"mtime": fp.stat().st_mtime, "map": out})
     except Exception:
-        pass
+        _swallow("gui._concept_board")  # 原裸 pass：计数化（P1-6），行为等价
     return _JY_BOARD_CACHE["map"]
 
 
@@ -206,7 +206,7 @@ def _concept_names() -> dict:
               for k, v in _d.items() if isinstance(v, dict) and v.get("name")}
         _JY_NAMES_CACHE.update({"mtime": _mt, "map": _m})
     except Exception:
-        pass
+        _swallow("gui._concept_names")  # 原裸 pass：计数化（P1-6），行为等价
     return _JY_NAMES_CACHE["map"]
 
 
@@ -623,6 +623,15 @@ def _limit_counts_from_ths(date, timeout=8.0, retries=1):
 _TX_INDEX_LEGS = ("sh000001", "sz399106", "bj899050")
 
 
+# 指数代码（带交易所前缀的 6 位）：上证 sh000xxx/中证 sh000xxx、深证 sz399xxx、北证 bj899xxx。
+# 只用于"取数时必须保留前缀"的判定；裸 6 位一律按个股处理。
+_INDEX_CODE_RE = re.compile(r"^(sh000|sh880|sh950|sz399|bj899)\d{3}$", re.I)
+
+
+def _is_index_code(code) -> bool:
+    return bool(_INDEX_CODE_RE.match(str(code or "").split("_")[0].strip()))
+
+
 def _tx_index_amount():
     """腾讯指数**实时快照**三腿成交额 → {code: 元}（字段 f[37]，单位万元）。
 
@@ -853,7 +862,7 @@ def _chart_trades(code):
                 _rows.sort(key=lambda r: r["ts"])
             _TRADE_LEDGER_CACHE.update({"mtime": _mt, "map": _m})
         except Exception:
-            pass
+            _swallow("gui._chart_trades")  # 原裸 pass：计数化（P1-6），行为等价
     return _TRADE_LEDGER_CACHE["map"].get(_c, [])
 
 
@@ -889,7 +898,7 @@ def _concept_roles() -> dict:
                 }
         _JY_ROLE_CACHE.update({"mtime": _mt, "map": out})
     except Exception:
-        pass
+        _swallow("gui._concept_roles")  # 原裸 pass：计数化（P1-6），行为等价
     return _JY_ROLE_CACHE["map"]
 
 
@@ -1023,6 +1032,7 @@ COND_LABELS = {
 from core import chart_analytics as _chart_analytics
 from core import scanners as _scanners
 from core.log_rotation import cap_log_file as _cap_log
+from core.diag_metrics import swallow as _swallow, set_process_tag as _diag_set_tag, flush as _diag_flush
 
 _FIB_LOOKBACK = _chart_analytics._FIB_LOOKBACK
 _FIB_FRACTAL_N = _chart_analytics._FIB_FRACTAL_N
@@ -1080,17 +1090,46 @@ def _terminate_hunter_proc():
                 try:
                     proc.kill()
                 except Exception:
-                    pass
+                    _swallow("gui._terminate_hunter_proc")  # 原裸 pass：计数化（P1-6），行为等价
         if fp is not None:
             try:
                 fp.close()
             except Exception:
-                pass
+                _swallow("gui._terminate_hunter_proc")  # 原裸 pass：计数化（P1-6），行为等价
     except Exception:
-        pass
+        _swallow("gui._terminate_hunter_proc")  # 原裸 pass：计数化（P1-6），行为等价
 
 
 _atexit.register(_terminate_hunter_proc)
+
+
+def _terminate_review_proc():
+    """GUI 退出时收掉复盘子进程（atexit 注册）。与 _terminate_hunter_proc 同款：
+    管优雅退出；GUI 横死时本函数不跑 ⇒ worker 侧父进程看门狗兜底自杀。"""
+    try:
+        with _REVIEW_PROC_LOCK:
+            proc, fp = _REVIEW_PROC.get("proc"), _REVIEW_PROC.get("log_fp")
+            _REVIEW_PROC["proc"] = None
+            _REVIEW_PROC["log_fp"] = None
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=3)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    _swallow("gui._terminate_review_proc")  # 原裸 pass：计数化（P1-6），行为等价
+        if fp is not None:
+            try:
+                fp.close()
+            except Exception:
+                _swallow("gui._terminate_review_proc")  # 原裸 pass：计数化（P1-6），行为等价
+    except Exception:
+        _swallow("gui._terminate_review_proc")  # 原裸 pass：计数化（P1-6），行为等价
+
+
+_atexit.register(_terminate_review_proc)
 # 2026-10-10: 原「开盘后每小时自动跑」定时器已删除（owner 需求6，扫描一律按钮触发）。
 _CHART_PREFETCH_STATE = {"started": False}  # 盘后 K线预下载调度（2026-10-04）
 # 主线程(js_api)心跳：高频轮询方法每次更新；看门狗发现停跳 ⇒ 判界面卡死并落线程栈（2026-10-08）
@@ -1117,7 +1156,7 @@ def _eval_js_guarded(win, script, tag="", timeout=3.0):
             win.evaluate_js(script)
             res["ok"] = True
         except Exception:
-            pass
+            _swallow("gui._run")  # 原裸 pass：计数化（P1-6），行为等价
         finally:
             _EVAL_GUARD["busy"] = False
 
@@ -1131,7 +1170,7 @@ def _eval_js_guarded(win, script, tag="", timeout=3.0):
             print(f"[WARN] evaluate_js({tag}) 超时 {timeout}s —— 渲染进程疑似僵死"
                   f"（连续 {_EVAL_GUARD['fail']} 次）", flush=True)
         except Exception:
-            pass
+            _swallow("gui._run")  # 原裸 pass：计数化（P1-6），行为等价
         return False
     if res["ok"]:
         _EVAL_GUARD["fail"] = 0
@@ -1203,8 +1242,22 @@ _HUNTER_CONF_CACHE = {}
 _SUSTAIN_UPS_MIN = 5
 _SUSTAIN_NET_MIN = 5
 _ROTATION_CACHE_MEM = {}
-# 2026-08-23: 每日大盘复盘（LLM）后台线程状态
+# 2026-08-23: 每日大盘复盘（LLM）运行状态；2026-11-23 起改**子进程**执行
+# （core/review_worker.py，骨架公共件 core/subprocess_job.py）——此前在同进程后台
+# 线程跑：LLM 网络挂死会长期占着 GUI 线程池，且数据收集+流式生成 1~10min 全程与
+# GUI 抢同一个 GIL。子进程挂死至多占住自己：monitor 带硬超时强杀；流式文本经
+# t_io/state/review_run_status.json 回传、结果经 review_run_result.json 回收，
+# 前端契约（run_daily_review / daily_review_progress 两端点、三字段
+# running/error/output）零改动。
 _REVIEW_RUN_STATE = {"running": False, "error": None}
+_REVIEW_PROC_LOCK = _th.Lock()
+_REVIEW_PROC = {"proc": None, "log_fp": None}
+_REVIEW_STATUS_FP = STATE_DIR / "review_run_status.json"
+_REVIEW_RESULT_FP = STATE_DIR / "review_run_result.json"
+_REVIEW_WORKER = BASE / "core" / "review_worker.py"
+# 复盘硬超时（权威在父侧 monitor，子进程不自定时，避免双侧计时口径漂移）：
+# 正常 1~10min（数据收集 ~1min + LLM 生成 1~8min），推理模型长思考给到 30min 上限。
+_REVIEW_TIMEOUT_SEC = 1800
 # 2026-10-10: 自动盘盈亏账单缓存（load_auto_pnl；纯磁盘读，30s TTL 足够）
 # 2026-11-22 P1-3：+ running 单飞闸（TTL 到期有旧值 ⇒ 立返旧值 + 后台重算，不再压调用线程）
 _AUTO_PNL_CACHE = {"ts": 0.0, "date": None, "data": None, "running": False}
@@ -1241,7 +1294,7 @@ def _read_auto_fills():
             except Exception:
                 continue
     except Exception:
-        pass
+        _swallow("gui._read_auto_fills")  # 原裸 pass：计数化（P1-6），行为等价
     fills.sort(key=lambda e: (str(e.get("time") or ""), float(e.get("_ts") or 0)))
     return fills
 
@@ -1255,7 +1308,7 @@ def _daily_last_close(code):
         if rows:
             return float(rows[-1].get("close") or 0)
     except Exception:
-        pass
+        _swallow("gui._daily_last_close")  # 原裸 pass：计数化（P1-6），行为等价
     return 0.0
 
 
@@ -1366,7 +1419,7 @@ def _concept_all_concept_descs():
                 if k and v and k not in out:
                     out[str(k)] = str(v)
     except Exception:
-        pass
+        _swallow("gui._concept_all_concept_descs")  # 原裸 pass：计数化（P1-6），行为等价
     return out
 
 
@@ -1432,7 +1485,7 @@ def _concept_tag_verdicts():
                         break
             out[str(code)] = [v, reason]
     except Exception:
-        pass
+        _swallow("gui._concept_tag_verdicts")  # 原裸 pass：计数化（P1-6），行为等价
     return out
 
 
@@ -1469,7 +1522,7 @@ def _concept_all_concept_reasons():
                 if v:
                     out.setdefault(k, []).append([nm, v, str(info.get("tag_verdict") or "")])
     except Exception:
-        pass
+        _swallow("gui._concept_all_concept_reasons")  # 原裸 pass：计数化（P1-6），行为等价
     return out
 
 
@@ -1708,7 +1761,7 @@ def _tail_decision_rows(fp, chunk_bytes=524288):
         if n_hold >= 20:                      # 尾块已足够复现「最后 20 条 HOLD」⇒ 与全量读等价
             return rows
     except Exception:
-        pass
+        _swallow("gui._tail_decision_rows")  # 原裸 pass：计数化（P1-6），行为等价
     # 回退：全量读（仅早盘/异常时触发）
     try:
         with open(fp, encoding="utf-8") as f:
@@ -1865,6 +1918,7 @@ def _em_neg_store(key):
 # 任何网络调用都会冻界面 ⇒ 该层**只读磁盘/内存缓存**（零网络），由后台按 30 分钟时段预热。
 _M30_OB_ENABLED = True                                 # 回滚开关：False ⇒ 体检表退回日线口径
 _OB_M30_STATE: dict = {}                               # 刷新守护线程幂等标记 {"started": bool}
+_DIAG_REPORTER_STATE: dict = {}                        # 吞点计数落盘线程幂等标记 {"started": bool}（P1-6）
 # 磁盘预热单飞（2026-10-18）：OB 表发现当前 slot 未热时按需补算（零网络）。
 # 背景：`start_ob_m30_refresher` 的**在线**刷新已改成只在交易时段跑；周末/盘后 slot 每 30 分钟
 # 变一次而没人填充 ⇒ 体检表「30min 判定」永远停在「计算中」（owner 截图 2026-10-18）。
@@ -1905,7 +1959,7 @@ _BEACON_LOCK = threading.Lock()
 # 深递归（200~400KB，慢日志 13,785 次 avg 1.8s）。按指纹键（骨架ts/重列ts/tags ts/
 # 30min 时段/结构&m30 缓存预热进度）记忆化：指纹没变直接回上次组包结果。
 # ver = 指纹摘要，供前端版本握手（传 client_ver 且未变 ⇒ 只回 {"unchanged": true}）。
-_BEACON_PKG: dict = {"ver": None, "payload": None}
+_BEACON_PKG: dict = {"ver": None, "payload": None, "key": None, "ts": 0.0}
 _BEACON_PKG_LOCK = threading.Lock()
 # 成分股 涨幅/成交额 的 mtime 缓存（见 load_market_beacon 内 _daily_stats 的注释）
 _BEACON_STATS: dict = {}
@@ -2487,7 +2541,7 @@ def _fetch_min_bars_disk(ts_code, freq):
         if fresh is not None and not fresh.empty:
             return fresh
     except Exception:
-        pass
+        _swallow("gui._fetch_min_bars_disk")  # 原裸 pass：计数化（P1-6），行为等价
     best, best_last = pd.DataFrame(), ""
     for name in (f"{ts_code}_{freq}_d540.json", f"{ts_code}_{freq}.json"):
         fp = _MIN_BARS_DIR / name
@@ -2649,7 +2703,7 @@ def _min_bars_deep_base(code, freq="5min", allow_topup=True):
                     # cap 按 chart_cache._MIN_SAVE_CAP 分档（5min 3600），深度留得住
                     _cc.save_minute_history(ts_code, freq, base)
                 except Exception:
-                    pass
+                    _swallow("gui._min_bars_deep_base")  # 原裸 pass：计数化（P1-6），行为等价
     if base is None:
         base = pd.DataFrame()
     # ⚠️ **单位归一（2026-10-21）**：磁盘/tushare 的分钟成交量是**股**，而腾讯尾与本仓日线
@@ -2839,7 +2893,7 @@ def _focus_load() -> dict:
         if isinstance(d, dict) and isinstance(d.get("codes"), dict):
             return d
     except Exception:
-        pass
+        _swallow("gui._focus_load")  # 原裸 pass：计数化（P1-6），行为等价
     return {"codes": {}}
 
 
@@ -2851,7 +2905,7 @@ def _focus_save(d: dict) -> None:
         tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
         os.replace(tmp, _FOCUS_FP)
     except Exception:
-        pass
+        _swallow("gui._focus_save")  # 原裸 pass：计数化（P1-6），行为等价
 
 
 # ---- 选股猎手「手动标红加粗」标记（2026-11-09 owner）：t_io/state/hunter_red_marks.json ----
@@ -2870,7 +2924,7 @@ def _redmark_load() -> dict:
         if isinstance(d, dict) and isinstance(d.get("codes"), list):
             return d
     except Exception:
-        pass
+        _swallow("gui._redmark_load")  # 原裸 pass：计数化（P1-6），行为等价
     return {"codes": []}
 
 
@@ -2882,7 +2936,7 @@ def _redmark_save(d: dict) -> None:
         tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
         os.replace(tmp, _REDMARK_FP)
     except Exception:
-        pass
+        _swallow("gui._redmark_save")  # 原裸 pass：计数化（P1-6），行为等价
 
 
 # ---- 周线 MACD 柱子翻红 → 自动标重点关注（2026-10-31 owner）----
@@ -2913,7 +2967,7 @@ def _wm_save_state(d: dict) -> None:
         tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
         os.replace(tmp, _WM_STATE_FP)
     except Exception:
-        pass
+        _swallow("gui._wm_save_state")  # 原裸 pass：计数化（P1-6），行为等价
 
 
 _WM_LAST = _wm_load_state()
@@ -3219,7 +3273,7 @@ def _snapshot_write(key, payload):
             tmp.write_text(blob, encoding="utf-8")
             tmp.replace(fp)
     except Exception:
-        pass
+        _swallow("gui._snapshot_write")  # 原裸 pass：计数化（P1-6），行为等价
 
 
 # ── 沪深逐日成交额「冻结」缓存（2026-10-16）────────────────────────────────
@@ -3257,7 +3311,7 @@ def _save_hs_daily_cache(days: dict) -> None:
             tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
             tmp.replace(_HS_DAILY_CACHE_FP)
     except Exception:
-        pass
+        _swallow("gui._save_hs_daily_cache")  # 原裸 pass：计数化（P1-6），行为等价
 
 
 def _kick_overview_refresh(key, fn):
@@ -3277,7 +3331,7 @@ def _kick_overview_refresh(key, fn):
         try:
             fn()
         except Exception:
-            pass
+            _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
         finally:
             with _OVERVIEW_INFLIGHT_LOCK:
                 _OVERVIEW_INFLIGHT.pop(key, None)
@@ -3352,7 +3406,7 @@ def _em_boards_disk_cached(api, code) -> list:
             tmp.write_text(json.dumps(disk, ensure_ascii=False), encoding="utf-8")
             tmp.replace(_EM_BOARDS_DISK_FP)
         except Exception:
-            pass
+            _swallow("gui._em_boards_disk_cached")  # 原裸 pass：计数化（P1-6），行为等价
     return boards
 
 
@@ -3488,7 +3542,7 @@ def _tags_ttl_now() -> float:
         if hm >= "15:00" or hm < "09:15":
             return 6 * 3600.0
     except Exception:
-        pass
+        _swallow("gui._tags_ttl_now")  # 原裸 pass：计数化（P1-6），行为等价
     return _TAGS_TTL
 # 单只标签的**跨批次**缓存（2026-10-18）：批量缓存按「代码集合指纹」存，猎手(offline=True)/
 # 风向标(288 只代表股)/建仓表 的集合各不相同 ⇒ 同一只票会被重复算（每只 ~300ms 的 pandas：
@@ -3589,7 +3643,7 @@ def _market_latest_date():
             if rows:
                 return str(rows[-1].get("date"))[:10]
         except Exception:
-            pass
+            _swallow("gui._market_latest_date")  # 原裸 pass：计数化（P1-6），行为等价
     return datetime.now().strftime("%Y-%m-%d")
 
 
@@ -3676,7 +3730,7 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
                     with _MA365_LOCK:
                         _MA365_STATE["done"] = done
     except Exception:
-        pass
+        _swallow("gui._compute_ma365_breadth")  # 原裸 pass：计数化（P1-6），行为等价
 
     def _to_series(cnt, keep):
         out = []
@@ -3698,7 +3752,7 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
         tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
         tmp.replace(_MA365_CACHE_FP)
     except Exception:
-        pass
+        _swallow("gui._compute_ma365_breadth")  # 原裸 pass：计数化（P1-6），行为等价
     with _MA365_LOCK:
         _MA365_STATE["done"] = total
     return rec
@@ -3964,7 +4018,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
                 with _SECTOR_MA_LOCK:
                     _SECTOR_MA_STATE["done"] = done
     except Exception:
-        pass
+        _swallow("gui._compute_sector_ma_breadth")  # 原裸 pass：计数化（P1-6），行为等价
 
     sectors = []
     for sec, per in counts.items():
@@ -3992,7 +4046,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
             tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
             tmp.replace(_SECTOR_MA_CACHE_FP)
         except Exception:
-            pass
+            _swallow("gui._one")  # 原裸 pass：计数化（P1-6），行为等价
     with _SECTOR_MA_LOCK:
         _SECTOR_MA_STATE["done"] = total
     return rec
@@ -4099,7 +4153,7 @@ class Api:
             try:
                 out[key] = fn()
             except Exception:
-                pass
+                _swallow("gui._init_marks_payload")  # 原裸 pass：计数化（P1-6），行为等价
         return out
 
     def load_day(self, date=None):
@@ -4448,7 +4502,7 @@ class Api:
                         prev += float(byd.get(prev_day) or 0)   # 昨日也要加北交所，否则同比偏大
                     bse_included = True
         except Exception:
-            pass
+            _swallow("gui._turnover_daily_fallback")  # 原裸 pass：计数化（P1-6），行为等价
         if not bse_included:
             degraded.append("bse_turnover")
 
@@ -5464,7 +5518,7 @@ class Api:
                 with _MA365_LOCK:
                     _MA365_MEM.update({"ts": _time_mod.time(), "val": val})
             except Exception:
-                pass
+                _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
             finally:
                 with _MA365_LOCK:
                     _MA365_STATE["running"] = False
@@ -5480,22 +5534,27 @@ class Api:
         """
         return {"t": _time_mod.time()}
 
-    def report_client_diag(self, kind, value, note=""):
-        """前端上报的**客户端侧**诊断（2026-10-10）→ `t_io/logs/gui_client_diag.log`。
+    def report_client_diag(self, kind, value, note="", tab="", rid=""):
+        """前端上报的**客户端侧**诊断（2026-10-10）→ `t_io/logs/gui_client_diag.jsonl`。
 
-        kind: "jsblock"（JS 主线程阻塞 ms）| "ping"（空端点往返 ms）
+        kind: "jsblock"（JS 主线程阻塞 ms）| "ping"（空端点往返 ms）| "api_timeout" 等
         value: 毫秒数
-        与 `report_slow_call` 分开写，避免污染那份"慢调用"记录。失败静默。
+        2026-11-23（P2-3）：改 JSONL（每行一个 JSON），加 tab（哪个页面）+ rid（哪次调用链），
+        与 gui_slow_calls.jsonl 同构（ts/tab/ms/rid 键对齐）⇒ 归因从"什么慢"到"在哪、哪次链上慢"。
+        tab/rid 为可选尾参——旧前端（未刷新页面）按 3 参调用照常工作。失败静默。
         """
         try:
-            log_fp = BASE / "t_io" / "logs" / "gui_client_diag.log"
+            log_fp = BASE / "t_io" / "logs" / "gui_client_diag.jsonl"
             log_fp.parent.mkdir(parents=True, exist_ok=True)
             _cap_log(log_fp)
+            rec = {"ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                   "tab": str(tab)[:24], "kind": str(kind)[:16],
+                   "ms": round(float(value), 1), "note": str(note)[:80],
+                   "rid": str(rid)[:24]}
             with open(log_fp, "a", encoding="utf-8") as f:
-                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
-                        f"{str(kind)[:16]:<10} {float(value):9.0f}ms  {str(note)[:80]}\n")
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         except Exception:
-            pass
+            _swallow("gui.report_client_diag")
         return {"ok": True}
 
     def dump_threads(self, tag=""):
@@ -5515,20 +5574,25 @@ class Api:
                         f" tag={str(tag)[:60]} 活线程={_th.active_count()} =====\n")
                 faulthandler.dump_traceback(file=f, all_threads=True)
         except Exception:
-            pass
+            _swallow("gui.dump_threads")  # 原裸 pass：计数化（P1-6），行为等价
         return {"ok": True}
 
-    def report_slow_call(self, name, ms):
-        """前端上报的慢 js_api 调用（>=800ms）→ 追加到 `t_io/logs/gui_slow_calls.log`。
-        2026-10-07：GUI 无自身日志，卡死只能靠外部探测；这里给"卡在哪"留痕。失败静默。"""
+    def report_slow_call(self, name, ms, tab="", rid=""):
+        """前端上报的慢 js_api 调用（>=800ms）→ 追加到 `t_io/logs/gui_slow_calls.jsonl`。
+        2026-10-07：GUI 无自身日志，卡死只能靠外部探测；这里给"卡在哪"留痕。失败静默。
+        2026-11-23（P2-3）：改 JSONL，加 tab + rid（与 gui_client_diag.jsonl 键对齐，
+        同 rid 的超时/jsblock/慢调用可串链归因）。tab/rid 可选——旧前端 2 参调用照常。"""
         try:
-            log_fp = BASE / "t_io" / "logs" / "gui_slow_calls.log"
+            log_fp = BASE / "t_io" / "logs" / "gui_slow_calls.jsonl"
             log_fp.parent.mkdir(parents=True, exist_ok=True)
             _cap_log(log_fp)
+            rec = {"ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                   "tab": str(tab)[:24], "name": str(name)[:40],
+                   "ms": round(float(ms)), "rid": str(rid)[:24]}
             with open(log_fp, "a", encoding="utf-8") as f:
-                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {str(name)[:40]} {float(ms):.0f}ms\n")
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         except Exception:
-            pass
+            _swallow("gui.report_slow_call")
         return {"ok": True}
 
     def report_chart_event(self, event, detail=""):
@@ -5547,7 +5611,7 @@ class Api:
             with open(fp, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         except Exception:
-            pass
+            _swallow("gui.report_chart_event")  # 原裸 pass：计数化（P1-6），行为等价
         return {"ok": True}
 
     def load_indices(self):
@@ -5652,14 +5716,14 @@ class Api:
                     })
             out["ts"] = datetime.now().strftime("%H:%M:%S")
         except Exception:
-            pass
+            _swallow("gui._load_indices_impl")  # 原裸 pass：计数化（P1-6），行为等价
         # 大盘 regime 状态
         try:
             state = _load_json(IDX_REGIME / "state.json", {})
             out["regime"] = state.get("last_regime")
             out["days_in_regime"] = state.get("days_in_regime")
         except Exception:
-            pass
+            _swallow("gui._load_indices_impl")  # 原裸 pass：计数化（P1-6），行为等价
         clean = _clean(out)
         # 写内存 TTL + 落盘快照（2026-10-10）。**只在确实拿到行情时**落盘——空/占位不写，
         # 否则冷启动会把"空指数板"固化成快照，下次开面板秒显一个假的空态（安全契约第 3 条）。
@@ -5746,7 +5810,7 @@ class Api:
                 from core.board_index import tdx_code_for
                 code = tdx_code_for(symbol) or code
             except Exception:
-                pass
+                _swallow("gui._tdx_min_df")  # 原裸 pass：计数化（P1-6），行为等价
             code = code.split("_")[0]
             import struct
             import pandas as pd
@@ -6062,7 +6126,7 @@ class Api:
                     _cache[secid] = (_t.time(), px, pc, "em-kline")
                 return px, pc, "em-kline"
         except Exception:
-            pass
+            _swallow("gui._em_last_price")  # 原裸 pass：计数化（P1-6），行为等价
         _cache[secid] = (_t.time(), None, None, None)      # 负缓存，见函数开头注释
         return None, None, None
 
@@ -6364,7 +6428,7 @@ class Api:
         try:
             self._quotes_snaps = (_time_mod.time(), snaps or {})
         except Exception:
-            pass
+            _swallow("gui._load_quotes_build")  # 原裸 pass：计数化（P1-6），行为等价
 
         ts = datetime.now().strftime("%H:%M:%S")
         out["ts"] = ts
@@ -6552,7 +6616,7 @@ class Api:
                     continue
                 out["lines"].append(self._parse_log_line(line))
         except Exception:
-            pass
+            _swallow("gui.load_console")  # 原裸 pass：计数化（P1-6），行为等价
         return out
 
     def _ensure_daily_ctx_indicators(self, code, daily_ctx):
@@ -6596,7 +6660,7 @@ class Api:
                 else:
                     daily_ctx["daily_trend_bg"] = "range"
         except Exception:
-            pass
+            _swallow("gui._ensure_daily_ctx_indicators")  # 原裸 pass：计数化（P1-6），行为等价
 
     # ---------- 突破箱体判定（建仓+加仓共用） ----------
     def check_box_breakout(self, code):
@@ -6680,6 +6744,10 @@ class Api:
     _OB_TTL = 45.0          # 体检结果缓存新鲜期（秒）
     _BEACON_TTL = 120.0      # 风向标「重列」缓存新鲜期（秒）；未热时前端短轮询（见 load_market_beacon）
     _BEACON_SKELETON_TTL = 90.0   # 骨架缓存新鲜期（秒）；过期后台重算，先给旧值
+    # 组包最小间隔（秒）：指纹变了也别立刻重组。2026-11-23 P0-4 对账：预热期结构/m30 缓存
+    # 规模每拍都在变 ⇒ 3s 轮询 × 逐拍重组 1.2~8.5s，开盘 5 分钟把桥线程压死、连累
+    # poll_live_bundle（当日慢日志 81 次 beacon + 23 次 bundle 全部集中在 08:53~09:35）。
+    _BEACON_REPACK_MIN_INTERVAL = 10.0
 
     def load_ob_analysis(self, date=None):
         """持仓体检（SWR 包装，2026-10-10）：逐只算 KDJ/CCI/标签/30min 判定是**纯 Python 重活**
@@ -6709,7 +6777,7 @@ class Api:
                     _r = self._load_ob_analysis_impl(date)
                     self._ob_cache = (_time_mod.time(), _r)
                 except Exception:
-                    pass
+                    _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
                 finally:
                     self._ob_running = False
             _th.Thread(target=_bg, name="ob-analysis", daemon=True).start()
@@ -6733,7 +6801,7 @@ class Api:
         try:
             out.pop("ma_reclaim_pending", None)
         except Exception:
-            pass
+            _swallow("gui._ob_overlay_live")  # 原裸 pass：计数化（P1-6），行为等价
         if not stocks:
             return
         _struct_pending = False
@@ -6749,13 +6817,13 @@ class Api:
                 if _st.get("pending"):
                     _struct_pending = True
             except Exception:
-                pass
+                _swallow("gui._ob_overlay_live")  # 原裸 pass：计数化（P1-6），行为等价
             try:
                 _live = self._today_forming_bar(_base, allow_network=False)
                 if _live and _live.get("close"):
                     s["price"] = float(_live["close"])
             except Exception:
-                pass
+                _swallow("gui._ob_overlay_live")  # 原裸 pass：计数化（P1-6），行为等价
             try:                                  # 当日均线回站 + 突破时刻（只读缓存，µs 级）
                 s["ma_reclaim"] = self._ma_reclaim_get(_base, kick=False)
             except Exception:
@@ -6771,14 +6839,14 @@ class Api:
             try:
                 self._kick_pb_struct_warm([s.get("code") for s in stocks if isinstance(s, dict)])
             except Exception:
-                pass
+                _swallow("gui._ob_overlay_live")  # 原裸 pass：计数化（P1-6），行为等价
         else:
             out.pop("struct_pending", None)
         if out.get("ma_reclaim_pending"):
             try:
                 self._kick_ma_reclaim_warm([s.get("code") for s in stocks if isinstance(s, dict)])
             except Exception:
-                pass
+                _swallow("gui._ob_overlay_live")  # 原裸 pass：计数化（P1-6），行为等价
         else:
             out.pop("ma_reclaim_pending", None)
 
@@ -6811,11 +6879,11 @@ class Api:
                     try:
                         self.load_stock_chart(c)      # 当日内存缓存命中则秒回
                     except Exception:
-                        pass
+                        _swallow("gui._one")  # 原裸 pass：计数化（P1-6），行为等价
                 with ThreadPoolExecutor(max_workers=2) as ex:
                     list(ex.map(_one, codes))
             except Exception:
-                pass
+                _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
         _th.Thread(target=_bg, name="ob-cold-warm", daemon=True).start()
 
     def _load_ob_analysis_impl(self, date=None):
@@ -7058,7 +7126,7 @@ class Api:
             try:
                 self._kick_cold_chart_warm(_cold)
             except Exception:
-                pass
+                _swallow("gui._load_ob_analysis_impl")  # 原裸 pass：计数化（P1-6），行为等价
         if m30_pending:
             out["m30_pending"] = True     # 30min 判定未热（>0 ⇒ 前端 3s 快速重拉，不等 12s）
             # 2026-10-18：当前 slot 未热时**按需**补一次磁盘预热（零网络、单飞）。
@@ -7068,7 +7136,7 @@ class Api:
                     # 2026-10-30：优先在线（磁盘停在上一交易日 ⇒ 只走磁盘就是整列「⚠旧」）
                     self._kick_ob_m30_fill(_m30_cold)
                 except Exception:
-                    pass
+                    _swallow("gui._load_ob_analysis_impl")  # 原裸 pass：计数化（P1-6），行为等价
         # 仓位结构未热：后台预热持仓（按 code 排队、槽位内去重），前端按 struct_pending 快速重拉
         _struct_pending = any((s.get("structure") or {}).get("pending") for s in out["stocks"])
         if _struct_pending:
@@ -7076,7 +7144,7 @@ class Api:
             try:
                 self._kick_pb_struct_warm([s.get("code") for s in out["stocks"] if s.get("code")])
             except Exception:
-                pass
+                _swallow("gui._load_ob_analysis_impl")  # 原裸 pass：计数化（P1-6），行为等价
         return _clean(out)
 
     # ---------- 入场三层评判（L1/L2/L3建议） ----------
@@ -7242,7 +7310,7 @@ class Api:
             _e = jy.get(code) if isinstance(jy.get(code), dict) else {}
             out["name"] = (_e or {}).get("name") or code
         except Exception:
-            pass
+            _swallow("gui.load_day_intraday")  # 原裸 pass：计数化（P1-6），行为等价
         try:
             # ── 日线：昨收 + 当日均线 ───────────────────────────────────────
             import core.chart_cache as _cc
@@ -7276,7 +7344,7 @@ class Api:
                 try:
                     _age = (datetime.now() - datetime.strptime(day, "%Y-%m-%d")).days
                 except Exception:
-                    pass
+                    _swallow("gui.load_day_intraday")  # 原裸 pass：计数化（P1-6），行为等价
                 if _age <= 100:
                     _r = _fetch_min_bars(code, "5min")
                     if _r is not None and not getattr(_r, "empty", True):
@@ -7331,7 +7399,7 @@ class Api:
                                    "hist": [round(x, 3) for x in _hist[-_n:]]}
                     out["macd_warm"] = len(_cl) >= 60
             except Exception:
-                pass
+                _swallow("gui.load_day_intraday")  # 原裸 pass：计数化（P1-6），行为等价
             out["available"] = True
             return out
         except Exception as e:
@@ -7393,7 +7461,7 @@ class Api:
                     if len(_hp.get("daily_rows") or []) > len(_dates) * 2:
                         _stale = True
                 except Exception:
-                    pass
+                    _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
             if not _stale:
                 # want_minutes 但缓存里没有分时（首帧为提速未取）⇒ 落到重建（带分时）。
                 # 2026-10-17：**三档都要**（10min 之前因合成 bug 常缺，只查 min30 会命中残缺缓存）。
@@ -7422,7 +7490,7 @@ class Api:
                         out["name"] = _c.get("name") or code
                         return self._build_chart_from_df(_cdf, out, code)
             except Exception:
-                pass
+                _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
 
         code_str = str(code)
         # em前缀 → 东财secid(如 em47.800005=A股平均股价)；sx000000 → 指数；纯6位 → 股票
@@ -7438,7 +7506,7 @@ class Api:
                     if _cc.get("date") == datetime.now().strftime("%Y-%m-%d") and _cc.get("rows"):
                         rows = _cc["rows"]
             except Exception:
-                pass
+                _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
 
         # 2026-10-04 cache-first：盘后预下载的「图表 payload」命中则**瞬开**，不走 GM 优先路径
         # （GM 不可达时每次卡满 12s 超时）。miss 时行为完全不变。
@@ -7465,13 +7533,13 @@ class Api:
                             from core.chart_cache import write_daily_history
                             write_daily_history(code_str, _long)   # merge，不截短
                         except Exception:
-                            pass
+                            _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
                         rows = [{"date": str(_r.date), "open": float(_r.open),
                                  "close": float(_r.close), "high": float(_r.high),
                                  "low": float(_r.low), "volume": float(_r.volume)}
                                 for _r in _long.itertuples(index=False)]
                 except Exception:
-                    pass
+                    _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
             if not rows:
                 # 北交所：日线四源全不通（memory），`bj_daily.fetch_bj_daily` 逐只重试 8 次 ≈18s
                 # ⇒ 卡死主线程。有缓存/payload 的 BJ 码已在上面命中；无缓存则**立即优雅降级**。
@@ -7481,7 +7549,7 @@ class Api:
                         out["error"] = "北交所行情源暂不可用（已知受限）"
                         return _clean(out)
                 except Exception:
-                    pass
+                    _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
                 try:
                     # miss → 带 6s 硬超时，防慢源冻主线程（指数走 index_daily）
                     _df = self._fetch_daily_bounded(code_str)
@@ -7592,7 +7660,7 @@ class Api:
                     json.dumps({"date": datetime.now().strftime("%Y-%m-%d"), "rows": rows},
                                ensure_ascii=False), encoding="utf-8")
             except Exception:
-                pass
+                _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
 
         if not rows:
             out["error"] = "无日线数据"
@@ -7604,7 +7672,7 @@ class Api:
                 if nm:
                     out["name"] = nm
             except Exception:
-                pass
+                _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
 
         try:
             import pandas as pd
@@ -7630,7 +7698,7 @@ class Api:
                     "rows": rows,
                 }, ensure_ascii=False), encoding="utf-8")
             except Exception:
-                pass
+                _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
         self._cache_chart(cache_key, result)
         # 机会式 payload 落盘（2026-10-06）：任何**真正建完**的图都落一份磁盘 payload，
         # 使非小池码「这次开了、下次（含新会话）瞬开」。后台、失败静默、有 LRU 容量上限。
@@ -7644,7 +7712,7 @@ class Api:
                 if not (_old_n and len(rows) * 2 < _old_n):
                     _cc.save_payload(code_str, result, rows)
             except Exception:
-                pass
+                _swallow("gui.load_stock_chart")  # 原裸 pass：计数化（P1-6），行为等价
         return result
 
     # ---------- 盘中实时 K 线（2026-10-17） ----------
@@ -7757,7 +7825,7 @@ class Api:
                             _eval_js_guarded(w, "_mwApplyOpts && _mwApplyOpts(%s)" % _json.dumps(_o),
                                              "mw-opts")
                         except Exception:
-                            pass
+                            _swallow("gui.open_multi_window")  # 原裸 pass：计数化（P1-6），行为等价
                     return {"ok": True, "reused": True}
                 except Exception:
                     self._mw_window = None          # 旧窗口已销毁 ⇒ 重建
@@ -7774,7 +7842,7 @@ class Api:
                 _sw = int(getattr(_scr, "physical_width", 0) or _scr.width or _sw)
                 _sh = int(getattr(_scr, "physical_height", 0) or _scr.height or _sh)
             except Exception:
-                pass
+                _swallow("gui.open_multi_window")  # 原裸 pass：计数化（P1-6），行为等价
             # 再留出**任务栏 + 标题栏**的余量（按比例算会顶到屏幕边，拖不动）：
             # 实测 1080p 上 0.94 会得到 1015，加上标题栏就出屏了 ⇒ 另加 -120 / -80 的硬约束。
             _mw_w = max(1200, min(int(_sw * 0.94), _sw - 80, 2600))
@@ -7805,7 +7873,7 @@ class Api:
                         % (_json.dumps(_codes), _json.dumps(_opts)),
                         "mw-enter")
                 except Exception:
-                    pass
+                    _swallow("gui._on_loaded")  # 原裸 pass：计数化（P1-6），行为等价
 
             def _on_closed():
                 self._mw_window = None
@@ -7814,7 +7882,7 @@ class Api:
                 win.events.loaded += _on_loaded
                 win.events.closed += _on_closed
             except Exception:
-                pass
+                _swallow("gui.open_multi_window")  # 原裸 pass：计数化（P1-6），行为等价
             return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:120]}"}
@@ -7843,7 +7911,7 @@ class Api:
             with open(fp, "a", encoding="utf-8") as f:
                 f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
         except Exception:
-            pass
+            _swallow("gui._log_turnover_win")  # 原裸 pass：计数化（P1-6），行为等价
 
     def open_turnover_window(self):
         """薄壳：js_api 方法**绝不能把 traceback 抛给前端**（前端只会看到"调用失败"，
@@ -8178,6 +8246,33 @@ class Api:
         except Exception:
             return ""
 
+    _IDX_DAILY_KICK = {"last": {}, "lock": threading.Lock()}
+
+    def _kick_index_daily_refresh(self, sym):
+        """指数日线缓存落后/缺失时，后台补一次（2026-11-23）。
+
+        `_daily_ma_bundle` 只读磁盘缓存（js_api 线程零网络），但指数缓存由
+        `facade.index_daily(end_date=None)` 才回写，不少指数停在几天~几月前
+        （实测 399006 停 11-17、000905 停 09-28、000016/899050 无档）⇒ 多窗口的
+        「日线均线」参考值整体失真。这里只在**发现落后**时 kick 一次（每码 10 分钟最多一次），
+        后台线程补完下一拍自然变新——不阻塞调用方，符合"js_api 线程零同步网络"。
+        """
+        now = _time_mod.time()
+        k = str(sym)
+        with self._IDX_DAILY_KICK["lock"]:
+            if now - float(self._IDX_DAILY_KICK["last"].get(k) or 0.0) < 600:
+                return
+            self._IDX_DAILY_KICK["last"][k] = now
+
+        def _go():
+            try:
+                from core.market_data.facade import get_provider
+                get_provider().index_daily(k, days=800, end_date=None)
+            except Exception:
+                _swallow("gui._go")  # 原裸 pass：计数化（P1-6），行为等价
+
+        threading.Thread(target=_go, daemon=True, name=f"idx-daily-{k}").start()
+
     def _daily_ma_bundle(self, code, price=None):
         """日线斐波那契均线 MA5/13/21/34/55（**含当日**）：`MA_n = (前 n-1 个完成日收盘 + 现价) / n`。
 
@@ -8197,6 +8292,15 @@ class Api:
             import core.chart_cache as _cc
             _today = datetime.now().strftime("%Y-%m-%d")
             df = _cc.load_daily_display(_c)
+            if _is_index_code(_c):
+                _last_d = None
+                try:
+                    if df is not None and not getattr(df, "empty", True):
+                        _last_d = str(df["date"].astype(str).iloc[-1])[:10]
+                except Exception:
+                    _last_d = None
+                if _last_d != _today:
+                    self._kick_index_daily_refresh(_c)
             if df is not None and not getattr(df, "empty", True):
                 _dts = [str(x)[:10] for x in df["date"].astype(str).values]
                 _cls = [float(x) for x in df["close"].astype(float).values]
@@ -8285,7 +8389,7 @@ class Api:
                         _CHART_LIVE_CACHE.clear()
                     _CHART_LIVE_CACHE[ck] = (_time_mod.time(), out)
         except Exception:
-            pass
+            _swallow("gui._chart_live_worker")  # 原裸 pass：计数化（P1-6），行为等价
         finally:
             with _CHART_LIVE_LOCK:
                 if len(_CHART_LIVE_STATE) > _CHART_LIVE_MAX * 3:
@@ -8303,10 +8407,18 @@ class Api:
         bus 异常/取空 ⇒ 回退腾讯直调（fail-open，同 P0-6 ma5_pullback 的模式：
         core/ma5_pullback.py 的 snapshot_fn）。
         """
+        # 2026-11-23 实报（多窗口指数涨幅/均线全错）：QuoteBus 把代码归一到**裸 6 位**再取数，
+        # 指数 `sh000001` 变成 `000001` ⇒ 腾讯按股票规则补 `sz` ⇒ 取回**平安银行**(12.46)；
+        # `sh000688`→国城矿业(16.46)。错价又被 `_daily_ma_bundle` 当成"今日收盘"掺进 MA
+        # （MA5=(前4日+12.46)/5=2859，图上均线整体失真）。指数必须**带前缀**取数 ⇒ 直连快照。
+        _is_idx = _is_index_code(base)
         try:
             try:
-                from core.market_data.quote_bus import get_quotes as _bus_get_quotes
-                _snaps = _bus_get_quotes([base], max_age_sec=4.0) or {}
+                if _is_idx:
+                    _snaps = {}          # 指数不进 bus（裸码寻址会串到个股），走下面的直连快照
+                else:
+                    from core.market_data.quote_bus import get_quotes as _bus_get_quotes
+                    _snaps = _bus_get_quotes([base], max_age_sec=4.0) or {}
             except Exception:
                 _snaps = {}
             if not _snaps:
@@ -8476,7 +8588,7 @@ class Api:
         try:
             s["fib"] = self._calc_fibonacci(d, period)
         except Exception:
-            pass
+            _swallow("gui._live_bar_series")  # 原裸 pass：计数化（P1-6），行为等价
         return s
 
     def _fetch_min_df(self, code, period):
@@ -8525,13 +8637,13 @@ class Api:
                 df, _MIN_PERIOD_MINUTES.get(period, 30),
                 quote or {}, datetime.now())
         except Exception:
-            pass
+            _swallow("gui._build_min_series")  # 原裸 pass：计数化（P1-6），行为等价
         d = _calc_ma_and_indicators(df.rename(columns={"time": "date"}))
         s = _to_series(d, intraday=True)
         try:
             s["fib"] = self._calc_fibonacci(d, period)
         except Exception:
-            pass
+            _swallow("gui._build_min_series")  # 原裸 pass：计数化（P1-6），行为等价
         return s
 
     def _live_minute_series(self, code, period, quote=None):
@@ -8564,14 +8676,14 @@ class Api:
                 if nm and len(c) == 6 and c.isdigit():
                     m[c] = nm
         except Exception:
-            pass
+            _swallow("gui._instrument_names")  # 原裸 pass：计数化（P1-6），行为等价
         try:
             for c, nm in (NAMES or {}).items():
                 c = str(c).split("_")[0]
                 if len(c) == 6 and c.isdigit() and nm:
                     m[c] = str(nm)
         except Exception:
-            pass
+            _swallow("gui._instrument_names")  # 原裸 pass：计数化（P1-6），行为等价
         for fp in (HOLDINGS_MANUAL, STATE_DIR / "holdings_auto.json"):
             try:
                 for c, info in (_load_json(fp, {}) or {}).items():
@@ -8580,7 +8692,7 @@ class Api:
                     if nm and len(c) == 6 and c.isdigit():
                         m[c] = nm
             except Exception:
-                pass
+                _swallow("gui._instrument_names")  # 原裸 pass：计数化（P1-6），行为等价
         with _INSTRUMENT_NAMES_LOCK:
             _INSTRUMENT_NAMES["map"] = m
             _INSTRUMENT_NAMES["ts"] = now
@@ -9005,7 +9117,7 @@ class Api:
         try:
             self._company_profile(str(code))
         except Exception:
-            pass
+            _swallow("gui.warm_stock_profile")  # 原裸 pass：计数化（P1-6），行为等价
         return {"ok": True, "code": str(code)}
 
 
@@ -9051,7 +9163,7 @@ class Api:
                 if has_impossible_gap(hit.get("daily_rows") or [], code):
                     return None
             except Exception:
-                pass
+                _swallow("gui._serve_payload_cache")  # 原裸 pass：计数化（P1-6），行为等价
             if want_minutes:
                 _pd = (hit.get("payload") or {}).get("period_data") or {}
                 _need = period if period in _MIN_PERIODS else None
@@ -9088,7 +9200,7 @@ class Api:
                             if _pc > 0 and _dc > 0 and abs(_pc - _dc) > max(0.011, _dc * 0.01):
                                 return None
                     except Exception:
-                        pass
+                        _swallow("gui._serve_payload_cache")  # 原裸 pass：计数化（P1-6），行为等价
                     # 2026-10-12: 除了"更新"，还要看"**更少**"。日线缓存被短窗口写入截短过之后
                     # （`save_daily_cache` 曾是盲覆盖），payload 会带着**残缺序列**被当成新鲜直接回放
                     # —— 日期闸拦不住（实测 600362：缓存 801 根、payload 只 21 根，
@@ -9099,7 +9211,7 @@ class Api:
                     if _prows and len(_prows) * 2 < len(_dfc):
                         return None
             except Exception:
-                pass
+                _swallow("gui._serve_payload_cache")  # 原裸 pass：计数化（P1-6），行为等价
             res = self._payload_to_result(
                 hit, code, allow_network=allow_network,
                 strip_minutes=not want_minutes,
@@ -9143,7 +9255,7 @@ class Api:
                 # 让调用方区分"明确没数据"与"超时"，从而快速失败、不再等 GM 的 4.5s 限流窗。
                 return d
             except Exception:
-                pass
+                _swallow("gui._go")  # 原裸 pass：计数化（P1-6），行为等价
             # 腾讯**异常**（网络/WAF）才走 GM 兜底 —— 此时 GM 有可能救回
             return fetch_daily_kline(_c)
         ex = _cf.ThreadPoolExecutor(max_workers=1)
@@ -9181,7 +9293,7 @@ class Api:
                     if bar and str(bar["date"]) > _last:
                         rows.append(bar)
             except Exception:
-                pass
+                _swallow("gui._daily_rows_cache_first")  # 原裸 pass：计数化（P1-6），行为等价
             return rows
         except Exception:
             return []
@@ -9222,12 +9334,12 @@ class Api:
                 try:
                     self._rebuild_payload_daily(payload, daily_rows[:-1] + [bar])   # 覆盖半成品
                 except Exception:
-                    pass
+                    _swallow("gui._payload_to_result")  # 原裸 pass：计数化（P1-6），行为等价
             elif bar and str(bar["date"]) > last:
                 try:
                     self._rebuild_payload_daily(payload, daily_rows + [bar])
                 except Exception:
-                    pass
+                    _swallow("gui._payload_to_result")  # 原裸 pass：计数化（P1-6），行为等价
         _pdta = payload.get("period_data") or {}
         if strip_minutes:
             for _k in _MIN_PERIODS:
@@ -9249,7 +9361,7 @@ class Api:
                     _s["amount"] = [round((o[3] + o[2] + o[1]) / 3.0 * float(v) * 100.0)
                                     for v, o in zip(_s["volume"], _s["ohlc"])]
                 except Exception:
-                    pass
+                    _swallow("gui._payload_to_result")  # 原裸 pass：计数化（P1-6），行为等价
         # 重算 version：磁盘 payload 里的旧版本号不含 trades 段；必须混入成交签名
         # （条数 + 末笔 ts），否则新导入的成交被前端「unchanged 不刷新」握手吞掉。
         payload["version"] = self._chart_version(_pdta, payload.get("trades"))
@@ -9566,14 +9678,14 @@ class Api:
                     if _old.poll() is None:
                         _old.terminate()
                 except Exception:
-                    pass
+                    _swallow("gui.run_hunter")  # 原裸 pass：计数化（P1-6），行为等价
                 _HUNTER_PROC["proc"] = None
             _fp_old = _HUNTER_PROC.get("log_fp")
             if _fp_old is not None:
                 try:
                     _fp_old.close()
                 except Exception:
-                    pass
+                    _swallow("gui.run_hunter")  # 原裸 pass：计数化（P1-6），行为等价
                 _HUNTER_PROC["log_fp"] = None
             # 清除旧结果，防读到上一个日期的缓存
             HUNTER_RUN_STATE["date"] = date
@@ -9608,7 +9720,7 @@ class Api:
                     try:
                         _log_fp.close()
                     except Exception:
-                        pass
+                        _swallow("gui.run_hunter")  # 原裸 pass：计数化（P1-6），行为等价
                 HUNTER_RUN_STATE["running"] = False
                 HUNTER_RUN_STATE["result"] = {"available": False,
                                               "error": f"猎手子进程启动失败: {e}"}
@@ -9650,7 +9762,7 @@ class Api:
                 try:
                     _log_fp.close()
                 except Exception:
-                    pass
+                    _swallow("gui._work")  # 原裸 pass：计数化（P1-6），行为等价
 
         _th.Thread(target=_work, daemon=True, name="hunter-proc-mon").start()
         return {"started": True, "running": True, "date": date}
@@ -9702,7 +9814,7 @@ class Api:
                      "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}, ensure_ascii=False),
                     encoding="utf-8")
             except Exception:
-                pass
+                _swallow("gui._push_hunter_build_candidates")  # 原裸 pass：计数化（P1-6），行为等价
             print(f"[建仓推送] {total} 只 / {len(groups)} 个板块 → 成功{r.get('sent')} 失败{r.get('failed')}")
         except Exception as e:
             print(f"[建仓推送] 失败（已忽略，不影响猎手）: {str(e)[:150]}")
@@ -9800,7 +9912,7 @@ class Api:
         try:
             self._kick_ma_reclaim_warm(code_list)
         except Exception:
-            pass
+            _swallow("gui.load_ma_reclaim")  # 原裸 pass：计数化（P1-6），行为等价
         items = {}
         for c in code_list:
             try:
@@ -9852,7 +9964,7 @@ class Api:
                     else:
                         regime_by_date[str(_r["date"])] = "range"
             except Exception:
-                pass
+                _swallow("gui._hunter_build_conformance")  # 原裸 pass：计数化（P1-6），行为等价
             _regime = regime_by_date.get(str(date), "range")
             for i, code in enumerate(codes):
                 if i % 50 == 0:
@@ -9860,7 +9972,7 @@ class Api:
                         from modules.market_data import MARKET_PROGRESS as _MP
                         _MP.update({"done": i, "total": len(codes), "msg": f"计算建仓符合度 {i}/{len(codes)}"})
                     except Exception:
-                        pass
+                        _swallow("gui._hunter_build_conformance")  # 原裸 pass：计数化（P1-6），行为等价
                 _c6 = str(code).split("_")[0]
                 _fp = _DAILY_CACHE_DIR / f"{_c6}.json"
                 try:
@@ -9931,7 +10043,7 @@ class Api:
                 except Exception:
                     continue
         except Exception:
-            pass
+            _swallow("gui._hunter_build_conformance")  # 原裸 pass：计数化（P1-6），行为等价
         return result
 
     def _score_dims(self, sm):
@@ -10029,7 +10141,7 @@ class Api:
                         _MP.update({"phase": f"行情拉取异常(仅{len(market_df)}只)，5s后整轮重试",
                                     "done": 0, "total": 0, "msg": ""})
                     except Exception:
-                        pass
+                        _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
                     import time as _t
                     _t.sleep(5)
             try:
@@ -10037,7 +10149,7 @@ class Api:
                 # done/total 归零 → 前端显示不确定进度条，避免继承拉取期的"100%"误导卡死观感
                 _MP.update({"phase": "概念打分", "done": 0, "total": 0, "msg": f"已拉取行情 {len(market_df)} 只，正在打分"})
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
             if len(market_df) < _min_ok:
                 out["error"] = (f"行情拉取失败：仅获取 {len(market_df)}/{len(codes)} 只，无法评分。"
                                 f"多为腾讯接口限流/网络异常，请稍后重试。"
@@ -10065,7 +10177,7 @@ class Api:
                 from modules.market_data import MARKET_PROGRESS as _MP
                 _MP.update({"phase": "构建板块/个股明细", "done": 0, "total": 0, "msg": f"打分完成 {len(scored)} 只"})
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
 
             score_map = {str(s.get("代码", "")): s for s in scored}
             for col in ["总得分", "涨停", "D1强势形态且新高", "D2强势形态",
@@ -10138,7 +10250,7 @@ class Api:
                         "limit_up": t.get("涨停数"), "vol_ratio": t.get("成交额放大倍数"),
                     }
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
 
             # 板块→个股明细（D5/D6 异常信息）
             sector_stocks = {}
@@ -10209,14 +10321,14 @@ class Api:
                                          + str(_info.get("sector") or "")):
                             _s["core_asset"] = True
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
 
             # 盘后建仓信号符合度注入（实盘盘中跳过省资源；盘后点击"今日数据"时显示）
             try:
                 from modules.market_data import MARKET_PROGRESS as _MP
                 _MP.update({"phase": "计算建仓符合度", "done": 0, "total": len(codes), "msg": ""})
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
             _build_n = 0
             try:
                 build_conf = self._hunter_build_conformance(codes, date)
@@ -10242,7 +10354,7 @@ class Api:
                                 s["build_stage_slope20"] = c.get("stage_slope20")
                                 s["build_price"] = c.get("price")
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
             # 建仓符合股靠前显示：GO(时机放行)优先 → 符合条件数 → 建仓得分（与建仓表同口径）
             for cat, stocks in sector_stocks.items():
                 stocks.sort(key=lambda s: (
@@ -10269,7 +10381,7 @@ class Api:
                 for _r in sum_rows:
                     _r["细分明细"] = _subd.get(_r.get("板块"), [])
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
             sum_cols = ["排名", "板块", "平均分", "涨停数", "热度", "趋势", "前三强", "股票数"]
 
             # 4) 概念得分趋势（近14天热度+均分）
@@ -10290,7 +10402,7 @@ class Api:
                         })
                     concept_trends[cat] = pts
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
 
             # 2026-08-16: 自动保存 heat history 快照（板块汇总），日期列表/历史视图随运行积累
             # 2026-10-13：保存前**合并回 热度分/热度版本/成交额总额** —— 本文件还有一个写入方
@@ -10312,7 +10424,7 @@ class Api:
                                     _r[_k] = _e[_k]
                 _save_hs(date.replace("-", ""), list(sum_rows))
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
 
             out["available"] = True
             out["pool_size"] = len(codes)
@@ -10357,7 +10469,7 @@ class Api:
                 from modules.market_data import MARKET_PROGRESS as _MP
                 _MP.update({"running": False, "phase": "完成", "done": 1, "total": 1, "msg": "选股猎手运行完成"})
             except Exception:
-                pass
+                _swallow("gui._load_hunter_impl")  # 原裸 pass：计数化（P1-6），行为等价
         except Exception as e:
             out["error"] = f"排名生成失败: {e}"
             return out
@@ -10587,7 +10699,7 @@ class Api:
                     with _BEACON_LOCK:
                         _BEACON_SKELETON.update({"key": _k, "ts": _time_mod.time(), "val": v})
                 except Exception:
-                    pass
+                    _swallow("gui._bg_sk")  # 原裸 pass：计数化（P1-6），行为等价
                 finally:
                     with _BEACON_LOCK:
                         _BEACON_SKELETON["running"] = False
@@ -10619,7 +10731,7 @@ class Api:
                     with _BEACON_LOCK:
                         _BEACON_ENRICH.update({"key": _k, "ts": _time_mod.time(), "rows": r})
                 except Exception:
-                    pass
+                    _swallow("gui._bg_en")  # 原裸 pass：计数化（P1-6），行为等价
                 finally:
                     with _BEACON_LOCK:
                         _BEACON_ENRICH["running"] = False
@@ -10632,7 +10744,7 @@ class Api:
             # 磁盘优先）后补上路，不再抢闸/饿死。
             self._kick_pb_struct_warm(all_codes)
         except Exception:
-            pass
+            _swallow("gui.load_market_beacon")  # 原裸 pass：计数化（P1-6），行为等价
         # ── 组包记忆化 + 版本握手（2026-11-22 P1-2）──
         # 指纹 = (骨架key+ts, 重列ts, 重列是否就绪, tags缓存ts, 30min时段, 结构/m30缓存规模)。
         # 结构/m30 缓存规模反映**预热进度**（懒列自填中指纹持续变 ⇒ 逐拍重组包=旧行为；
@@ -10662,10 +10774,24 @@ class Api:
                 try:
                     self.load_stock_tags_batch(all_codes, offline=True)   # 踢 SWR，不取结果
                 except Exception:
-                    pass
+                    _swallow("gui._bg_en")  # 原裸 pass：计数化（P1-6），行为等价
             if client_ver and str(client_ver) == ver:
                 return _clean({"unchanged": True, "ver": ver})
             return _pkg_pay          # ⚠️ 下游（pywebview 串行化）只读不改，无需深拷贝
+        # ── 组包节流（2026-11-23 P0-4）──
+        # 指纹变了（预热期缓存规模每拍都在变）但距上次组包 <10s：回**同 key 的上一版产物**。
+        # 描述性面板 10s 滞后无感；却能把开盘高峰的重组风暴（1.2~8.5s/拍 × 3s 轮询）压掉 ~70%+。
+        # key 必须一致才节流：防 top_n 切换时把 A 口径的产物回给 B 口径的请求（串味）。
+        with _BEACON_PKG_LOCK:
+            _last_key = _BEACON_PKG.get("key")
+            _last_pay = _BEACON_PKG.get("payload")
+            _last_ver = _BEACON_PKG.get("ver")
+            _last_ts = float(_BEACON_PKG.get("ts") or 0.0)
+        if (_last_pay is not None and _last_key == key
+                and (_time_mod.time() - _last_ts) < self._BEACON_REPACK_MIN_INTERVAL):
+            if client_ver and str(client_ver) == str(_last_ver):
+                return _clean({"unchanged": True, "ver": _last_ver})
+            return _last_pay
         try:
             # 2026-10-18：**offline=True**（批量视图铁律）。288 只代表股若走在线路径，每只都会
             # `_append_today_forming_bar` → 单只快照（2s 超时）⇒ 恢复/盘后高峰把 6 个工作线程
@@ -10690,6 +10816,8 @@ class Api:
         with _BEACON_PKG_LOCK:
             _BEACON_PKG["ver"] = ver
             _BEACON_PKG["payload"] = payload
+            _BEACON_PKG["key"] = key
+            _BEACON_PKG["ts"] = _time_mod.time()
         if client_ver and str(client_ver) == ver:
             return _clean({"unchanged": True, "ver": ver})
         return payload
@@ -10808,7 +10936,7 @@ class Api:
         try:
             self._kick_pb_m30_warm(codes)      # 每 30min 时段节流一次
         except Exception:
-            pass
+            _swallow("gui._beacon_enrich")  # 原裸 pass：计数化（P1-6），行为等价
         return out
 
     def _pb_struct_get(self, code):
@@ -10834,7 +10962,7 @@ class Api:
             if now.weekday() >= 5 or hm >= "15:00" or hm < "09:15":
                 return 6 * 3600.0
         except Exception:
-            pass
+            _swallow("gui._ma_reclaim_ttl")  # 原裸 pass：计数化（P1-6），行为等价
         return _MA_RC_TTL
 
     def _ma_reclaim_compute(self, code, date):
@@ -11050,7 +11178,7 @@ class Api:
                                                "above5": ma.get("above5"), "above20": ma.get("above20"),
                                                "price": ma.get("price")}
             except Exception:
-                pass
+                _swallow("gui._run")  # 原裸 pass：计数化（P1-6），行为等价
             finally:
                 with _MA_RC_WARM_LOCK:
                     _MA_RC_WARM["running"] = False
@@ -11214,7 +11342,7 @@ class Api:
                                         thread_name_prefix="pb-hist") as ex:
                     list(ex.map(lambda c: self._pb_struct_hist(c, date, compute=True), codes))
             except Exception:
-                pass
+                _swallow("gui._run")  # 原裸 pass：计数化（P1-6），行为等价
 
         _th.Thread(target=_run, daemon=True, name="pb-struct-hist-warm").start()
 
@@ -11254,7 +11382,7 @@ class Api:
                                     thread_name_prefix="ob-m30-disk") as ex:  # CPU 密集
                 list(ex.map(lambda c: self._m30_top_snapshot(c, allow_compute=True), codes))
         except Exception:
-            pass
+            _swallow("gui._warm_ob_m30_disk")  # 原裸 pass：计数化（P1-6），行为等价
 
     def _kick_ob_m30_disk(self, codes):
         """**按需**磁盘预热当前 slot 的 OB 30min 快照（零网络、单飞）。
@@ -11276,7 +11404,7 @@ class Api:
             try:
                 self._warm_ob_m30_disk(codes)
             except Exception:
-                pass
+                _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
             finally:
                 with _OB_M30_DISK_LOCK:
                     _OB_M30_DISK_WARM["running"] = False
@@ -11302,7 +11430,7 @@ class Api:
             try:
                 self.refresh_ob_m30(codes)
             except Exception:
-                pass
+                _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
             finally:
                 # 在线失败/不全 → **磁盘兜底**：否则体检表一直「计算中」，前端 3s 轮询会反复打网络
                 # （磁盘算出来的 bar_time 是昨天，界面照实标「⚠旧」，但至少不再挂 pending）。
@@ -11313,7 +11441,7 @@ class Api:
                     if _left:
                         self._warm_ob_m30_disk(_left)
                 except Exception:
-                    pass
+                    _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
                 with _OB_M30_ONLINE_LOCK:
                     _OB_M30_ONLINE_WARM["running"] = False
         _th.Thread(target=_bg, daemon=True, name="ob-m30-online-warm").start()
@@ -11368,7 +11496,7 @@ class Api:
                         if str(_cur.get("bar_time") or "") >= _today + " 15:00":
                             return
                     except Exception:
-                        pass
+                        _swallow("gui._one")  # 原裸 pass：计数化（P1-6），行为等价
                 try:
                     df = _fetch_min_bars(bc, "30min")       # 在线→磁盘兜底（后台线程）
                 except Exception:
@@ -11381,7 +11509,7 @@ class Api:
                                     thread_name_prefix="ob-m30") as ex:
                 list(ex.map(_one, codes))
         except Exception:
-            pass
+            _swallow("gui.refresh_ob_m30")  # 原裸 pass：计数化（P1-6），行为等价
 
     def _trend30_trend(self, code):
         """30 分钟趋势判定（2026-10-04 方案）。返回 (trend|None, src)。
@@ -11480,7 +11608,7 @@ class Api:
                                         "volume": live["volume"]}])
                     df = pd.concat([df, fb], ignore_index=True)
         except Exception:
-            pass
+            _swallow("gui._append_today_forming_bar")  # 原裸 pass：计数化（P1-6），行为等价
         return df
 
     def _stock_tags_from_df(self, df, code, t30=None):
@@ -11650,7 +11778,7 @@ class Api:
                                          % (_cv.get("why") or "均线", _cv["spread"],
                                             _cv.get("spread_short") or 0.0)})
         except Exception:
-            pass
+            _swallow("gui._stock_tags_from_df")  # 原裸 pass：计数化（P1-6），行为等价
 
         box_pos = None
         if cur_box and cur_box["high"] > cur_box["low"]:
@@ -11837,7 +11965,7 @@ class Api:
                         try:
                             _pf30(part, workers=8)
                         except Exception:
-                            pass
+                            _swallow("gui._tags_one_yield")  # 原裸 pass：计数化（P1-6），行为等价
                     futures = {ex.submit(_tags_one_yield, c): c for c in part}
                     for fut in as_completed(futures, timeout=90):
                         code = futures[fut]
@@ -11849,7 +11977,7 @@ class Api:
             try:
                 self._kick_pb_struct_warm(codes)
             except Exception:
-                pass
+                _swallow("gui._compute")  # 原裸 pass：计数化（P1-6），行为等价
             return result
 
         def _cache_store(tags):
@@ -11878,7 +12006,7 @@ class Api:
                 try:
                     _cache_store(_compute())
                 except Exception:
-                    pass
+                    _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
                 finally:
                     _TAGS_RUNNING.discard(_cache_key)
             threading.Thread(target=_bg, daemon=True).start()
@@ -11907,7 +12035,7 @@ class Api:
                 try:
                     self._kick_pb_struct_warm(codes)
                 except Exception:
-                    pass
+                    _swallow("gui._maybe_kick_struct")  # 原裸 pass：计数化（P1-6），行为等价
 
         def _with_struct(payload):
             # 结构层走**独立键** `struct`：若塞进 tags 条目里，前端「标签是否取齐」的判据
@@ -11919,7 +12047,7 @@ class Api:
             try:
                 out["ma5_streak"] = {str(c): self._ma5_streak(c, date) for c in codes}
             except Exception:
-                pass
+                _swallow("gui._with_struct")  # 原裸 pass：计数化（P1-6），行为等价
             out["struct"] = {str(c): (_struct.get(str(c)) or {"pending": True}) for c in codes}
             return _clean(out)
 
@@ -12220,7 +12348,7 @@ class Api:
             try:
                 disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
             except Exception:
-                pass
+                _swallow("gui.load_breakout_stocks")  # 原裸 pass：计数化（P1-6），行为等价
         return result
 
     def start_breakout_scan(self, force=False, date=None):
@@ -12276,7 +12404,7 @@ class Api:
                 try:
                     self._breakout_disk_path(today).unlink(missing_ok=True)
                 except Exception:
-                    pass
+                    _swallow("gui.start_breakout_scan")  # 原裸 pass：计数化（P1-6），行为等价
 
         def run():
             try:
@@ -12295,7 +12423,7 @@ class Api:
                         self._breakout_disk_path(today).write_text(
                             json.dumps(result, ensure_ascii=False), encoding="utf-8")
                     except Exception:
-                        pass
+                        _swallow("gui.run")  # 原裸 pass：计数化（P1-6），行为等价
                 with _BREAKOUT_LOCK:
                     state.update({"status": "done", "done": len(codes),
                                   "found": len(breakouts), "stocks": breakouts})
@@ -12394,7 +12522,7 @@ class Api:
             try:
                 disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
             except Exception:
-                pass
+                _swallow("gui.load_reclaim_stocks")  # 原裸 pass：计数化（P1-6），行为等价
         return result
 
     def start_reclaim_scan(self, force=False, date=None):
@@ -12440,7 +12568,7 @@ class Api:
                 try:
                     self._reclaim_disk_path(today).unlink(missing_ok=True)
                 except Exception:
-                    pass
+                    _swallow("gui.start_reclaim_scan")  # 原裸 pass：计数化（P1-6），行为等价
 
         def run():
             try:
@@ -12457,7 +12585,7 @@ class Api:
                         self._reclaim_disk_path(today).write_text(
                             json.dumps(result, ensure_ascii=False), encoding="utf-8")
                     except Exception:
-                        pass
+                        _swallow("gui.run")  # 原裸 pass：计数化（P1-6），行为等价
                 with _BREAKOUT_LOCK:
                     state.update({"status": "done", "done": len(codes),
                                   "found": len(hits), "stocks": hits})
@@ -12497,7 +12625,7 @@ class Api:
             _keys, _ = _dsum_keys()
             dates.update(_keys)
         except Exception:
-            pass
+            _swallow("gui.available_hunter_dates")  # 原裸 pass：计数化（P1-6），行为等价
         from datetime import timedelta
         _today = datetime.now().date()
         for _i in range(120):
@@ -12611,7 +12739,7 @@ class Api:
                         while len(_SECTOR_MA_BY_END) > _SECTOR_MA_END_MAX:
                             _SECTOR_MA_BY_END.pop(next(iter(_SECTOR_MA_BY_END)))
                 except Exception:
-                    pass
+                    _swallow("gui._bg_hist")  # 原裸 pass：计数化（P1-6），行为等价
                 finally:
                     with _SECTOR_MA_LOCK:
                         _SECTOR_MA_END_RUNNING.discard(end)
@@ -12629,7 +12757,7 @@ class Api:
                 with _SECTOR_MA_LOCK:
                     _SECTOR_MA_MEM.update({"ts": _time_mod.time(), "val": val})
             except Exception:
-                pass
+                _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
             finally:
                 with _SECTOR_MA_LOCK:
                     _SECTOR_MA_STATE["running"] = False
@@ -12809,7 +12937,7 @@ class Api:
                             sector_stocks.setdefault(sector, []).append(_stk)
                             break
             except Exception:
-                pass
+                _swallow("gui.load_hunter_history")  # 原裸 pass：计数化（P1-6），行为等价
 
             out["available"] = True
             out["summary_cols"] = ["排名", "板块", "股票数量", "平均分", "涨停数", "热度", "趋势", "前三强"]
@@ -13010,7 +13138,7 @@ class Api:
             (_ROTATION_CACHE_DIR / f"{_ckey[0]}_{_ckey[1]}_{_ckey[2]}.json").write_text(
                 json.dumps(_result, ensure_ascii=False), encoding="utf-8")
         except Exception:
-            pass
+            _swallow("gui._build_rotation")  # 原裸 pass：计数化（P1-6），行为等价
         return _result
 
     def load_sector_rotation(self, date=None, view="industry", tail_days=18):
@@ -13020,7 +13148,7 @@ class Api:
             try:
                 _df.update_today_if_needed()   # 工作日收盘后自动补当日快照
             except Exception:
-                pass
+                _swallow("gui.load_sector_rotation")  # 原裸 pass：计数化（P1-6），行为等价
             ready, message = _df.cache_readiness()
             if not ready:
                 if not ROTATION_RUN_STATE.get("running") and not _df.ROTATION_PROGRESS.get("running"):
@@ -13037,19 +13165,7 @@ class Api:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-    # ---------- 每日大盘复盘（LLM，2026-08-23 新增） ----------
-    def _review_bootstrap_work(self, date, cfg):
-        try:
-            from core.market_review import run_market_review_stream
-            _REVIEW_RUN_STATE["output"] = ""
-            def _on_text(t):
-                _REVIEW_RUN_STATE["output"] = (_REVIEW_RUN_STATE.get("output") or "") + t
-            run_market_review_stream(date, cfg, _on_text)
-        except Exception as e:
-            _REVIEW_RUN_STATE["error"] = str(e)
-        finally:
-            _REVIEW_RUN_STATE["running"] = False
-
+    # ---------- 每日大盘复盘（LLM，2026-08-23 新增；2026-11-23 子进程化） ----------
     def get_llm_config(self):
         from core.market_review import load_llm_config
         return load_llm_config()
@@ -13059,7 +13175,14 @@ class Api:
         return _s(base_url, model, api_key, reasoning_effort)
 
     def run_daily_review(self, date, base_url, model, api_key, reasoning_effort=""):
-        """大盘复盘（后台线程）。模型配置保存后即触发。返回 {status: running/error}。"""
+        """大盘复盘（**子进程**，2026-11-23），立即返回；前端轮询 daily_review_progress。
+
+        子进程 = `sys.executable core/review_worker.py --date <date>`，复盘本体复用
+        `core.market_review.run_market_review_stream` 唯一真源（算法零改动）；
+        stdout/stderr 落 t_io/logs/review_run_{ts}.log，流式文本走
+        review_run_status.json、结果走 review_run_result.json（monitor 线程回收）。
+        返回结构与前端契约不变：{status: running/error[, message]}。
+        """
         try:
             from core.market_review import save_llm_config
         except Exception as e:
@@ -13067,14 +13190,128 @@ class Api:
         cfg = save_llm_config(base_url, model, api_key, reasoning_effort)
         if not cfg.get("saved"):
             return {"status": "error", "message": "模型配置不完整（base_url / model / api_key 必填）"}
-        if _REVIEW_RUN_STATE.get("running"):
-            return {"status": "running", "message": "已有复盘进行中"}
-        _REVIEW_RUN_STATE.update({"running": True, "error": None, "output": ""})
-        _th.Thread(target=self._review_bootstrap_work, args=(date, cfg), daemon=True).start()
+        with _REVIEW_PROC_LOCK:
+            if _REVIEW_RUN_STATE.get("running"):
+                return {"status": "running", "message": "已有复盘进行中"}
+            # 残留子进程（状态未标 running 但进程还活着，兜底）⇒ 先收尸再起跑，
+            # 防两个 worker 同时写状态档（同 run_hunter 的防重入纪律）。
+            _old = _REVIEW_PROC.get("proc")
+            if _old is not None:
+                try:
+                    if _old.poll() is None:
+                        _old.terminate()
+                except Exception:
+                    _swallow("gui.run_daily_review")  # 原裸 pass：计数化（P1-6），行为等价
+                _REVIEW_PROC["proc"] = None
+            _fp_old = _REVIEW_PROC.get("log_fp")
+            if _fp_old is not None:
+                try:
+                    _fp_old.close()
+                except Exception:
+                    _swallow("gui.run_daily_review")  # 原裸 pass：计数化（P1-6），行为等价
+                _REVIEW_PROC["log_fp"] = None
+            _REVIEW_RUN_STATE.update({"running": True, "error": None, "output": "", "date": date})
+            _log_fp = None
+            try:
+                LOGS_DIR.mkdir(parents=True, exist_ok=True)
+                _log_fp = open(LOGS_DIR / f"review_run_{datetime.now():%Y%m%d_%H%M%S}.log", "a",
+                               encoding="utf-8", errors="replace")
+                _log_fp.write(f"\n===== {datetime.now():%Y-%m-%d %H:%M:%S} 复盘子进程启动 "
+                              f"date={date} =====\n")
+                _log_fp.flush()
+                # 首拍（worker 首写前的空窗）：父进程先落一份，前端立即有画面
+                _write_json_atomic(_REVIEW_STATUS_FP,
+                                   {"running": True, "date": date, "pid": None,
+                                    "output": "启动复盘子进程…\n", "ts": _time_mod.time()})
+                # api_key 不上命令行（进程列表可见）：上面 save_llm_config 已落盘，
+                # worker 启动后 load_llm_config() 自行读回。
+                proc = subprocess.Popen(
+                    [sys.executable, str(_REVIEW_WORKER), "--date", date,
+                     "--parent-pid", str(os.getpid()),
+                     "--status-file", str(_REVIEW_STATUS_FP),
+                     "--result-file", str(_REVIEW_RESULT_FP)],
+                    cwd=str(BASE),
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    stdout=_log_fp, stderr=subprocess.STDOUT)
+                _REVIEW_PROC["proc"] = proc
+                _REVIEW_PROC["log_fp"] = _log_fp
+                _t0 = _time_mod.time()
+            except Exception as e:
+                if _log_fp is not None:
+                    try:
+                        _log_fp.close()
+                    except Exception:
+                        _swallow("gui.run_daily_review")  # 原裸 pass：计数化（P1-6），行为等价
+                _REVIEW_RUN_STATE.update({"running": False,
+                                          "error": f"复盘子进程启动失败: {e}"})
+                return {"status": "error", "message": f"复盘子进程启动失败: {str(e)[:150]}"}
+
+        def _work():
+            """子进程回收线程：wait（带硬超时）→ 读结果档 → 复位 _REVIEW_RUN_STATE。"""
+            try:
+                from core.subprocess_job import wait_with_timeout
+                _rc, _timed_out = wait_with_timeout(proc, _REVIEW_TIMEOUT_SEC)
+                _out, _err = None, None
+                try:
+                    _d = json.loads(_REVIEW_RESULT_FP.read_text(encoding="utf-8"))
+                    # 日期匹配 + 文件新于本次起跑（防吃到上一轮的残留结果档，同 run_hunter）
+                    if (isinstance(_d, dict) and str(_d.get("date")) == str(date)
+                            and _REVIEW_RESULT_FP.stat().st_mtime >= _t0 - 1):
+                        _r = _d.get("result") or {}
+                        _out = _r.get("output") or ""
+                        if not _d.get("ok"):
+                            _err = str(_r.get("error") or "复盘失败")[:500]
+                except Exception:
+                    _out = None
+                if _timed_out:
+                    _err = (f"复盘子进程超时（>{int(_REVIEW_TIMEOUT_SEC)}s）已强制终止，"
+                            f"详见 t_io/logs/review_run_*.log")
+                elif _out is None:
+                    _err = (f"复盘子进程异常退出（code={_rc}），"
+                            f"详见 t_io/logs/review_run_*.log")
+                if _out is None:
+                    # 异常/超时：状态档里可能还留着已流出的部分文本，带给前端当排障上下文
+                    try:
+                        _sd = json.loads(_REVIEW_STATUS_FP.read_text(encoding="utf-8"))
+                        if isinstance(_sd, dict) and str(_sd.get("date")) == str(date):
+                            _out = _sd.get("output") or ""
+                    except Exception:
+                        _out = ""
+                _REVIEW_RUN_STATE["output"] = _out
+                _REVIEW_RUN_STATE["error"] = _err
+            except Exception as e:
+                _REVIEW_RUN_STATE["error"] = f"复盘运行失败: {e}"
+            finally:
+                _REVIEW_RUN_STATE["running"] = False
+                with _REVIEW_PROC_LOCK:
+                    if _REVIEW_PROC.get("proc") is proc:
+                        _REVIEW_PROC["proc"] = None
+                        _REVIEW_PROC["log_fp"] = None
+                try:
+                    _log_fp.close()
+                except Exception:
+                    _swallow("gui._work")  # 原裸 pass：计数化（P1-6），行为等价
+
+        _th.Thread(target=_work, daemon=True, name="review-proc-mon").start()
         return {"status": "running"}
 
     def daily_review_progress(self):
-        return {"running": bool(_REVIEW_RUN_STATE.get("running")), "error": _REVIEW_RUN_STATE.get("error"),
+        """复盘进度（前端 800ms 轮询）。返回 {running, error, output}（契约不变）。
+
+        运行中：流式文本由子进程周期落在状态档 ⇒ 读档返回（进程内 _REVIEW_RUN_STATE
+        只有启动拍）；读档失败/日期不符 ⇒ 回退进程内状态（worker 首写前的空窗）。
+        """
+        if _REVIEW_RUN_STATE.get("running"):
+            try:
+                _d = json.loads(_REVIEW_STATUS_FP.read_text(encoding="utf-8"))
+                if (isinstance(_d, dict)
+                        and str(_d.get("date")) == str(_REVIEW_RUN_STATE.get("date"))):
+                    return {"running": True, "error": None,
+                            "output": _d.get("output") or ""}
+            except Exception:
+                _swallow("gui.daily_review_progress")  # 原裸 pass：计数化（P1-6），行为等价
+        return {"running": bool(_REVIEW_RUN_STATE.get("running")),
+                "error": _REVIEW_RUN_STATE.get("error"),
                 "output": _REVIEW_RUN_STATE.get("output") or ""}
 
     def get_daily_review(self, date):
@@ -13090,7 +13327,7 @@ class Api:
             if fp.exists():
                 return {"text": fp.read_text(encoding="utf-8"), "exists": True, "data": data}
         except Exception:
-            pass
+            _swallow("gui.get_daily_review")  # 原裸 pass：计数化（P1-6），行为等价
         return {"text": "", "exists": False, "data": {}}
 
     def get_daily_review_list(self):
@@ -13103,7 +13340,7 @@ class Api:
                 if st and len(st) == 10:
                     dates.append(st)
         except Exception:
-            pass
+            _swallow("gui.get_daily_review_list")  # 原裸 pass：计数化（P1-6），行为等价
         return {"dates": dates}
 
     def get_sector_breadth(self, days=25, asof=None):
@@ -13337,7 +13574,7 @@ class Api:
                     if isinstance(_h, dict) and _h.get("name"):
                         _names[str(_c).split("_")[0]] = _h["name"]
             except Exception:
-                pass
+                _swallow("gui.load_auto_status")  # 原裸 pass：计数化（P1-6），行为等价
             derived = _auto_fill_costs()
             positions = {}
             for gk, p in (hb.get("positions", {}) or {}).items():
@@ -13366,7 +13603,7 @@ class Api:
                         pp["market_value"] = round(_px * _q, 2)
                         pp["unreal_pnl"] = round(_px * _q - _c * _q, 2)
                 except Exception:
-                    pass
+                    _swallow("gui.load_auto_status")  # 原裸 pass：计数化（P1-6），行为等价
                 positions[c6] = pp
             out["heartbeat"] = {
                 "time": hb.get("time"), "bar": hb.get("bar"),
@@ -13415,7 +13652,7 @@ class Api:
                             ev_st["latest"].append(e)
                     ev_st["latest"] = ev_st["latest"][-10:]
             except Exception:
-                pass
+                _swallow("gui.load_auto_status")  # 原裸 pass：计数化（P1-6），行为等价
         out["events"] = dict(ev_st["counts"])
         out["latest"] = list(ev_st["latest"])
         return _clean(out)
@@ -13502,7 +13739,7 @@ class Api:
                 if isinstance(h, dict) and h.get("name"):
                     names[str(code).split("_")[0]] = h["name"]
         except Exception:
-            pass
+            _swallow("gui._compute_auto_pnl")  # 原裸 pass：计数化（P1-6），行为等价
         # 按时间序读全部 fill（跨日排序）——与 _auto_fill_costs 同源，避免两处解析漂移
         fills = _read_auto_fills()
         cost_map = _auto_fill_costs()
@@ -13569,7 +13806,7 @@ class Api:
                 if rows:
                     return float(rows[-1].get("close") or 0)
             except Exception:
-                pass
+                _swallow("gui._last_close")  # 原裸 pass：计数化（P1-6），行为等价
             return 0.0
 
         stocks = []
@@ -13728,7 +13965,7 @@ class Api:
                         if d0:
                             m[d0] = float(r.get("close") or 0)
                 except Exception:
-                    pass
+                    _swallow("gui._close_on")  # 原裸 pass：计数化（P1-6），行为等价
                 _close_memo[code] = m
             m = _close_memo[code]
             if not m:
@@ -13829,7 +14066,7 @@ class Api:
         try:
             cash = _load_json(BRIDGE_DIR / "heartbeat.json", {}).get("cash")
         except Exception:
-            pass
+            _swallow("gui._compute_auto_pnl")  # 原裸 pass：计数化（P1-6），行为等价
         _cash = round(float(cash), 2) if isinstance(cash, (int, float)) else None
 
         # ---- 2026-11-22 owner：仿掘金绩效面板（18 项指标）----
@@ -14021,11 +14258,11 @@ class Api:
         try:
             self._ledger_append_today(d)
         except Exception:
-            pass
+            _swallow("gui.load_trade_history")  # 原裸 pass：计数化（P1-6），行为等价
         try:
             self._ledger_mtd_reduction(d)       # 逐股「本月减亏额度」（2026-11-11 owner）
         except Exception:
-            pass
+            _swallow("gui.load_trade_history")  # 原裸 pass：计数化（P1-6），行为等价
         d.pop("trades", None)                  # 原始成交行只留在磁盘里
         return _clean(d)
 
@@ -14126,7 +14363,7 @@ class Api:
             if _acc_u:
                 d["total_unrealized"] = round(sum(_acc_u.values()), 2)
         except Exception:
-            pass
+            _swallow("gui._ledger_append_today")  # 原裸 pass：计数化（P1-6），行为等价
         unreal_by_acc = {}
         for s in d.get("stocks") or []:
             a = s.get("account") or ""
@@ -14269,7 +14506,7 @@ class Api:
                 if q.get("price"):
                     px_map[q.get("code")] = float(q["price"])
         except Exception:
-            pass
+            _swallow("gui.load_position_manager")  # 原裸 pass：计数化（P1-6），行为等价
         # 按基础代码合并 A/B 双账户
         merged = {}
         for code, h in cur.items():
@@ -14341,7 +14578,7 @@ class Api:
                 else:
                     msg = rest
         except Exception:
-            pass
+            _swallow("gui._parse_log_line")  # 原裸 pass：计数化（P1-6），行为等价
         return {"t": t, "level": level, "msg": msg,
                 "key": Api._is_key_line(line)}
 
@@ -14483,7 +14720,7 @@ class Api:
                 if query in snap and snap[query].get("name"):
                     results.append({"code": query, "name": snap[query]["name"]})
             except Exception:
-                pass
+                _swallow("gui.search_stock")  # 原裸 pass：计数化（P1-6），行为等价
         # 2. 名称模糊: 从 watchlist_concept.json 匹配（{code: {name,...}} 或 list）
         if not results:
             try:
@@ -14504,7 +14741,7 @@ class Api:
                             if len(results) >= 10:
                                 break
             except Exception:
-                pass
+                _swallow("gui.search_stock")  # 原裸 pass：计数化（P1-6），行为等价
         return _clean({"results": results})
 
     # ---------- 异常监控池（2026-10-22 owner）----------
@@ -14807,7 +15044,7 @@ class Api:
                             filled += 1
                             from_tx += 1
             except Exception:
-                pass
+                _swallow("gui.abnormal_pool_fill_limit_times")  # 原裸 pass：计数化（P1-6），行为等价
         missing = len(todo) - from_tx
         ok = self._abn_write(stocks)
         out = {"ok": ok, "date": d0, "requested": _requested, "auto": _auto,
@@ -15040,7 +15277,7 @@ class Api:
         try:
             self._attach_ma_reclaim(rows, date)
         except Exception:
-            pass
+            _swallow("gui._pool_rows_compute")  # 原裸 pass：计数化（P1-6），行为等价
         # 排序（2026-11-03 owner：「太多了很乱，按时间的顺序显示」）：
         #   · 有涨停日期的票在前（**新日期在前**），再按**首次涨停时间**升序；
         #   · 没算到时间的排在当日末尾（"99:99"），板数高的靠前，最后按代码稳定排序；
@@ -15419,7 +15656,7 @@ class Api:
                                cwd=str(BASE), creationflags=flags, timeout=600,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:
-                pass
+                _swallow("gui._bg")  # 原裸 pass：计数化（P1-6），行为等价
             finally:
                 st["running"] = False
 
@@ -15483,7 +15720,7 @@ class Api:
             if _age > 20 * 3600 and datetime.now().strftime("%H:%M") >= "15:40":
                 self._kick_link_matrix_build()
         except Exception:
-            pass
+            _swallow("gui.load_linked_stocks")  # 原裸 pass：计数化（P1-6），行为等价
         codes, dates, R = mat
         try:
             j = codes.index(base)
@@ -15604,7 +15841,7 @@ class Api:
                 if _h and str(_h.get("pool") or "") in ("auto", "both"):
                     _entry["pool"] = str(_h.get("pool"))
             except Exception:
-                pass
+                _swallow("gui.add_to_watchlist")  # 原裸 pass：计数化（P1-6），行为等价
             stocks[code] = _entry
         try:
             tmp = fp.with_suffix(".tmp")
@@ -15671,7 +15908,7 @@ class Api:
             held_qty = int(_h.get("qty") or 0)
             held_pool = str(_h.get("pool") or "")
         except Exception:
-            pass
+            _swallow("gui.add_and_scan")  # 原裸 pass：计数化（P1-6），行为等价
         visible = (code in _wl_now) and (held_qty <= 0 or bool(_entry_now.get("manual_added_at")))
         out = {"ok": True, "code": code, "name": name, "scan_date": scan_date,
                "visible_in_manual": visible, "scan": scan, "scan_error": scan_error}
@@ -15757,7 +15994,7 @@ class Api:
                 except Exception:
                     continue
         except Exception:
-            pass
+            _swallow("gui.get_signal_condition_detail")  # 原裸 pass：计数化（P1-6），行为等价
 
         if not latest_record:
             return {"available": False, "error": f"未找到 {code} 的扫描记录"}
@@ -15976,7 +16213,7 @@ class Api:
                     try:
                         dd = float(str(_b["cur"]).replace("%", "")) / 100
                     except (ValueError, TypeError):
-                        pass
+                        _swallow("gui._compute_drawdown_detail")  # 原裸 pass：计数化（P1-6），行为等价
                     break
 
         detail = {
@@ -16052,7 +16289,7 @@ class Api:
                         r["up30"] = info.get("up30")
                         r["up30_prev"] = info.get("up30_prev")
         except Exception:
-            pass
+            _swallow("gui.get_high_confidence_signals")  # 原裸 pass：计数化（P1-6），行为等价
         return result
 
     def poll_live_bundle(self, date=None, pb_sig=None):
@@ -16154,12 +16391,12 @@ class Api:
                         r["up30"] = info.get("up30")
                         r["up30_prev"] = info.get("up30_prev")
         except Exception:
-            pass
+            _swallow("gui.refresh_pb")  # 原裸 pass：计数化（P1-6），行为等价
         # 当日「均线回站」+ 突破时刻（2026-10-23 owner，三张表同源）
         try:
             self._attach_ma_reclaim(result.get("rows") or [], date)
         except Exception:
-            pass
+            _swallow("gui.refresh_pb")  # 原裸 pass：计数化（P1-6），行为等价
         return result
 
     def prewarm_stock_tags(self, date=None):
@@ -16183,7 +16420,7 @@ class Api:
             if codes:
                 self.load_stock_tags_batch(codes)  # 无缓存 ⇒ 起后台算，立即返回
         except Exception:
-            pass
+            _swallow("gui.prewarm_stock_tags")  # 原裸 pass：计数化（P1-6），行为等价
 
     def prewarm_overview(self):
         """启动预热（2026-10-07）：后台**并发**跑一遍总览页的重端点（指数板/大盘成交额/成交额历史/
@@ -16195,7 +16432,7 @@ class Api:
             try:
                 fn()
             except Exception:
-                pass
+                _swallow("gui._safe")  # 原裸 pass：计数化（P1-6），行为等价
         try:
             # 2026-10-28：4 并发 → 2。这四个都是"读缓存 + 网络"的重端点，启动瞬间与首帧扇出、
             # 与标签批算抢同一批核；降到 2 只是晚几秒备好，但不会把 UI 线程饿住。
@@ -16204,7 +16441,7 @@ class Api:
                 list(ex.map(_safe, [self.load_indices, self.load_market_turnover,
                                     self.load_turnover_history, self.load_index_divergence]))
         except Exception:
-            pass
+            _swallow("gui.prewarm_overview")  # 原裸 pass：计数化（P1-6），行为等价
 
     def prewarm_holdings_charts(self):
         """启动预热（2026-10-04）：后台**低并发**预热持仓的个股图表缓存。
@@ -16236,7 +16473,7 @@ class Api:
                 try:
                     self.load_stock_chart(c)
                 except Exception:
-                    pass
+                    _swallow("gui._one")  # 原裸 pass：计数化（P1-6），行为等价
                 # 2026-10-07：顺带预热**技术标签**（持仓体检表要显示标签）。`_stock_tags_from_df`
                 # 里最贵的是 30min 趋势 `get_trend30`（~0.8s/只、有 per-code 缓存），预热后
                 # `load_ob_analysis` 命中缓存 → 不卡主线程。
@@ -16246,7 +16483,7 @@ class Api:
                     if _df is not None and not _df.empty:
                         self._stock_tags_from_df(_df, c)
                 except Exception:
-                    pass
+                    _swallow("gui._one")  # 原裸 pass：计数化（P1-6），行为等价
             with ThreadPoolExecutor(max_workers=3) as ex:
                 list(ex.map(_one, codes))
             # 2026-10-09：预热**持仓体检 30min 快照**（趋势/背离/顶部特征）→ OB 表零计算读取。
@@ -16254,7 +16491,7 @@ class Api:
             # 避免此处与它重复各算一遍（`_build_m30_snapshot` ~300ms/只）。
             self._warm_ob_m30_disk(codes)
         except Exception:
-            pass
+            _swallow("gui.prewarm_holdings_charts")  # 原裸 pass：计数化（P1-6），行为等价
 
     def _build_and_save_payloads(self, codes):
         """盘后预下载（小池）：逐只（低并发 3）建图并落盘 `chart_payload/`，供次日**瞬开**。
@@ -16280,7 +16517,7 @@ class Api:
                         from core.market_data import get_provider
                         df = get_provider().append_forming_bar(df, c)
                     except Exception:
-                        pass
+                        _swallow("gui._one")  # 原裸 pass：计数化（P1-6），行为等价
                     df = df.copy()
                     df["date"] = pd.to_datetime(df["date"])
                     df = df.sort_values("date").reset_index(drop=True)
@@ -16347,7 +16584,7 @@ class Api:
                 self._kick_pb_struct_hist_warm(
                     [_r.get("code") for _r in _rows if _r.get("code")], date)
             except Exception:
-                pass
+                _swallow("gui.recompute_pb")  # 原裸 pass：计数化（P1-6），行为等价
         # 3) 聚合新 trace（含技术标签）
         pb = self.refresh_pb(date)
         out = {"position_builder": pb}
@@ -16755,7 +16992,7 @@ class Api:
         try:
             self._backfill_timing_features(rows, date)
         except Exception:
-            pass
+            _swallow("gui._agg_position_builder")  # 原裸 pass：计数化（P1-6），行为等价
 
         rows.sort(key=lambda x: -(x.get("composite_score") or 0))
         verdicts["pending"] = pending
@@ -16789,7 +17026,7 @@ class Api:
                             r["tags"] = info.get("tags", [])
                             r["trend"] = info.get("trend")
             except Exception:
-                pass
+                _swallow("gui._visible")  # 原裸 pass：计数化（P1-6），行为等价
 
         # 持仓股背离兜底（2026-09-20 owner 要求"持仓股的背离也要显示"）：
         # 自动池由 _gm 侧扫描，那条路径**不产出背离**（_gm/signals/position_builder.py
@@ -16818,7 +17055,7 @@ class Api:
                             r["divergence_detail"] = _d
                             r["divergence"] = {k: v["type"] for k, v in _d.items()}
                 except Exception:
-                    pass
+                    _swallow("gui._visible")  # 原裸 pass：计数化（P1-6），行为等价
 
         # 建仓表「30min 判定」列（2026-10-09）：与体检表同口径，主线程**只读轻量缓存、零计算**；
         # 未热 → 该行显示「计算中」，同时后台预热整池（每 30min 时段一次，~0.9s）。
@@ -17006,7 +17243,7 @@ def start_chart_prefetch_scheduler(api):
                         full=False,
                         payload_builder=lambda codes: api._build_and_save_payloads(codes))
             except Exception:
-                pass
+                _swallow("gui._loop")  # 原裸 pass：计数化（P1-6），行为等价
             _time_mod.sleep(300)
 
     _th.Thread(target=_loop, daemon=True).start()
@@ -17032,10 +17269,26 @@ def start_ob_m30_refresher(api):
                     if _m30_online_allowed():
                         api.refresh_ob_m30()
             except Exception:
-                pass
+                _swallow("gui._loop")  # 原裸 pass：计数化（P1-6），行为等价
             _time_mod.sleep(60)
 
     _th.Thread(target=_loop, daemon=True, name="ob-m30-refresher").start()
+
+
+def start_diag_metrics_reporter():
+    """吞点计数 300s 落盘（2026-11-23 P1-6）：diag_metrics 全内存计数，本线程每 300s flush 到
+    t_io/logs/metrics.jsonl，供复盘/架构评估追踪裸吞点收敛。守护线程；diag_metrics 自身绝不抛，
+    循环内无需 try。仅 __main__ 显式启动（模块级不启动，避免测试 import 副作用）。"""
+    if _DIAG_REPORTER_STATE.get("started"):
+        return
+    _DIAG_REPORTER_STATE["started"] = True
+
+    def _loop():
+        while True:
+            _time_mod.sleep(300)
+            _diag_flush()
+
+    _th.Thread(target=_loop, daemon=True, name="diag-metrics-flush").start()
 
 
 def _stargui_freeze_watchdog(threshold_s=12.0):
@@ -17070,7 +17323,7 @@ def _stargui_freeze_watchdog(threshold_s=12.0):
                         f"{tail} 线程栈 =====\n")
                 faulthandler.dump_traceback(file=f, all_threads=True)
         except Exception:
-            pass
+            _swallow("gui._dump")  # 原裸 pass：计数化（P1-6），行为等价
 
     def _loop():
         _last = 0.0
@@ -17083,14 +17336,14 @@ def _stargui_freeze_watchdog(threshold_s=12.0):
                         _DUMP_REQ.unlink()
                         _dump("按需线程栈（哨兵触发，未卡死）")
                 except Exception:
-                    pass
+                    _swallow("gui._loop")  # 原裸 pass：计数化（P1-6），行为等价
                 _ts = _GUI_HB.get("ts") or 0.0
                 _now = _time_mod.time()
                 if _ts and (_now - _ts) > threshold_s and (_now - _last) > 30:
                     _last = _now
                     _dump("疑似界面卡死", f"（主线程心跳停 {_now - _ts:.0f}s）")
             except Exception:
-                pass
+                _swallow("gui._loop")  # 原裸 pass：计数化（P1-6），行为等价
 
     _th.Thread(target=_loop, name="gui-freeze-watchdog", daemon=True).start()
 
@@ -17136,7 +17389,7 @@ def _start_ctrlc_abort_watchdog(grace_s=2.5, poll_s=0.4):
                 try:
                     sys.stdout.flush()
                 except Exception:
-                    pass
+                    _swallow("gui._loop")  # 原裸 pass：计数化（P1-6），行为等价
                 _os._exit(0)
 
     _th.Thread(target=_loop, name="ctrlc-abort", daemon=True).start()
@@ -17165,7 +17418,7 @@ def _acquire_gui_single_instance():
             try:
                 _k32.CloseHandle(h)
             except Exception:
-                pass
+                _swallow("gui._acquire_gui_single_instance")  # 原裸 pass：计数化（P1-6），行为等价
             return None
         return h
     except Exception:
@@ -17204,14 +17457,14 @@ if __name__ == "__main__":
     try:
         sys.setswitchinterval(0.001)
     except Exception:
-        pass
+        _swallow("gui._acquire_gui_single_instance")  # 原裸 pass：计数化（P1-6），行为等价
 
     # V8 预热(2026-09-08): akshare 的 py_mini_racer(V8) 首次初始化必须在主线程，见 core/v8guard.py
     try:
         from core.v8guard import prewarm_akshare_v8
         prewarm_akshare_v8()
     except Exception:
-        pass
+        _swallow("gui._acquire_gui_single_instance")  # 原裸 pass：计数化（P1-6），行为等价
 
     api = Api()
     # 冷启动 import 预热（2026-10-10）：首个 load_day 会懒加载 config/position_builder/timing_gate/
@@ -17223,7 +17476,7 @@ if __name__ == "__main__":
             try:
                 __import__(_m)
             except Exception:
-                pass
+                _swallow("gui._prewarm_imports")  # 原裸 pass：计数化（P1-6），行为等价
     _th.Thread(target=_prewarm_imports, name="import-prewarm", daemon=True).start()
 
     # GM 健康探测（2026-10-10）：放在窗口创建**之前**，让前端加载页面那 1-2s 与探测重叠。
@@ -17243,7 +17496,7 @@ if __name__ == "__main__":
                 prov._note_gm_down("startup-probe", "sh000001",
                                    RuntimeError("启动探测：指数日线为空"))
         except Exception:
-            pass
+            _swallow("gui._prewarm_gm_probe")  # 原裸 pass：计数化（P1-6），行为等价
     _th.Thread(target=_prewarm_gm_probe, name="gm-health-probe", daemon=True).start()
 
     # 2026-10-21：进程内**线程级** CPU 归因（外部采样拿不到别的进程的线程名，见 core/thread_watch.py）。
@@ -17268,6 +17521,8 @@ if __name__ == "__main__":
     _start_ctrlc_abort_watchdog()     # Ctrl+C 连带关掉 GUI（不依赖 UI 线程响应，见其 docstring）
     start_chart_prefetch_scheduler(api)   # 盘后 15:10 预下载 K线缓存（小池 payload+分钟、全池日线）
     start_ob_m30_refresher(api)           # 持仓体检 30min 快照：跨时段后台刷新（趋势/背离/顶部特征）
+    _diag_set_tag("gui")                  # P1-6：吞点计数进程标签（metrics.jsonl 中区分 gui / 自动盘）
+    start_diag_metrics_reporter()         # P1-6：吞点计数 300s 落盘 → t_io/logs/metrics.jsonl
     # 启动预热（均为后台 daemon 线程，不阻塞启动；失败静默）：
     #  · 持仓图表：低并发(3)，消除 load_ob_analysis 的 14s 冷启动阻塞
     #  · 技术标签：走其内置后台分支，消除首次进建仓表/破位表的标签冷算等待
@@ -17292,7 +17547,7 @@ if __name__ == "__main__":
             if _first:
                 api.load_stock_chart(_first)      # 冷启动一次性：import + provider + 建图全链
         except Exception:
-            pass
+            _swallow("gui._boot_warmup")  # 原裸 pass：计数化（P1-6），行为等价
         # 2026-10-28（GUI 卡死第六轮）：三路预热原来**同时**起 ⇒ 启动后头几分钟 CPU 打满，
         # UI 线程在 `Thread.start()` 上被饿住 ⇒ 表现为"刚打开就卡死"（giu_freeze.log 14:40:58
         # 现场：3 个线程在 `_tags_one_yield` 里跑 pandas，19 个在 evaluate_js 等 semaphore）。
@@ -17301,7 +17556,7 @@ if __name__ == "__main__":
             try:
                 _fn()
             except Exception:
-                pass
+                _swallow("gui._boot_warmup")  # 原裸 pass：计数化（P1-6），行为等价
             _time_mod.sleep(1.5)
 
     _th.Thread(target=_boot_warmup, daemon=True, name="boot-warmup").start()
@@ -17322,7 +17577,7 @@ if __name__ == "__main__":
             })
             _calc_ma_and_indicators(_d)
         except Exception:
-            pass
+            _swallow("gui._prewarm_chart_build")  # 原裸 pass：计数化（P1-6），行为等价
 
     _th.Thread(target=_prewarm_chart_build, daemon=True).start()
     here = Path(__file__).parent
@@ -17343,7 +17598,7 @@ if __name__ == "__main__":
         try:
             print(f"[webview2] 已关闭后台/遮挡节流: {_wv2_args}", flush=True)
         except Exception:
-            pass
+            _swallow("gui._prewarm_chart_build")  # 原裸 pass：计数化（P1-6），行为等价
 
     # 前端开发调试: 设置 WEBVIEW_DEBUG=1 打开 devtools
     debug = sys.argv[1] == "--debug" if len(sys.argv) > 1 else False

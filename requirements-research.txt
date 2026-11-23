@@ -1,0 +1,7 @@
+# 研究/实验环境追加依赖（先装 requirements.txt）
+# 用途：因子挖掘、参数寻优、离线实验脚本（scripts/experiment/、t_io/validation/ 下研究件）
+# 生产链路（GUI/自动盘/猎手）**不需要**本文件
+scikit-learn>=1.2.0   # scripts/experiment/index_ma_hint（LogisticRegression/roc_auc）
+optuna>=3.0.0         # t_io/validation/optuna_swing 参数寻优
+scipy>=1.9.0          # t_io/validation/factor_mining（rankdata）
+matplotlib>=3.6.0     # scripts/daily_breadth_chart、doc 月度复盘图表

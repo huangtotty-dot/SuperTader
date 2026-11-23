@@ -25,6 +25,11 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 
 from config.params import INDEX_REGIME_PARAMS
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # ===== 日志 =====
 _ir_log = logging.getLogger("index_regime")
@@ -83,6 +88,7 @@ def index_regime_name(regime) -> str:
     try:
         r = regime if isinstance(regime, IndexRegime) else IndexRegime(str(regime))
     except Exception:
+        _swallow("exec.analysis.index_regime.index_regime_name")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return "未知"
     return _IR_REGIME_NAMES.get(r, "未知")
 
@@ -91,6 +97,7 @@ def get_regime_position_factor(regime) -> float:
     try:
         r = regime if isinstance(regime, IndexRegime) else IndexRegime(str(regime))
     except Exception:
+        _swallow("exec.analysis.index_regime.get_regime_position_factor")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return 1.0
     return _IR_POSITION_FACTORS.get(r, 1.0)
 
@@ -150,6 +157,7 @@ def _ir_f(x, nd: int = 4) -> Optional[float]:
             return None
         return round(v, nd)
     except Exception:
+        _swallow("exec.analysis.index_regime._ir_f")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 
@@ -173,6 +181,7 @@ def _ir_input_version(df: Optional[pd.DataFrame], symbol: str, source: str = "")
         payload = "%s|%s\n%s" % (str(symbol), str(source or ""), df.to_csv(index=False))
         return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
     except Exception:
+        _swallow("exec.analysis.index_regime._ir_input_version")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 
@@ -185,7 +194,7 @@ def _ir_context_base(target: str, mode: str, symbol: str,
         if df is not None and len(df) > 0 and "date" in df.columns:
             input_last = str(df["date"].iloc[-1])
     except Exception:
-        pass
+        _swallow("exec.analysis.index_regime._ir_context_base")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return {
         "requested_date": str(target),
         "input_last_date": input_last,

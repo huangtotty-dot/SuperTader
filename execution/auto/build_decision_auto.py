@@ -13,6 +13,11 @@ EOD 口径（df_1min=None）：跳过 W35（与 manual 侧 EOD 同）。
 import importlib.util
 import os
 import sys
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # 跨仓消费 core/build_decision.py（决策核，纯函数无 IO）。repo 上下文走常规 import；
 # .gszq 部署环境（sys.path 无 superTrader 根）回退 importlib 绝对路径加载——与 .gszq 壳
@@ -25,7 +30,7 @@ def _load_build_decision():
         from core import build_decision as m
         return m
     except ImportError:
-        pass
+        _swallow("exec.build_decision_auto._load_build_decision")  # 原静默吞点：计数化（P1-6 三批），行为等价
     _root = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     _path = os.path.join(_root, "core", "build_decision.py")

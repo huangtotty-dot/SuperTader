@@ -75,6 +75,7 @@ from core.feishu_cards import (
     feishu_hr as _feishu_hr_fn,
     feishu_md_div as _feishu_md_div_fn,
 )
+from core.diag_metrics import swallow as _swallow
 
 _now_fn = datetime.now
 
@@ -94,7 +95,7 @@ def _holdings() -> Dict[str, dict]:
                         if isinstance(v, dict)
                         and (v.get("qty") or v.get("base"))}
     except Exception:
-        pass
+        _swallow("exec.daily_sentiment._holdings")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return {}
 
 
@@ -304,6 +305,7 @@ def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str,
                 try:
                     result.append({"date": str(r[0])[:10], "open": float(r[1]), "close": float(r[2])})
                 except Exception:
+                    _swallow("exec.daily_sentiment._parse_bars")  # 原静默吞点：计数化（P1-6 三批），行为等价
                     continue
         return result
 
@@ -340,6 +342,7 @@ def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str,
                         o, c = float(oi), float(ci)
                         bars.append({"date": di, "open": o, "close": c})
                     except Exception:
+                        _swallow("exec.daily_sentiment.stock_daily_features")  # 原静默吞点：计数化（P1-6 三批），行为等价
                         continue
                 bars.sort(key=lambda x: x["date"])
                 _log.info(f"[stock_feat] {code} 腾讯失败/超时，akshare 兜底成功({len(bars)}条)")
@@ -508,9 +511,10 @@ def load_sentiment_history() -> List[Dict[str, Any]]:
                         if d:
                             recs[d] = rec
                     except Exception:
+                        _swallow("exec.daily_sentiment.load_sentiment_history")  # 原静默吞点：计数化（P1-6 三批），行为等价
                         continue
         except Exception:
-            pass
+            _swallow("exec.daily_sentiment.load_sentiment_history")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return [recs[d] for d in sorted(recs.keys())]
 
 
@@ -541,6 +545,7 @@ def _overheat_streak(history: List[Dict[str, Any]], today_z: float, exclude_date
             else:
                 break
         except Exception:
+            _swallow("exec.daily_sentiment._overheat_streak")  # 原静默吞点：计数化（P1-6 三批），行为等价
             break
     return streak
 
@@ -766,6 +771,7 @@ def _board_index_of_code(code: str) -> str:
         from core.board_index import resolve_index as _ri
         return _ri(code)[0]
     except Exception:
+        _swallow("exec.daily_sentiment._board_index_of_code")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return "sh000001"
 
 
@@ -874,7 +880,7 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
                     _d.setdefault("notes", []).append(board_crash_note)
                     _d["reason"] = _d.get("reason", "") + "；" + board_crash_note
             except Exception:
-                pass
+                _swallow("exec.daily_sentiment.compute_daily_sentiment")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
     # 7) 汇总理由
     reasons = [
@@ -953,7 +959,7 @@ def save_sentiment_record(result: Dict[str, Any]) -> None:
     try:
         os.makedirs(log_dir, exist_ok=True)
     except Exception:
-        pass
+        _swallow("exec.daily_sentiment.save_sentiment_record")  # 原静默吞点：计数化（P1-6 三批），行为等价
     # jsonl 逐日一条（append；读取侧按 date 去重取最后）
     _append_jsonl_fn(sentiment_jsonl_path(), result)
     # csv 同日覆盖更新
@@ -1096,7 +1102,7 @@ def push_daily_sentiment(now: Optional[datetime] = None) -> bool:
             try:
                 _log.warning(f"⚠️ push_daily_sentiment 后台异常（已吞掉）: {str(e)[:150]}")
             except Exception:
-                pass
+                _swallow("exec.daily_sentiment._worker")  # 原静默吞点：计数化（P1-6 三批），行为等价
         finally:
             with _push_lock:
                 _push_thread_running = False
@@ -1130,7 +1136,7 @@ def _cli() -> None:
     try:
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:
-        pass
+        _swallow("exec.daily_sentiment._cli")  # 原静默吞点：计数化（P1-6 三批），行为等价
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
     if not args.no_push and not args.no_save:

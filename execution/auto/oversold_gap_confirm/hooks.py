@@ -48,6 +48,11 @@ from functools import partial
 import pandas as pd
 
 from . import backfill, executor, fillbackfill, preplace_probe, prescreen
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # 每日一次状态（原先散在 gm_main 的模块级全局 `_OSC_*_DONE_DATE` + `context._osc_candidates`）
 _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
@@ -132,7 +137,7 @@ def _write_prescreen(rt, date, cand, meta, ok=True, last_attempt_ok=None,
         try:
             rt.log(f"[OSC] ⚠️ 盘前候选留痕写入失败（不阻断）: {e}")
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.hooks._write_prescreen")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 
@@ -164,6 +169,7 @@ def save_day_state(rt, date) -> bool:
         os.replace(tmp, fp)
         return True
     except Exception:
+        _swallow("exec.oversold_gap_confirm.hooks.save_day_state")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False
 
 
@@ -206,6 +212,7 @@ def load_day_state(rt, date) -> bool:
             _bf.setdefault(int(k), v)
         return True
     except Exception:
+        _swallow("exec.oversold_gap_confirm.hooks.load_day_state")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False
 
 
@@ -298,6 +305,7 @@ def _read_prescreen_cache(rt, today):
             try:
                 pc, ma = float(v.get("prev_close")), float(v.get("ma20"))
             except (TypeError, ValueError):
+                _swallow("exec.oversold_gap_confirm.hooks._read_prescreen_cache")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
             if pc > 0 and ma > 0:
                 cand[str(c)] = {"prev_close": pc, "ma20": ma,
@@ -306,6 +314,7 @@ def _read_prescreen_cache(rt, today):
                                     "board_top_n": d.get("board_top_n")}
         return cand
     except Exception:
+        _swallow("exec.oversold_gap_confirm.hooks._read_prescreen_cache")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 
@@ -355,14 +364,14 @@ def prescreen_init(rt, today=None) -> bool:
                       "candidates": len(_STATE.get("candidates") or {}),
                       "elapsed_sec": round(_el, 1)})
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.hooks.prescreen_init")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return True
     rt.log("[OSC] ⚠️ init 预筛未成功（fail-open：策略照常启动，09:31 钩子兜底重跑一次）")
     try:
         rt.audit({"event": "osc_prescreen_init_fail", "date": _today,
                   "elapsed_sec": round(_el, 1)})
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.hooks.prescreen_init")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return False
 
 
@@ -388,11 +397,12 @@ def bars_from_10am_df(df, codes, now):
                 amount = float(_r.get("amount") or 0)
                 volume = float(_r.get("volume") or 0)
             except Exception:
+                _swallow("exec.oversold_gap_confirm.hooks.bars_from_10am_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
             if low > 0 and close > 0:
                 out[c] = {"low": low, "close": close, "amount": amount, "volume": volume}
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.hooks.bars_from_10am_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return out
 
 
@@ -476,6 +486,7 @@ def _board_buy_candidates(context, codes, now) -> dict:
     try:
         from core.board_index import index_gm_symbol, resolve_index
     except Exception as e:
+        _swallow("exec.oversold_gap_confirm.hooks._board_buy_candidates", e)  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {"allowed": [], "blocked": [], "unavailable": [
             {"code": str(c), "index_symbol": None, "reason": "board_regime_unavailable",
              "error": "board_index_import:%s" % e} for c in (codes or [])]}
@@ -546,7 +557,7 @@ def try_buy(rt, context, now) -> int:
             rt.audit({"event": "osc_skip", "reason": "kill_switch", "time": str(now)})
             return 0
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.hooks.try_buy")  # 原静默吞点：计数化（P1-6 三批），行为等价
     _cand = dict(_STATE["candidates"])
     _skip_reason = None
     # 大盘单边下跌熔断：即使候选合法也零 BUY；必须在 10:00 个股行情读取之前判定。
@@ -644,7 +655,7 @@ def try_buy(rt, context, now) -> int:
         try:
             rt.risk(str(now), "osc_exec_error", f"超跌跳空确认执行异常: {str(_e)[:200]}", code="")
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.hooks.try_buy")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return 0
 
 
@@ -711,6 +722,7 @@ def backfill_times(rt) -> list:
         gap = int(rt.param("osc_backfill_interval_min", 6))
         rounds = int(rt.param("osc_backfill_rounds", 2))
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.hooks.backfill_times")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return []
     out = []
     for i in range(max(0, rounds)):
@@ -724,6 +736,7 @@ def backfill_deadline(rt):
     try:
         v = int(rt.param("osc_backfill_deadline_hhmm", 1020))
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.hooks.backfill_deadline")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return dtime(10, 20)
     return dtime(v // 100, v % 100)
 
@@ -773,6 +786,7 @@ def fetch_current_snapshot(rt, codes, now) -> dict:
                           else getattr(q0, "ask_v", None)),
             }
         except Exception:
+            _swallow("exec.oversold_gap_confirm.hooks.fetch_current_snapshot")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
     return out
 
@@ -787,7 +801,7 @@ def _backfill_gate_abort(rt, now, round_idx, reason, message) -> int:
     try:
         rt.risk(str(now), reason, message, code="")
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.hooks._backfill_gate_abort")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return 0
 
 
@@ -805,7 +819,7 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
                       "round": int(round_idx), "time": str(now)})
             return 0
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.hooks.try_backfill")  # 原静默吞点：计数化（P1-6 三批），行为等价
     # 与首轮同一熔断口径：uni_down 下保留原挂单，不撤单、不取复检行情、不补新仓。
     if getattr(context, "last_index_regime", None) == "uni_down":
         rt.log("[OSC] [X] 大盘 regime=uni_down -> 补单轮中止（不撤单、不开新仓）")
@@ -1021,6 +1035,7 @@ def sell_codes(rt) -> list:
         _book = rt.book_dir
         return sorted((executor.load_book(_book).get("open") or {}).keys())
     except Exception:
+        _swallow("exec.oversold_gap_confirm.hooks.sell_codes")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return []
 
 
@@ -1041,11 +1056,12 @@ def latest_close_from_df(df, codes, now):
             try:
                 close = float(_r.get("close") or 0)
             except Exception:
+                _swallow("exec.oversold_gap_confirm.hooks.latest_close_from_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
             if close > 0:
                 out[c] = close
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.hooks.latest_close_from_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return out
 
 
@@ -1073,6 +1089,7 @@ def sell_retry_deadline(rt):
     try:
         v = int(rt.param("osc_sell_retry_deadline_hhmm", 1458))
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.hooks.sell_retry_deadline")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return dtime(14, 58)
     return dtime(v // 100, v % 100)
 
@@ -1151,7 +1168,7 @@ def try_sell(rt, context, now, today) -> int:
         try:
             rt.risk(str(now), "osc_sell_error", f"超跌跳空确认卖侧异常: {str(_e)[:200]}", code="")
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.hooks.try_sell")  # 原静默吞点：计数化（P1-6 三批），行为等价
         raise
 
 
@@ -1170,11 +1187,12 @@ def morning_high_from_df(df, codes, now):
             try:
                 hi = float(_row["high"].max())
             except Exception:
+                _swallow("exec.oversold_gap_confirm.hooks.morning_high_from_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
             if hi > 0:
                 out[c] = hi
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.hooks.morning_high_from_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return out
 
 
@@ -1195,6 +1213,7 @@ def morning_sell_retry_deadline(rt):
     try:
         v = int(rt.param("osc_morning_sell_retry_deadline_hhmm", 1030))
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.hooks.morning_sell_retry_deadline")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return dtime(10, 30)
     return dtime(v // 100, v % 100)
 
@@ -1206,6 +1225,7 @@ def preplace_probe_enabled(rt) -> bool:
     try:
         return bool(rt.param("osc_preplace_probe_enabled", False))
     except Exception:
+        _swallow("exec.oversold_gap_confirm.hooks.preplace_probe_enabled")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False
 
 
@@ -1274,7 +1294,7 @@ def probe_preplace_final(rt, context, now, today) -> int:
             rt.audit({"event": "osc_preplace_probe_fail", "error": str(_e)[:200],
                       "time": str(now)})
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.hooks.probe_preplace_final")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return 0
 
 
@@ -1361,7 +1381,7 @@ def try_morning_sell(rt, context, now, today) -> int:
         try:
             rt.risk(str(now), "osc_morning_sell_error", f"超跌跳空确认早盘卖侧异常: {str(_e)[:200]}", code="")
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.hooks.try_morning_sell")  # 原静默吞点：计数化（P1-6 三批），行为等价
         raise
 
 # ════════════════════════ 分发（宿主唯一入口）════════════════════════
@@ -1409,7 +1429,7 @@ def on_bar(rt, context, now, today, t) -> None:
                 rt.risk(str(now), "osc_morning_sell_giveup",
                         f"早盘冲高卖重试 {_mr} 次仍失败，今日放弃该钩子", code="")
             except Exception:
-                pass
+                _swallow("exec.oversold_gap_confirm.hooks.on_bar")  # 原静默吞点：计数化（P1-6 三批），行为等价
         else:
             try:
                 try_morning_sell(rt, context, now, today)
@@ -1455,7 +1475,7 @@ def on_bar(rt, context, now, today, t) -> None:
             try:
                 save_day_state(rt, today)
             except Exception:
-                pass
+                _swallow("exec.oversold_gap_confirm.hooks.on_bar")  # 原静默吞点：计数化（P1-6 三批），行为等价
     # 14:50 止损/到期
     # P1-7（2026-10-26）：每日一次标记改为「成功才置位」——卖侧是风控腿，前置位写法
     # 令 try_sell 一抛异常就当日永久缺席（与历史「14:55 尾盘归位未执行」事故同型）。
@@ -1473,7 +1493,7 @@ def on_bar(rt, context, now, today, t) -> None:
                         f"14:50 卖侧重试 {_sr} 次仍失败，今日放弃：止损/到期未执行，持仓过夜",
                         code="")
             except Exception:
-                pass
+                _swallow("exec.oversold_gap_confirm.hooks.on_bar")  # 原静默吞点：计数化（P1-6 三批），行为等价
         else:
             try:
                 try_sell(rt, context, now, today)
@@ -1500,4 +1520,4 @@ def on_bar(rt, context, now, today, t) -> None:
                 rt.log(f"[OSC] {_slot} 心跳 · 持仓 {len(sell_codes(rt))} 只 · "
                        f"今日已完成 {'/'.join(_t[k] for k in _done) if _done else '无'}")
             except Exception:
-                pass
+                _swallow("exec.oversold_gap_confirm.hooks.on_bar")  # 原静默吞点：计数化（P1-6 三批），行为等价

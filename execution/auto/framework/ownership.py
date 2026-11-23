@@ -32,6 +32,11 @@ from __future__ import annotations
 
 import json
 import os
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 LEGACY = "legacy"          # 账户持有但无策略认领 ⇒ 对所有策略锁定
 
@@ -108,7 +113,7 @@ class Ownership(object):
             try:
                 codes.update(st.owned_codes())
             except Exception:
-                pass
+                _swallow("exec.framework.ownership._known_codes")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return sorted(codes)
 
 

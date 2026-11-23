@@ -24,6 +24,9 @@
     2026-10-21 教训：秒退时输出进黑洞，主日志干净得像没事发生）。
   · 父进程看门狗：父 PID 消失（GUI 被杀/崩溃/强退，atexit 来不及跑）⇒ 自行退出，
     不留孤儿写状态文件。与 GUI 侧 atexit terminate 互为双保险。
+
+（2026-11-23：上述公共件已抽至 core/subprocess_job.py 供 review_worker 复用；
+本文件保持原样以守住 P2-4 测试基线，后续可迁移到 subprocess_job——纯删重复，不改行为。）
 """
 from __future__ import annotations
 

@@ -239,7 +239,7 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
     "ma5_recover_bonus_cap": 15.0,    # 恢复加分封顶
     # —— R0 震荡三元组压缩（研究中震荡段 100% 命中 / 趋势段 0% 误判）——
     "r0_cross_min": 3,                # 近20日 MA5/MA10 交叉次数下限
-    "r0_vol_max": 1.15,                # 量比 vol_MA5/vol_MA20 上限（缩量）
+    "r0_vol_max": 1.0,                 # 量比 vol_MA5/vol_MA20 上限（缩量）。2026-11-23 对齐 overlay 有效值（原默认 1.15 陈旧，仅靠 config.py overlay 兜底）
     "r0_pos_lo": 15.0, "r0_pos_hi": 65.0,   # 20日价格区间位置带
     "r0_factor": 0.6,                 # 命中 → 总分 ×0.6
     # —— V2.1 K-day 关键日跃迁（校准自 sh000001_daily_features.csv，2026-07-18）——
@@ -318,7 +318,7 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
     # —— 数据与 IO ——
     "index_symbol_sh": "sh000001", "index_symbol_sz": "sz399001",
     "kline_count_sh": 900, "kline_count_sz": 450,
-    "http_timeout": 8, "http_retry": 2, "http_retry_sleep": 1.0,
+    "http_timeout": 15, "http_retry": 2, "http_retry_sleep": 1.0,   # 2026-11-23 对齐 overlay 有效值（原默认 8 陈旧，仅靠 config.py overlay 兜底）
     "state_dir": None,                               # None → 默认 <BASE_DIR|E:\06_T>\t_io\index_regime
     "min_bars": 150,                                 # 趋势指标所需最少日线数（不足则逐项降级）
 }

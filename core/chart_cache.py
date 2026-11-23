@@ -24,6 +24,8 @@ from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 
+from core.diag_metrics import swallow as _swallow   # 2026-11-23 P1-6：吞点计数化（行为与 pass 等价）
+
 _BASE = Path(__file__).resolve().parents[1]
 if str(_BASE) not in sys.path:
     sys.path.insert(0, str(_BASE))
@@ -373,8 +375,8 @@ def enforce_payload_cap(max_files=_PAYLOAD_MAX) -> int:
             try:
                 p.unlink()
                 removed += 1
-            except Exception:
-                pass
+            except Exception as _e:
+                _swallow("chart_cache.enforce_payload_cap.unlink", _e)
         return removed
     except Exception:
         return 0
@@ -779,8 +781,8 @@ def prefetch_minute(codes, freqs=("30min", "60min"), sleep_s=0.35) -> dict:
                 df = fetch_minute_online(ts_code, freq, days_map.get(freq, 70))
                 if save_minute_history(ts_code, freq, df):
                     stat["got"] += 1
-            except Exception:
-                pass
+            except Exception as _e:
+                _swallow("chart_cache.prefetch_minute.fetch_save", _e)
             time.sleep(sleep_s)   # 防 tushare 限流
     return stat
 
@@ -816,8 +818,8 @@ def _acquire_lock(ttl=1800) -> bool:
             if time.time() - os.path.getmtime(_LOCK_FP) > ttl or not _lock_owner_alive():
                 os.remove(_LOCK_FP)
                 return _acquire_lock(ttl)
-        except Exception:
-            pass
+        except Exception as _e:
+            _swallow("chart_cache.acquire_lock.reclaim", _e)
         return False
     except Exception:
         return True   # fail-open
@@ -826,8 +828,8 @@ def _acquire_lock(ttl=1800) -> bool:
 def _release_lock() -> None:
     try:
         os.remove(_LOCK_FP)
-    except Exception:
-        pass
+    except Exception as _e:
+        _swallow("chart_cache.release_lock", _e)
 
 
 def was_run_today(kind, now=None) -> bool:
@@ -846,8 +848,8 @@ def mark_run_today(kind, now=None) -> None:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(st, f, ensure_ascii=False)
         os.replace(tmp, _STATE_FP)
-    except Exception:
-        pass
+    except Exception as _e:
+        _swallow("chart_cache.mark_run_today.write", _e)
 
 
 def run_prefetch(small=True, full=True, minutes=True, days_full=800,

@@ -18,6 +18,11 @@ import os
 import time
 from datetime import datetime
 from typing import Dict, Any, Optional
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # ── 桥目录配置 ──
 # P4-2 迁移：事件桥从 goldminer runtime/bridge → superTrader t_io/bridge（schema 不变）。
@@ -79,7 +84,7 @@ def _append_jsonl(path: str, rec: dict):
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
     except Exception:
-        pass
+        _swallow("exec.gm_bridge.writer._append_jsonl")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def _write_json(path: str, data):
@@ -88,7 +93,7 @@ def _write_json(path: str, data):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, default=str)
     except Exception:
-        pass
+        _swallow("exec.gm_bridge.writer._write_json")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def _write_json_atomic(path: str, data):
@@ -99,7 +104,7 @@ def _write_json_atomic(path: str, data):
             json.dump(data, f, ensure_ascii=False, default=str)
         os.replace(tmp, path)
     except Exception:
-        pass
+        _swallow("exec.gm_bridge.writer._write_json_atomic")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 # ── 公开 API：事件写入 ──
@@ -301,6 +306,7 @@ def check_kill_switch() -> bool:
     try:
         return os.path.exists(_kill_switch_path())
     except Exception:
+        _swallow("exec.gm_bridge.writer.check_kill_switch")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False
 
 
@@ -318,6 +324,7 @@ def read_buy_pending() -> dict:
         with open(_buy_pending_path(), encoding="utf-8") as f:
             return json.load(f) or {}
     except Exception:
+        _swallow("exec.gm_bridge.writer.read_buy_pending")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {}
 
 
@@ -327,6 +334,7 @@ def read_buy_decision() -> dict:
         with open(_buy_decision_path(), encoding="utf-8") as f:
             return json.load(f) or {}
     except Exception:
+        _swallow("exec.gm_bridge.writer.read_buy_decision")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {}
 
 
@@ -358,6 +366,7 @@ def read_auto_build() -> dict:
         with open(_auto_build_path(), encoding="utf-8") as f:
             return json.load(f) or {}
     except Exception:
+        _swallow("exec.gm_bridge.writer.read_auto_build")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {}
 
 
@@ -396,7 +405,7 @@ def stamp_run_type(rec: dict, run_type: str = RUN_TYPE_LIVE) -> dict:
     try:
         rec.setdefault("run_type", run_type or RUN_TYPE_LIVE)
     except Exception:
-        pass
+        _swallow("exec.gm_bridge.writer.stamp_run_type")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return rec
 
 
@@ -412,11 +421,12 @@ def install_audit_run_type(gm_module, run_type: str):
             try:
                 rec.setdefault("run_type", _rt)
             except Exception:
-                pass
+                _swallow("exec.gm_bridge.writer._wrapped")  # 原静默吞点：计数化（P1-6 三批），行为等价
             return _o(rec)
         _wrapped._run_type_wrapped = True
         _wrapped._run_type_orig = _orig
         gm_module._audit_write = _wrapped
         return True
     except Exception:
+        _swallow("exec.gm_bridge.writer.install_audit_run_type")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return False

@@ -31,6 +31,8 @@ from typing import Dict
 
 sys.stdout.reconfigure(encoding="utf-8")
 _ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(_ROOT))
+from core.diag_metrics import swallow as _diag_swallow  # noqa: E402（P1-6 切片命名空间用）
 _WATCHER_FP = _ROOT / "execution" / "auto" / "_gm" / "gm_bridge" / "watcher.py"
 _SRC = _WATCHER_FP.read_text(encoding="utf-8")
 _A = _SRC.index("# ── 旁路风控 ──")
@@ -51,7 +53,9 @@ class TestPositionAlarmTruth(unittest.TestCase):
         ns = {"os": os, "json": json, "time": time, "datetime": datetime,
               "Dict": Dict, "BRIDGE_DIR": self._tmp,
               "_push": lambda *a: self.pushes.append(a),
-              "_stock_label": lambda code: code}
+              "_stock_label": lambda code: code,
+              # 2026-11-23 P1-6：watcher 吞点已计数化（_swallow 引用），切片 exec 需补名
+              "_swallow": _diag_swallow}
         exec(compile(_SRC[_A:_B], "watcher.py:risk_block", "exec"), ns)
         self.ns = ns
 

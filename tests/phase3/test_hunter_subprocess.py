@@ -101,13 +101,32 @@ class _CaseBase(unittest.TestCase):
             except Exception:
                 pass
         self._wait_done(3.0)         # 等 monitor 收尾（关日志句柄），防 WinError 32
+        # 僵尸回收用例的残余竞态（2026-11-23 实锤）：`_wait_done` 只看 running 标志，
+        # 但 test_zombie 主体自己把 running 复位成 False——被 terminate 的 monitor
+        # 线程被唤醒→关日志句柄虽只需毫秒，临时目录清理却可能抢在它前面 ⇒ WinError 32
+        # 连红。先主动关残留句柄，再短重试清理，不掩盖真问题（最终仍抛）。
+        try:
+            with gui._HUNTER_PROC_LOCK:
+                _fp = gui._HUNTER_PROC.get("log_fp")
+                gui._HUNTER_PROC["log_fp"] = None
+            if _fp:
+                _fp.close()
+        except Exception:
+            pass
         gui.HUNTER_RUN_STATE.update(self._saved["state"])
         gui._HUNTER_STATUS_FP = self._saved["status_fp"]
         gui._HUNTER_RESULT_FP = self._saved["result_fp"]
         gui.LOGS_DIR = self._saved["logs"]
         with gui._HUNTER_PROC_LOCK:
             gui._HUNTER_PROC.update(self._saved["proc"])
-        self.td.cleanup()
+        for _attempt in range(10):
+            try:
+                self.td.cleanup()
+                break
+            except PermissionError:
+                time.sleep(0.2)      # 等 monitor 线程把日志句柄放掉
+        else:
+            self.td.cleanup()
 
     def _wait_done(self, sec=5.0):
         t0 = time.time()

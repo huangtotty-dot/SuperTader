@@ -19,6 +19,11 @@ import time
 import signal
 from datetime import datetime, timedelta
 from typing import Dict, Set, Optional
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # ── 桥路径（0806 迁移：与手工做T系统分离，统一由 writer 决定） ──
 try:
@@ -151,7 +156,7 @@ def _log_push(title: str, content: str, level: str, sent: bool, error: str = "")
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except Exception:
-        pass
+        _swallow("exec.gm_bridge.watcher._log_push")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 def _push(title: str, content: str, level: str = "info") -> bool:
@@ -248,6 +253,7 @@ def _account_truth_today():
                 positions[code] = {"qty": qty, "cost": float((v or {}).get("cost") or 0)}
         return float(last["cash"]), positions
     except Exception:
+        _swallow("exec.gm_bridge.watcher._account_truth_today")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 
@@ -338,7 +344,7 @@ def _check_heartbeat():
             # 有新心跳（mtime 更新）则自然取代基线
             _last_hb_ts = max(_last_hb_ts, os.path.getmtime(_heartbeat_path()))
     except Exception:
-        pass
+        _swallow("exec.gm_bridge.watcher._check_heartbeat")  # 原静默吞点：计数化（P1-6 三批），行为等价
     gap = now - _last_hb_ts
     if gap > 600 and _last_heartbeat_ok:
         _last_heartbeat_ok = False
@@ -367,9 +373,9 @@ def _ensure_singleton():
                     print(f"[watcher] 检测到存活实例 pid={pid}，已终止并接管（单例）")
                     time.sleep(1)
                 except OSError:
-                    pass
+                    _swallow("exec.gm_bridge.watcher._ensure_singleton")  # 原静默吞点：计数化（P1-6 三批），行为等价
     except Exception:
-        pass
+        _swallow("exec.gm_bridge.watcher._ensure_singleton")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 # ── 事件处理 ──
@@ -487,7 +493,7 @@ def run(date_str: str = None):
                                 rec = json.loads(line)
                                 handle_event(rec)
                             except json.JSONDecodeError:
-                                pass
+                                _swallow("exec.gm_bridge.watcher.run")  # 原静默吞点：计数化（P1-6 三批），行为等价
                     last_size = size
         except Exception as e:
             print(f"[watcher] 读取异常: {e}")
@@ -506,7 +512,7 @@ def _write_self_heartbeat():
         with open(os.path.join(BRIDGE_DIR, "watcher_heartbeat.json"), "w", encoding="utf-8") as f:
             json.dump(rec, f, ensure_ascii=False)
     except Exception:
-        pass
+        _swallow("exec.gm_bridge.watcher._write_self_heartbeat")  # 原静默吞点：计数化（P1-6 三批），行为等价
 
 
 if __name__ == "__main__":

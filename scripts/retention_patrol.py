@@ -8,14 +8,20 @@ bridge/heartbeat_*.jsonl 全留存（1.5-2.8MB/交易日）、cache/breakout_*.j
 **默认 dry-run**：只打印将删什么、释放多少；`--apply` 才真删。
 
 删除白名单（按文件 mtime 滚动，只删这些 glob 命中的文件，别的一概不碰）：
-  · t_io/cache/tushare_mins/**/*      mtime > 180 天
-  · t_io/minute_snapshots/**/*.json   mtime > 180 天
-  · t_io/bridge/heartbeat_*.jsonl     mtime >  90 天
+  · t_io/cache/tushare_mins/*.json    mtime > 30 天（2026-11-23 改：只扫顶层 json，
+    保护 47 个 legacy CSV 代码子目录——replay_day.py 在读；30 天未刷新≈掉出股票池的
+    僵尸缓存（实测 4,660 个），纯缓存删除=下次查看走一次网络，正确性无影响）
+  · t_io/cache/chart_payload/*.json   mtime > 60 天（纯预下载缓存，掉池残留同理）
   · t_io/cache/breakout_*.json        mtime > 180 天
+  · t_io/logs/hunter_run_*.log        mtime > 90 天（P2-4 子进程日志，防累积）
 
-只报告不删（研究产物，处置权留给 owner）：
-  · t_io/validation/**（实测 9.4G）
-  · t_io/traces/**（实测 181M）
+只报告不删（**永不删**，见 2026-11-23 架构评估"绝不能碰"清单）：
+  · t_io/validation/**（实测 9.4G，研究产物，处置权留 owner）
+  · t_io/traces/**（实测 181M，复盘偶尔读旧 trace）
+  · t_io/minute_snapshots/**（2023~2025 旧年份是一年期回测 harness_backtest 的
+    数据基础；近 1 年是做T信号活数据源——原 180d 删除规则会误删，2026-11-23 移除）
+  · t_io/bridge/heartbeat_*.jsonl（gui.py 盈亏曲线的**日期轴**——删一天曲线上少一天，
+    即使 equity_daily 有值也补不回；且是交易事件审计链。原 90d 删除规则 2026-11-23 移除）
 
 用法：
   python scripts/retention_patrol.py            # dry-run（默认）
@@ -42,16 +48,20 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[1]
 
 # 白名单删除规则：只有命中 glob 且 mtime 超龄的文件才进删除候选。
+# ⚠️ 2026-11-23 P0-3 防事故修正：minute_snapshots / bridge/heartbeat 两条规则**移除**
+# （误删回测数据基础、断盈亏曲线日期轴，见文件头注释与"只报告"段）。
 DELETE_RULES = [
-    {"name": "cache/tushare_mins", "glob": "cache/tushare_mins/**/*",        "keep_days": 180},
-    {"name": "minute_snapshots",   "glob": "minute_snapshots/**/*.json",     "keep_days": 180},
-    {"name": "bridge/heartbeat",   "glob": "bridge/heartbeat_*.jsonl",       "keep_days": 90},
-    {"name": "cache/breakout",     "glob": "cache/breakout_*.json",          "keep_days": 180},
+    {"name": "cache/tushare_mins",  "glob": "cache/tushare_mins/*.json",   "keep_days": 30},
+    {"name": "cache/chart_payload", "glob": "cache/chart_payload/*.json",  "keep_days": 60},
+    {"name": "cache/breakout",      "glob": "cache/breakout_*.json",       "keep_days": 180},
+    {"name": "logs/hunter_run",     "glob": "logs/hunter_run_*.log",       "keep_days": 90},
 ]
-# 研究产物：只报体积，永不删。
+# 只报体积，永不删（理由见文件头注释）。
 REPORT_ONLY = [
-    {"name": "validation", "glob": "validation/**/*"},
-    {"name": "traces",     "glob": "traces/**/*"},
+    {"name": "validation",        "glob": "validation/**/*"},
+    {"name": "traces",            "glob": "traces/**/*"},
+    {"name": "minute_snapshots",  "glob": "minute_snapshots/**/*.json"},
+    {"name": "bridge/heartbeat",  "glob": "bridge/heartbeat_*.jsonl"},
 ]
 
 _SEC_PER_DAY = 86400

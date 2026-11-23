@@ -59,6 +59,11 @@ except Exception:                                    # pragma: no cover - 兜底
 # 控制台着色（2026-10-15）。默认关；宿主 gm_main 探测到控制台支持 ANSI 后调 `style.enable(True)`。
 # 只影响显示：未开启时 `style.c()` 原样返回字符串。写日志文件那份由 ops_guard._TeeStream 剥码。
 from . import style as _st                          # noqa: E402
+try:
+    from core.diag_metrics import swallow as _swallow
+except ImportError:  # 路径未就绪的极端环境：计数降级为空操作，绝不崩主链（P1-6）
+    def _swallow(*_a, **_k):
+        return None
 
 # ⚠️ 目录名沿用历史的 `weak_strong_book`（**刻意不改**）：它是**在线账本**（positions.json），
 #    改名会让在途持仓与卖侧失联。要改名须与「部署新代码」同刻做数据迁移。
@@ -133,6 +138,7 @@ def _dec(value, default="0") -> Decimal:
         value = Decimal(str(value))
         return value if value.is_finite() else Decimal(default)
     except (InvalidOperation, TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.executor._dec")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return Decimal(default)
 
 
@@ -264,6 +270,7 @@ def _positive_price(value):
     try:
         px = float(value)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.executor._positive_price")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     return px if math.isfinite(px) and px > 0 else None
 
@@ -289,7 +296,7 @@ def _settle_buy_budget_record(rec, rep=None):
                       12: "expired", 6: "pending_cancel"}.get(int(raw), status) \
                 if raw is not None else status
         except (TypeError, ValueError):
-            pass
+            _swallow("exec.oversold_gap_confirm.executor._settle_buy_budget_record")  # 原静默吞点：计数化（P1-6 三批），行为等价
         rec["status"] = status
         if rep.get("order_id"):
             rec["order_id"] = rep.get("order_id")
@@ -468,7 +475,7 @@ def recover_order_intents(gateway, date, book_dir, log=print):
         try:
             log(f"[WS] ⛔ 委托意图恢复未闭环，禁止新 BUY: {out['issues']}")
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.executor.recover_order_intents")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return out
 
 
@@ -630,6 +637,7 @@ def load_book(book_dir: str = BOOK_DIR_DEFAULT) -> dict:
         with open(fp, encoding="utf-8") as f:
             b = json.load(f)
     except Exception:
+        _swallow("exec.oversold_gap_confirm.executor.load_book")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return {"updated_at": "", "open": {}}
     if not isinstance(b, dict) or not isinstance(b.get("open"), dict):
         return {"updated_at": "", "open": {}}
@@ -1126,7 +1134,7 @@ def _log_decision(log, full: dict, names: dict | None = None,
             if n.get('low') and n.get('prev_close'):
                 _lo = " 最低/昨收%+.2f%%" % ((n['low'] / n['prev_close'] - 1.0) * 100.0)
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.executor._log_decision")  # 原静默吞点：计数化（P1-6 三批），行为等价
         _gap = (n.get('gap') or 0) * 100
         log("        %s %-8s %-10s %s  差:%s%s  昨收%.2f 低%.2f 收%.2f" % (
             _st.c(_c, _st.CYAN), _name, str(bm.get(_c) or '')[:10],
@@ -1150,6 +1158,7 @@ def _apply_cash_floor(cash0, cash_floor, log, date):
     try:
         fl = float(cash_floor)
     except Exception:
+        _swallow("exec.oversold_gap_confirm.executor._apply_cash_floor")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return cash0, None
     meta = {"cash_before_raw": round(cash0, 2), "cash_floor": round(fl, 2),
             "cash_floor_applied": bool(fl > cash0)}
@@ -1273,6 +1282,7 @@ def _san(x):
     try:
         v = float(x)
     except (TypeError, ValueError):
+        _swallow("exec.oversold_gap_confirm.executor._san")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
     return v if math.isfinite(v) else None
 
@@ -1354,7 +1364,7 @@ def _write_decision(date, mode, started, full, picks, spares, *,
         try:
             log(f"[WS] ⚠️ 决策留痕写入失败（不阻断）: {e}")
         except Exception:
-            pass
+            _swallow("exec.oversold_gap_confirm.executor._write_decision")  # 原静默吞点：计数化（P1-6 三批），行为等价
         return None
 
 
@@ -1400,7 +1410,7 @@ def _buys_summary(buys_out: list) -> dict:
                 if math.isfinite(value) and value > 0:
                     known_notional = value
         except (TypeError, ValueError):
-            pass
+            _swallow("exec.oversold_gap_confirm.executor._buys_summary")  # 原静默吞点：计数化（P1-6 三批），行为等价
         if known_notional is None and filled > 0 and actual_px is not None:
             known_notional = filled * actual_px
         if known_notional is not None:
@@ -1565,7 +1575,7 @@ def merge_backfill_fills(book_dir: str, date: str, round_no: int, round_res: dic
                                 "summary": summary, "fills_file": fp},
                                ensure_ascii=False, indent=2))
     except Exception:
-        pass
+        _swallow("exec.oversold_gap_confirm.executor.merge_backfill_fills")  # 原静默吞点：计数化（P1-6 三批），行为等价
     log(f"[WS] 补单第{rn}轮留痕：fills 合并 buys+{len(recs)}（shift_from={shift or '-'}）⇒ "
         f"buys_placed={summary.get('buys_placed')}")
     return recs

@@ -210,6 +210,36 @@ let _apiTimeoutCnt = 0;
 let _lastReportAt = 0;      // 上报节流（见 apiCall 末尾注释）
 let _lastApiMs = 0;         // 最近一次 apiCall 耗时 ms（P0-7 被动 ping 的拥堵探针依据）
 
+// ---- 2026-11-23（P2-3）：诊断上报升级 tab + 关联 rid（慢日志 JSONL 化）----
+// rid 让同一次 apiCall 的「慢调用 + 超时 + jsblock/ping」能在 jsonl 里串成一条链：
+// 从「什么慢」归因到「在哪个 tab、哪一次调用链上慢」。
+let _diagRidSeq = 0;
+function _diagRid() { _diagRidSeq++; return Date.now().toString(36) + "-" + _diagRidSeq; }
+function _diagTab() {
+  try {
+    const el = document.querySelector(".sidebar-item.active");
+    return (el && el.dataset && el.dataset.tab) || "";
+  } catch (e) { return ""; }
+}
+// fire-and-forget 上报（不占 apiCall 在飞名额）；返回 promise 时吞掉 rejection
+// —— 旧后端（GUI 未重启）参数个数不符会 reject，绝不能让诊断埋点炸出未捕获异常。
+function _reportSlow(name, ms, rid) {
+  try {
+    const api = window.pywebview && window.pywebview.api;
+    if (!api || typeof api.report_slow_call !== "function") return;
+    const r = api.report_slow_call(name, Math.round(ms), _diagTab(), rid || _diagRid());
+    if (r && typeof r.catch === "function") r.catch(() => {});
+  } catch (e) { /* 静默 */ }
+}
+function _reportDiag(kind, value, note, rid) {
+  try {
+    const api = window.pywebview && window.pywebview.api;
+    if (!api || typeof api.report_client_diag !== "function") return;
+    const r = api.report_client_diag(kind, Math.round(value), note || "", _diagTab(), rid || _diagRid());
+    if (r && typeof r.catch === "function") r.catch(() => {});
+  } catch (e) { /* 静默 */ }
+}
+
 async function apiCall(name, ...args) {
   if (!window.pywebview || !window.pywebview.api) {
     throw new Error("未运行在 pywebview 环境（请用 python gui.py 启动）");
@@ -233,6 +263,7 @@ async function apiCall(name, ...args) {
   }
   _apiInflight++;
   const _t0 = performance.now();
+  const _rid = _diagRid();   // P2-3：本次调用链关联 id（慢/超时上报串成一条链）
   const _cap = _API_TIMEOUT_OVERRIDE[name] || _API_TIMEOUT_MS;
   let _timedOut = false;
   try {
@@ -257,9 +288,9 @@ async function apiCall(name, ...args) {
       if (_timedOut) {
         _apiTimeoutCnt++;
         // 超时单独记一笔（这类调用不会走慢调用上报：挂住的调用连 finally 都跑不到，日志里是隐形的）
-        try { window.pywebview.api.report_client_diag("api_timeout", _dt, String(name)); } catch (e) { }
+        _reportDiag("api_timeout", _dt, String(name), _rid);
       } else if (_dt >= 800 && name !== "report_slow_call") {
-        try { window.pywebview.api.report_slow_call(name, Math.round(_dt)); } catch (e) { /* 静默 */ }
+        _reportSlow(name, _dt, _rid);
       }
     }
   }
@@ -6886,7 +6917,7 @@ async function loadStockChartNow(force) {
       const _tr = performance.now() - _tr0;
       // 2026-10-20：区分「后端慢」与「前端渲染慢」——>=500ms 单独记一行
       if (_tr >= 500) {
-        try { window.pywebview.api.report_slow_call("chart_render", Math.round(_tr)); } catch (e) { /* 静默 */ }
+        _reportSlow("chart_render", _tr);
       }
       // 整图可能比实时尾旧（分钟源/缓存/版本握手三层闸）⇒ 立刻用实时尾覆盖当前周期
       startStockChartLive();
@@ -6905,7 +6936,7 @@ async function loadStockChartNow(force) {
     // 2026-10-20：原来静默吞错 ⇒ 后端异常时弹窗永远停在「加载中...」，被误判为"慢"。
     const el = document.getElementById("stockChart");
     if (el) el.innerHTML = `<div class="empty" style="color:#f85149;padding-top:120px">K线加载失败：${esc((e && (e.message || e)) || "未知错误")}</div>`;
-    try { window.pywebview.api.report_slow_call("chart_error", 0); } catch (e2) { /* 静默 */ }
+    _reportSlow("chart_error", 0);
   }
 }
 
@@ -7236,7 +7267,7 @@ async function openDayIntraday(code, name, date) {
     // ⚠️ 之前这里没有 try/catch —— async 函数抛错会变成**未处理的 rejection**，
     // 界面就永远停在「加载中…」，看起来像后端挂了（实际后端 3.2s 就返回了）。
     if (info) info.innerHTML = `<span style="color:#f85149">渲染失败：${esc((e && (e.message || e)) || "未知")}</span>`;
-    try { window.pywebview.api.report_slow_call("day_render_err", 0); } catch (e2) { /* 静默 */ }
+    _reportSlow("day_render_err", 0);
   }
 }
 
@@ -7420,7 +7451,7 @@ async function openStockChart(code, name) {
   const _openMs = performance.now() - _open0;
   // 2026-10-20：端到端「点开→出图」耗时（含桥传输+渲染），>=800ms 落慢日志
   if (_openMs >= 800) {
-    try { window.pywebview.api.report_slow_call("chart_open_total", Math.round(_openMs)); } catch (e) { /* 静默 */ }
+    _reportSlow("chart_open_total", _openMs);
   }
   startStockChartLive();          // 盘中实时尾（3s）
   // 2026-10-20 owner：「业务简介特别的慢」——**开图就在后台预取公司资料**。
@@ -13785,19 +13816,26 @@ const _liveTimers = {};    // name -> { kick: timeoutId, interval: intervalId }
 // 这是**正反馈**，也是日志里"每次调用都慢、且延迟稳定停在 20s 平台"的成因。
 // 改成完成后 setTimeout 排下一次：每个轮询器至多 1 个在飞，队列有界，反馈环断开。
 // 代价：慢时轮询频率自然降下来（这正是我们想要的背压），不再是固定的"到点就打"。
-function _startStaggered(name, fn, periodMs, offsetMs) {
+function _startStaggered(name, fn, periodMs, offsetMs, hiddenKeep) {
   _stopStaggered(name);
-  const slot = { kick: null, interval: null, stopped: false };
+  const slot = { kick: null, interval: null, stopped: false, flying: false,
+                 tickFn: null, hiddenKeep: !!hiddenKeep };
   const tick = async () => {
-    if (slot.stopped) return;
+    if (slot.stopped || slot.flying) return;   // flying 闸：回可见补拍与自排期绝不叠加
+    slot.flying = true;
     try {
       // 上限保护：单次若卡死（后端挂住不返回），也必须能重新排期——否则该轮询永久停摆。
       // 取 30s：远大于正常往返，只在真挂住时兜底。
       await Promise.race([Promise.resolve(fn()), new Promise(r => setTimeout(r, 30000))]);
     } catch (e) { /* 静默：轮询失败不该打断循环 */ }
+    slot.flying = false;
     if (slot.stopped) return;
-    slot.interval = setTimeout(tick, periodMs);   // ← 上一次跑完才排下一次
+    // 2026-11-23（P2-6）：页面隐藏期非告警轮询降频 ×3（10s→30s，挂机省电省桥容量）；
+    // pricealert（响铃/告警音授权）传 hiddenKeep=true 保持原频；回可见由 visibilitychange 立即补拍。
+    const _next = (!slot.hiddenKeep && document.hidden) ? periodMs * 3 : periodMs;
+    slot.interval = setTimeout(tick, _next);   // ← 上一次跑完才排下一次
   };
+  slot.tickFn = tick;
   // 先延迟 offset 再起跑：只挪相位，不改「首帧等一个周期」的原有语义
   slot.kick = setTimeout(() => {
     slot.kick = null;
@@ -13866,7 +13904,8 @@ function startLivePoll() {
     if (state.date) return refreshLive(false);
   }, 10000, 0);
   // 价格突破提醒的事件轮询（响铃用）。**不受 chartModalOpen 影响** —— 正看 K 线时更要响。
-  _startStaggered("pricealert", () => pollPriceAlerts(), 10000, 5200);
+  // P2-6：hiddenKeep=true —— 隐藏期**不降频**（响铃/告警音授权条款，见 _startStaggered 注释）。
+  _startStaggered("pricealert", () => pollPriceAlerts(), 10000, 5200, true);
   // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
   _startStaggered("auto", () => {
     if (chartModalOpen) return;        // K 线弹窗打开：暂停 auto_pnl/auto_status（3~5s 重活）
@@ -13884,7 +13923,12 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261122c", 0); } catch (e) { /* 静默 */ }
+  _reportSlow("app_boot_20261123", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
+  // 2026-11-23（P2-5）：echarts（~1MB）空闲预热。已是按需加载（首屏不阻塞），但首次开图
+  // 要现场下载+解析 1MB（冷开图可感到顿挫）⇒ 启动后浏览器空闲期先拉下来编一遍，
+  // 用户第一次开 K 线即热。requestIdleCallback 缺席时退化 setTimeout；失败静默不碍启动。
+  const _ric = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
+  _ric(() => { try { _ensureEcharts(); } catch (e) { /* 静默 */ } }, { timeout: 4000 });
   // 2026-11-22（P2-5）：重点关注/猎手标红/周线MACD上次轮巡 已**并入 load_day 响应**
   // （原这里 3 个独立 apiCall 与首帧扇出挤 6 个在飞名额）⇒ 由 loadAndRender 统一应用。
   // 后端键缺失时三函数各自回退原端点（见 loadFocusCodes/loadRedMarks/loadWeeklyMacdLastStatus 的 pre 参数）。
@@ -14040,13 +14084,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const now = Date.now();
     if (now - _lastDiagAt < 2000) return;
     _lastDiagAt = now;
-    try {
-      if (window.pywebview && window.pywebview.api
-        && typeof window.pywebview.api.report_client_diag === "function") {
-        // fire-and-forget，且**不占** apiCall 的在飞名额（诊断不该挤掉业务调用）
-        window.pywebview.api.report_client_diag(kind, Math.round(value), note || "");
-      }
-    } catch (e) { /* 静默 */ }
+    // P2-3：走 _reportDiag（带 tab+rid、吞 rejection）；不占 apiCall 在飞名额（诊断不该挤业务）
+    _reportDiag(kind, value, note || "");
   }
   let _lastTick = performance.now();
   setInterval(() => {
@@ -14072,6 +14111,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const _g = _hiddenAt ? Date.now() - _hiddenAt : 0;
       _hiddenAt = 0;
       if (_g > 60000) _onWakeFromSleep(_g);
+      // P2-6 配套：隐藏期降过频的轮询立即补一拍（否则短隐藏后数据最长停 30s）。
+      // pricealert（hiddenKeep）不补——它本就没降频；flying 闸防与在飞 tick 叠加。
+      Object.keys(_liveTimers).forEach((n) => {
+        const s = _liveTimers[n];
+        if (!s || s.stopped || s.hiddenKeep || !s.tickFn) return;
+        if (s.interval) clearTimeout(s.interval);
+        s.interval = setTimeout(s.tickFn, 0);
+      });
       _repaintAfterHidden();
     } else {
       _hiddenAt = Date.now();

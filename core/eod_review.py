@@ -22,7 +22,30 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _daily_review_state = {"date": "", "next_try": 0.0}
 _chart_prefetch_state = {"date": "", "next_try": 0.0}
 _freshness_patrol_state = {"date": ""}   # 产物新鲜度巡检（2026-10-12）当日占位
+_retention_patrol_state = {"date": ""}   # t_io 保留策略巡检（2026-11-23 P1-1）周六占位
+_diag_flush_date = ""                    # diag_metrics 落盘（2026-11-23 P1-6）当日占位
 _daily_pnl_push_date = ""  # 模块级：14:59推送防重复
+
+
+def _maybe_flush_diag_metrics(now: datetime) -> None:
+    """15:10 后每日一次：把本进程的诊断计数快照落 `t_io/logs/metrics.jsonl`（2026-11-23 P1-6 首片）。
+
+    只落**本进程**（main 循环）的计数——GUI/gm_main/各子进程要各自接 flush（进程标记区分），
+    铺开节奏见 P1-6 排期；无吞点时 flush 自跳过不写空行。
+    """
+    global _diag_flush_date
+    try:
+        if now.weekday() >= 5 or now.time() < dtime(15, 10):
+            return
+        today = now.strftime("%Y-%m-%d")
+        if _diag_flush_date == today:
+            return
+        from core import diag_metrics as _dm
+        _dm.set_process_tag("main")
+        _dm.flush()                      # 返回 None=无吞点或写失败，都无需动作
+        _diag_flush_date = today
+    except Exception as e:
+        log.warning(f"⚠️ 诊断指标落盘失败: {str(e)[:120]}")
 
 
 def _maybe_run_daily_review(now: datetime) -> None:
@@ -198,6 +221,61 @@ def _maybe_run_freshness_patrol(now: datetime) -> None:
         _threading.Thread(target=_worker, args=(today,), name="freshness-patrol", daemon=True).start()
     except Exception as e:
         log.warning(f"⚠️ 产物新鲜度巡检触发失败: {str(e)[:120]}")
+
+
+def _maybe_run_retention_patrol(now: datetime) -> None:
+    """**周六 15:50 后每周一次** t_io 保留策略巡检（dry-run）→ 飞书（2026-11-23 P1-1）。
+
+    为什么周六：周一~周五盘子在跑，不添任何磁盘压力；周六系统空闲，报告来得及人工过目。
+    为什么 **dry-run 永远不接 --apply**：删除不可逆（脚本 docstring 明示），自动链只产报告，
+    真删永远人工执行（参照报告 `python scripts/retention_patrol.py --apply`）。
+    幂等：`t_io/state/retention_patrol_{date}.json` 占位（跨重启成立），报告全文也落该文件。
+    """
+    global _retention_patrol_state
+    try:
+        t = now.time()
+        if now.weekday() != 5 or t < dtime(15, 50):
+            return
+        today = now.strftime("%Y-%m-%d")
+        if _retention_patrol_state.get("date") == today:
+            return
+        marker = os.path.join(_ROOT, "t_io", "state", f"retention_patrol_{today}.json")
+        if os.path.exists(marker):
+            _retention_patrol_state["date"] = today     # 已跑过也占位，免得每轮查文件
+            return
+
+        def _worker(day: str, _mk: str) -> None:
+            try:
+                import subprocess as _sp
+                script = os.path.join(_ROOT, "scripts", "retention_patrol.py")
+                cp = _sp.run([sys.executable, script], capture_output=True, text=True,
+                             timeout=600, cwd=_ROOT)
+                report = (cp.stdout or "")[-4000:]          # dry-run 全文（长输出截尾保底）
+                ok = (cp.returncode == 0)
+                if ok:
+                    try:
+                        with open(_mk, "w", encoding="utf-8") as f:
+                            f.write(report)
+                    except OSError:
+                        pass
+                    _retention_patrol_state["date"] = day
+                # 飞书卡片：dry-run 摘要（截 ~1500 字防超长）；失败也推，链路失败不能静默
+                summary = report if len(report) <= 1500 else report[:700] + "\n……（中略）……\n" + report[-700:]
+                title = f"🧹 t_io 保留策略巡检（{day} · dry-run）" if ok else f"⚠️ t_io 保留策略巡检失败（{day}）"
+                if not ok:
+                    summary = f"rc={cp.returncode}\n{(cp.stderr or '')[:600]}\n{summary}"
+                from config import send_feishu_payload
+                send_feishu_payload(
+                    {"msg_type": "text", "content": {"text": f"{title}\n{summary}"}},
+                    "t_io 保留策略巡检周报已推送", "t_io 保留策略巡检推送")
+                log.info(f"t_io 保留策略巡检完成（{day}）rc={cp.returncode} → {_mk}")
+            except Exception as e:                 # 不吞：链路失败必须留痕
+                log.error(f"❌ t_io 保留策略巡检链路异常: {type(e).__name__}: {e}")
+
+        _threading.Thread(target=_worker, args=(today, marker), name="retention-patrol",
+                          daemon=True).start()
+    except Exception as e:
+        log.warning(f"⚠️ t_io 保留策略巡检触发失败: {str(e)[:120]}")
 
 
 def _maybe_record_daily_pnl(now: datetime) -> None:
