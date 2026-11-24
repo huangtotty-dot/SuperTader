@@ -107,6 +107,26 @@ print(f"H1-b 修正候选(≤25段内拐点日): {len(h1b_days)} 天 ≈{len(h1b
 print(f"H2-a 原口径触发: {len(h2_days)} 天 {h2_days[-6:]}")
 print(f"H2-b 修正候选(≥70段峰后首日跌): {len(h2b_days)} 天 ≈{len(h2b_days)/3.33:.1f}/年 {h2b_days[-6:]}")
 
+# H1-s/H2-s 斜率口径（2026-11-24 owner 提案，评估通过；区域按近5日足迹）：
+#   H1-s 冰点转暖 = slope5 负转正 ∧ 近5日 sent_ma 曾 ≤25（12次, +5/+10日方向对73%）
+#   H2-s 热点转冷 = slope5 正转负 ∧ 近5日曾≥60（40次, 70%/67%）；严格档 ≥70（14次, 79%/86%）
+n_r = len(rows)
+h1s, h2s60, h2s70 = [], [], []
+for j in range(1, n_r):
+    a, b = rows[j-1], rows[j]
+    if a.get("slope5") is None or b.get("slope5") is None: continue
+    recent = [v for v in (r.get("sent_ma") for r in rows[max(0, j-5):j+1]) if v is not None]
+    if not recent: continue
+    if a["slope5"] < 0 < b["slope5"] and min(recent) <= 25:
+        h1s.append(b["date"])
+    if a["slope5"] > 0 > b["slope5"]:
+        mx = max(recent)
+        if mx >= 60: h2s60.append(b["date"])
+        if mx >= 70: h2s70.append(b["date"])
+print(f"H1-s 斜率口径(负转正∧近5日≤25): {len(h1s)} 天 ≈{len(h1s)/3.33:.1f}/年 {h1s[-6:]}")
+print(f"H2-s 斜率口径(正转负∧近5日≥60): {len(h2s60)} 天 ≈{len(h2s60)/3.33:.1f}/年 {h2s60[-6:]}")
+print(f"H2-s 严格档(≥70): {len(h2s70)} 天 {h2s70[-6:]}")
+
 # ── qt.gtimg.cn 批量快照（f[3]=现价 f[4]=昨收 f[5]=开 f[33]=高 f[34]=低）──
 def qt_batch(codes):
     out = {}
