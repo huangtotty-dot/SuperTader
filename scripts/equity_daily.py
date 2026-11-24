@@ -29,6 +29,7 @@ import glob
 import json
 import os
 import sys
+from datetime import datetime
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -75,10 +76,13 @@ def _load_json(fp):
         return json.load(f)
 
 
-def force_refresh_index(index: str):
+def force_refresh_index(index: str, date: str = None):
     """强制刷新指数日线缓存（根治「用到才拉」停在旧日期的问题）：
     先备份并删除缓存文件再调 index_daily，绕过 weekday/09:15 的 need_refresh 门控，
-    保证每次都发起网络拉取；网络失败则恢复旧缓存兜底。返回 (df, note)。"""
+    保证每次都发起网络拉取；网络失败则恢复旧缓存兜底。返回 (df, note)。
+
+    候选㊳（2026-11-24）：fqkline 断供（501）时，date 给定且缓存仍缺当日行 →
+    用 qt.gtimg.cn 快照补丁当日行（quote_daily_bar），α 序列不再因单点断供开天窗。"""
     idx = str(index).lower()
     cache_fp = os.path.join(_KLINE_DIR, f"index_{idx}.json")
     bak = None
@@ -97,9 +101,78 @@ def force_refresh_index(index: str):
         except Exception:
             pass
         df = TencentProvider().index_daily(idx)
+        if df.empty or (date and str(df.iloc[-1]["date"]) < date):
+            qdf, qnote = _quote_patch_index(idx, date)
+            if qdf is not None:
+                return qdf, f"{idx}:网络拉取失败,回退旧缓存;{qnote}"
         return df, f"{idx}:网络拉取失败,回退旧缓存"
+    if date and not df.empty and str(df.iloc[-1]["date"]) < date:
+        # 拉取"成功"但末行仍旧（fqkline 501 返回空数据也会被当成成功缓存）→ quote 补丁
+        qdf, qnote = _quote_patch_index(idx, date)
+        if qdf is not None:
+            return qdf, qnote
     last = str(df.iloc[-1]["date"]) if not df.empty else "无数据"
     return df, f"{idx}:强制刷新生效,缓存末行={last}"
+
+
+def _quote_patch_index(idx: str, date: str):
+    """指数缓存当日行 quote 补丁。补丁成功返回 (df, note)，否则 (None, None)。"""
+    if not date:
+        return None, None
+    try:
+        from core.market_data.tencent_provider import quote_daily_bar
+        bar = quote_daily_bar(idx)
+    except Exception:
+        return None, None
+    if not bar or bar.get("date") != date:
+        return None, None
+    row = _quote_patch_cache_file(os.path.join(_KLINE_DIR, f"index_{idx}.json"), bar, date)
+    if row is None:
+        return None, None
+    try:
+        d = _load_json(os.path.join(_KLINE_DIR, f"index_{idx}.json"))
+        import pandas as pd
+        df = pd.DataFrame(d.get("rows") or [])
+        return df, f"{idx}:fqkline断供→quote快照补丁当日行close={bar['close']}"
+    except Exception:
+        return None, None
+
+
+def _quote_patch_cache_file(cache_fp: str, bar: dict, date: str):
+    """把 quote bar 写进日线缓存（替换同日旧行，原子写）。成功返回行 dict，失败 None。
+    副作用即收益：GUI/K线弹窗等其它读缓存处同步被修复。"""
+    try:
+        d = _load_json(cache_fp) if os.path.exists(cache_fp) else {"rows": []}
+        rows = [r for r in (d.get("rows") or []) if str(r.get("date")) != date]
+        row = {"date": bar["date"], "open": bar["open"], "close": bar["close"],
+               "high": bar["high"], "low": bar["low"], "volume": bar["volume"],
+               "amount": bar["amount"], "src": "tencent_quote"}
+        rows.append(row)
+        rows.sort(key=lambda r: str(r.get("date")))
+        d["rows"] = rows
+        d["saved_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " quote_patch"
+        tmp = cache_fp + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False)
+        os.replace(tmp, cache_fp)
+        return row
+    except Exception:
+        return None
+
+
+def _quote_patch_stock(code: str, date: str):
+    """个股缓存当日行 quote 补丁（候选㊳）：fqkline 断供时用 qt.gtimg.cn 快照
+    补齐当日 EOD 收盘。补丁成功返回 close，否则 None（缓存同步被修复）。"""
+    try:
+        from core.market_data.tencent_provider import quote_daily_bar
+        bar = quote_daily_bar(code)
+    except Exception:
+        return None
+    if not bar or bar.get("date") != date:
+        return None
+    if _quote_patch_cache_file(os.path.join(_KLINE_DIR, f"{code}.json"), bar, date) is None:
+        return None
+    return float(bar["close"])
 
 
 def index_ret(df, date: str):
@@ -249,6 +322,9 @@ def _eod_close(code: str, date: str):
             return t_close, f"tencent({warn})"
         if t_close is not None:
             return t_close, f"tencent-carry({t_used},{warn})"
+        q = _quote_patch_stock(code, date)  # 候选㊳: fqkline 断供 → qt 快照兜底
+        if q is not None:
+            return q, f"quote({warn})"
         return close, warn
     # 缓存缺失或陈旧（无当日行）→ 腾讯日线回退
     t_close, t_used = _tencent_close(code, date)
@@ -256,6 +332,9 @@ def _eod_close(code: str, date: str):
         return t_close, "tencent"
     if t_close is not None:
         return t_close, f"tencent-carry({t_used})"
+    q = _quote_patch_stock(code, date)  # 候选㊳: fqkline 断供 → qt 快照兜底
+    if q is not None:
+        return q, "quote"
     if close is not None:
         return close, f"cache-carry({used})"
     return None, None
@@ -501,9 +580,9 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
     notes = [_SIM_TAG + "(heartbeat尾行+K线重估)"]
     if extra_note:
         notes.append(extra_note)
-    # 1) 基准强制刷新（先于一切计算）
-    df_main, note1 = force_refresh_index(_BENCH_MAIN)
-    df_aux, note2 = force_refresh_index(_BENCH_AUX)
+    # 1) 基准强制刷新（先于一切计算）；候选㊳: 传 date 供 fqkline 断供时 quote 补丁当日行
+    df_main, note1 = force_refresh_index(_BENCH_MAIN, date)
+    df_aux, note2 = force_refresh_index(_BENCH_AUX, date)
     notes += [note1, note2]
     benchmark_ret, b_note = index_ret(df_main, date)
     benchmark_aux_ret, ba_note = index_ret(df_aux, date)

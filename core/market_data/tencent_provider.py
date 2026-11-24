@@ -492,6 +492,40 @@ def _qt_snapshot_raw(symbol: str):
     return f
 
 
+def quote_daily_bar(symbol: str):
+    """腾讯 qt.gtimg.cn 快照 → 当日日线 bar（fqkline K线端点断供时的兜底，候选㊳）。
+
+    背景（2026-11-24 实证）：fqkline 端点 501 断供整天，但 qt.gtimg.cn 报价端点存活
+    （501 只影响 /appstock/ 路径族）⇒ EOD 净值/基准刷新多一条活路。
+
+    返回 {"date","open","high","low","close","volume","amount","src"} 或 None。
+    口径：volume=手（与日线缓存一致）；amount=元（f[35] 三段式第 3 段）。
+    ⚠️ 快照在盘后是当日终值、盘中是时点价——调用方负责只在 EOD 场景使用，
+    并自行校验 bar["date"] 与目标日期一致。
+    """
+    f = _qt_snapshot_raw(_tx_symbol(symbol))
+    if not f or len(f) < 36:
+        return None
+    try:
+        ts = str(f[30])                       # 形如 20261124151951
+        if len(ts) < 8 or not ts[:8].isdigit():
+            return None
+        date = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]}"
+        close = float(f[3])
+        open_ = float(f[5])
+        high = float(f[33])
+        low = float(f[34])
+        vol = float(f[6] or 0)                # 手
+        parts = str(f[35]).split("/")         # "43.93/128017/559459537"
+        amount = float(parts[2]) if len(parts) == 3 else 0.0
+    except (TypeError, ValueError, IndexError):
+        return None
+    if not close or close <= 0:
+        return None
+    return {"date": date, "open": open_, "high": high, "low": low, "close": close,
+            "volume": vol, "amount": amount, "src": "tencent_quote"}
+
+
 # ── 分钟 K 线 / 裸日线（2026-10-17，盘中实时 K 线专用）───────────────────────
 _MINUTE_KLINE_COLS = ["time", "open", "high", "low", "close", "volume"]
 _MKLINE_FREQS = ("m1", "m5", "m15", "m30", "m60")     # 腾讯无 m10（10min 由 m5 合成）

@@ -1,6 +1,27 @@
 {
-  "updated_at": "2026-11-20 14:50:06",
-  "open": {},
+  "updated_at": "2026-11-24 14:50:01",
+  "open": {
+    "300508": {
+      "entry_date": "2026-11-24",
+      "entry_price": 43.7824,
+      "qty": 2100,
+      "dev20": -0.094633,
+      "gap": 0.14014560582423297,
+      "board": "机器人",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "300354": {
+      "entry_date": "2026-11-24",
+      "entry_price": 28.4233,
+      "qty": 300,
+      "dev20": -0.087783,
+      "gap": 0.12896825396825395,
+      "board": "物理AI",
+      "days_held": 0,
+      "last_check_date": null
+    }
+  },
   "closed": {
     "301373": {
       "entry_date": "2026-10-14",
