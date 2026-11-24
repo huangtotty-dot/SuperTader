@@ -92,6 +92,11 @@ _TTL_REGISTRY = [
          exempt=("P0-2 起语义为：fresh 直返；stale **同步**走 QuoteBus（共享档 max_age=8s，"
                  "bus 命中本征毫秒级），异常回旧值不抛。TTL 不再承担「省网络」职责"
                  "（stale 拍经 bus 同步取数，无相位病），登记豁免。")),
+    dict(endpoint="load_index_leaders", ttl_name="_IDX_LEADERS_TTL",
+         ttl_re=r"_IDX_LEADERS_TTL\s*=\s*(\d+(?:\.\d+)?)",
+         poll_re=r"_IDX_LEADERS_TTL_MS\s*=\s*(\d+)",
+         exempt=None),                       # 86400s > 60s：名单日频（市值前10），
+                                             # 重建在 core.index_leaders 后台单飞，前端只读缓存
     dict(endpoint="load_auto_pnl", ttl_name="_AUTO_PNL_TTL",
          ttl_re=r"_AUTO_PNL_TTL\s*=\s*(\d+(?:\.\d+)?)",
          poll_re=r'_startStaggered\("auto"[\s\S]{0,500}?,\s*(\d+)\s*,\s*\d+\s*\)',

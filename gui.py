@@ -4450,6 +4450,25 @@ class Api:
             with self._SECTOR_PCT_LOCK:
                 self._SECTOR_PCT_RUN["running"] = False
 
+    # 指数「市值前 10」名单（2026-11-24 owner：「每个指数选取 10 个市值最大的股票，
+    # 用方格显示涨幅」）。名单日频（市值排序盘中几乎不变）⇒ 服务周期 = 1 天；
+    # 前端只读缓存，跨日重建在 core.index_leaders 的后台单飞线程里跑（js_api 零网络）。
+    _IDX_LEADERS_TTL = 86400.0
+
+    def load_index_leaders(self):
+        """各指数「总市值前 10」名单 → {date, built_at, items:{指数名:[{code,name,mktcap}]}, pending}。
+
+        口径见 `core/index_leaders`（宽基=对应板块市值前 10；中证500/1000=先取成分表再排）。
+        本方法只做**缓存读 + 后台单飞重建调度**：名单未就绪时返回 pending=True，
+        前端显示"名单准备中"，下一拍自然补齐。
+        """
+        try:
+            from core import index_leaders as _il
+            return _clean(_il.get_cached(self._IDX_LEADERS_TTL))
+        except Exception:
+            _swallow("gui.load_index_leaders")
+            return _clean({"date": None, "items": {}, "pending": True})
+
     def _market_turnover_impl(self):
         now = _time_mod.time()
         hit = Api._turnover_cache.get("payload")
@@ -17557,6 +17576,15 @@ def _acquire_gui_single_instance():
 
 if __name__ == "__main__":
     import webview
+
+    # 指数「市值前10」名单预热（2026-11-24）：只做"读缓存 + 必要时踢后台重建"，
+    # 不阻塞启动。放在这里是为了**不等前端轮询**也把名单建起来（用户不开信号页时
+    # 前端可能一整天都不问这个端点）。
+    try:
+        from core import index_leaders as _il0
+        _il0.get_cached(86400.0)
+    except Exception:
+        pass
 
     # 单实例闸（2026-10-28）：双开会把 pywebview 投递层翻倍压垮。`--allow-multi` 可强行跳过。
     #

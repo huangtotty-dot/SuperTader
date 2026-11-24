@@ -776,6 +776,9 @@ function _applyQuotesPayload(q, skipPb) {
   // 风向标「价/涨幅」列：面板就绪后自身轮询降到 60s，挂在 10s live 轮询上才能 ~15s 刷新
   // （内部有 tab 可见性 + 15s TTL + 单飞闸，不在该页/在飞中都是零成本）
   loadBeaconQuotes();
+  // 指数「市值前10」方格（2026-11-24）：名单 60s 轮询 + 涨幅 15s 一拍，内部都有闸
+  loadIndexLeaders();
+  _loadIdxLeaderQuotes();
   // 猎手展开页的实时价/涨幅：只刷**当前可见**的展开板块（TTL 15s 节流；
   // 猎手页没打开/没展开任何板块时是零成本 —— 别为看不见的东西出网）
   if (hunterOpenSectors.size && _hunterTabActive()) {
@@ -884,6 +887,7 @@ async function loadMarketBeacon(force, dateOverride) {
     } else {
       _beacon = { ts: Date.now(), data: d || {}, inflight: false, date: _curDate };
       window._beaconVer = (d && d.ver) || null;   // pending 帧不带 ver ⇒ 保留上次
+      try { loadIndexLeaders(); } catch (e) { /* 忽略 */ }   // 指数市值前10 方格
       renderMarketBeacon(d || {});
     }
   } catch (e) {
@@ -1064,8 +1068,7 @@ function renderMarketBeacon(d) {
         <span style="color:#2ea043;margin-left:6px">■</span> 其余
       </span>
     </div>
-    <div id="beaconLeadStrip" class="beacon-leadstrip"
-         title="各板块龙头公司的实时涨幅（与明细表同一次行情刷新，约 15s 一拍；点条目展开该板块）">${_beaconLeadStripHtml(d)}</div>
+    <div id="indexLeadGrid" class="idx-leader-grid">${_idxLeaderGridHtml()}</div>
     <div class="beacon-grid">` + secs.map((sec, i) => {
     const leads = (sec.rows || []).filter(r => r.tier === "龙头").map(r => r.name);
     const mids = (sec.rows || []).filter(r => r.tier === "中军").length;
@@ -1149,44 +1152,97 @@ function _applyBeaconQuotes() {
     const q = _beaconQ.cache[td.getAttribute("data-hcode")];
     if (q) td.innerHTML = hunterMktcapHtml(q);
   });
-  _refreshBeaconLeadStrip();     // 2026-11-24：龙头实时涨幅条同拍刷新
 }
 
-/* ── 风向标「龙头实时涨幅」单独一行（2026-11-24 owner）──
-   每个板块列出它的龙头公司（tier==="龙头"，最多 3 只）+ **实时涨幅**；
-   数据复用 `_beaconQ.cache`（与明细表「价/涨幅」列**同一次** load_quotes_for，约 15s 一拍），
-   所以不需要新增接口。点条目 = 展开/收起对应板块明细。
-   为什么单独一行：方格卡默认收起，原来只有卡片底部一行"龙头 名字"，没有任何实时数字；
-   盘中想知道"今天各个板块的龙头在不在"，得逐个展开 20 多张卡。 */
-function _blPct(q) {
+/* ── 风向标「指数市值前 10」方格（2026-11-24 owner：每个指数取市值最大的 10 只，方格显示涨幅）──
+   名单来自 `load_index_leaders`（后端 core.index_leaders，**日频**缓存，宽基=对应板块
+   市值前 10、中证500/1000=成分表筛选后取前 10）；涨幅走 `load_quotes_for`（与建仓表/
+   猎手同一条 QuoteBus 行情，15s 一拍）。
+   为什么名单与行情分开：名单一天一变（重建要 40~80s），行情 15s 一变 —— 混在一个
+   端点里会让"名单刷新"变成高频重活。 */
+const _IDX_LEADERS_TTL_MS = 60000;          // 名单轮询（守卫 TTL 登记：86400s > 60s）
+let _idxLeaders = { data: null, ts: 0, inflight: false };
+let _idxQ = { cache: {}, last: 0, inflight: false };
+const IDX_Q_TTL_MS = 15000;
+
+function _ilPct(q) {
   if (!q || q.change_pct == null) return '<span class="cell-dim">⏳</span>';
   const v = Number(q.change_pct);
   const cls = v > 0.005 ? "up" : v < -0.005 ? "down" : "cell-dim";
-  return `<span class="${cls}"><b>${v >= 0 ? "+" : ""}${fmt(v, 2)}%</b></span>`;
+  return `<span class="${cls}">${v >= 0 ? "+" : ""}${fmt(v, 2)}%</span>`;
 }
 
-function _beaconLeadStripHtml(d) {
-  const secs = (d && d.sectors) || [];
-  if (!secs.length) return "";
-  const items = secs.map((sec, i) => {
-    const leads = (sec.rows || []).filter(r => r.tier === "龙头").slice(0, 3);
-    const body = leads.length
-      ? leads.map(r => {
-          const q = _beaconQ.cache[String(r.code).split("_")[0]];
-          return `<span class="bl-nm">${esc(r.name)}</span> ${_blPct(q)}`;
-        }).join(" / ")
-      : '<span class="cell-dim" title="该板块当日无最强一档（不硬凑）">无龙头</span>';
-    return `<span class="bl" onclick="beaconToggle(${i})" title="${esc(sec.name)} · 点击展开/收起该板块明细">`
-      + `<b>${esc(sec.name)}</b> ${body}</span>`;
-  });
-  return `<span class="bl-tag">龙头实时</span>` + items.join("");
+function _idxLeaderGridHtml() {
+  const d = _idxLeaders.data;
+  if (!d || d.pending || !d.items || !Object.keys(d.items).length) {
+    return '<div class="empty cell-dim" style="font-size:11px;padding:4px 2px">'
+      + '指数「市值前 10」名单准备中（首次约 1 分钟，算完自动出现）…</div>';
+  }
+  return Object.keys(d.items).map(name => {
+    const rows = d.items[name] || [];
+    const body = rows.map(r => {
+      const code = String(r.code || "").split("_")[0];
+      const q = _idxQ.cache[code];
+      return `<div class="il-row" title="${esc(name)} · 市值前10（双击看K线）"
+                   ondblclick="openStockChart('${esc(code)}','${esc(r.name || "")}')">
+        <span class="il-nm">${esc(r.name || code)}</span>${_ilPct(q)}</div>`;
+    }).join("");
+    return `<div class="il-tile"><div class="il-head">${esc(name)}`
+      + `<span class="il-sub">市值前10</span></div><div class="il-body">${body}</div></div>`;
+  }).join("");
 }
 
-function _refreshBeaconLeadStrip() {
-  const el = document.getElementById("beaconLeadStrip");
-  if (!el || !_beacon || !_beacon.data) return;
-  const html = _beaconLeadStripHtml(_beacon.data);
+function _renderIndexLeaderGrid() {
+  const el = document.getElementById("indexLeadGrid");
+  if (!el) return;
+  const html = _idxLeaderGridHtml();
   if (html && el.innerHTML !== html) el.innerHTML = html;
+}
+
+async function loadIndexLeaders(force) {
+  if (_idxLeaders.inflight) return;
+  const now = Date.now();
+  if (!force && _idxLeaders.data && now - _idxLeaders.ts < _IDX_LEADERS_TTL_MS) {
+    _renderIndexLeaderGrid(); return;
+  }
+  // ⚠️ 不再按 tab 可见性挡：名单的后台重建由这次调用触发（后端只读缓存/踢线程），
+  //    如果只在信号页才问，用户不开那个页时名单就永远不建（2026-11-24 真机踩到：
+  //    缓存里缺上证指数一整天）。渲染本身仍然是"元素不存在就返回"，零成本。
+  _idxLeaders.inflight = true;
+  try {
+    const d = await apiCall("load_index_leaders");
+    _idxLeaders.data = d || null;
+    _idxLeaders.ts = Date.now();
+    _renderIndexLeaderGrid();
+    if (d && d.pending) {                     // 名单还在后台建（首次/跨日/换 schema）
+      setTimeout(() => loadIndexLeaders(true), 8000);   // 8s 后补一枪，别等满 60s
+    } else {
+      _loadIdxLeaderQuotes();                 // 名单到手 ⇒ 立刻补涨幅
+    }
+  } catch (e) { /* 静默：保持"准备中" */ }
+  finally { _idxLeaders.inflight = false; }
+}
+
+async function _loadIdxLeaderQuotes(force) {
+  if (_idxQ.inflight) return;
+  const now = Date.now();
+  if (!force && now - _idxQ.last < IDX_Q_TTL_MS) { _renderIndexLeaderGrid(); return; }
+  const d = _idxLeaders.data;
+  if (!d || !d.items) return;
+  const codes = [];
+  Object.values(d.items).forEach(rows => (rows || []).forEach(r => {
+    const c = String(r.code || "").split("_")[0];
+    if (c && !codes.includes(c)) codes.push(c);
+  }));
+  if (!codes.length) return;
+  _idxQ.inflight = true;
+  try {
+    const r = await apiCall("load_quotes_for", codes);
+    const qm = (r && r.quotes) || {};
+    if (Object.keys(qm).length) { Object.assign(_idxQ.cache, qm); _idxQ.last = Date.now(); }
+    _renderIndexLeaderGrid();
+  } catch (e) { /* 保持 ⏳ */ }
+  finally { _idxQ.inflight = false; }
 }
 
 function _tabActive(id) {
@@ -14058,7 +14114,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  _reportSlow("app_boot_20261124e", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
+  _reportSlow("app_boot_20261124h", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
   // 2026-11-23（P2-5）：echarts（~1MB）空闲预热。已是按需加载（首屏不阻塞），但首次开图
   // 要现场下载+解析 1MB（冷开图可感到顿挫）⇒ 启动后浏览器空闲期先拉下来编一遍，
   // 用户第一次开 K 线即热。requestIdleCallback 缺席时退化 setTimeout；失败静默不碍启动。
