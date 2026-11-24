@@ -4348,7 +4348,7 @@ class Api:
         口径沿用原桌面浮窗（浮窗已于 2026-11-17 删除），两件事分开取：
           · 分子 = 腾讯指数实时快照三腿（10 秒级，**含正在走的那根 5min bar**）；
           · 分母 = 上一交易日**同一时刻**累计 —— 用 `load_market_turnover()` 下发的
-            `prev_cum`（逐 5min 累计曲线）按当前秒插值（`core.turnover_base`）。
+            `prev_cum`（逐 **1min** 累计曲线）按当前秒插值（`core.turnover_base`）。
         分母缺曲线时才退回 5min 边界值，并在 `src` 如实标注。
 
         返回 {available, amount, base, delta, pct, projected, hm, day, prev_day, src,
@@ -4630,16 +4630,24 @@ class Api:
                 #    直接返空表，等于把本来健康的 GM 也废掉（实测踩到：正常态被判成 sina 兜底）。
                 _down = getattr(_prov, "_gm_down_until", None)
                 if _down is None or datetime.now() >= _down:
-                    gm = _prov.index_minute(sym, count_bars=800, freq="300s")
+                    # 2026-11-24 owner：浮窗「量能全天分布」要更密 ⇒ 主口径升到 **1 分钟**
+                    # （此前 5min ×48 根，图上一天只有 48 个点）。1600 根 ≈ 6.6 个交易日，
+                    # 足够今日/昨日对比 + 近几日外推；响应体变大但请求数不变。
+                    gm = _prov.index_minute(sym, count_bars=1600, freq="60s")
             except Exception:
                 gm = None
             if not _empty(gm) and not _stale_day(gm):
                 return gm
+            # 新浪 scale=1 并非官方文档口径（实测有的节点只认 5/15/30/60）⇒ 先试 1 分钟，
+            # 拿不到再退回 5 分钟。**绝不能因为"想要更密"把分母这条腿弄没**。
             sdf = None
-            try:
-                sdf = sina_index.fetch_index_minutes(sym, scale=5, datalen=400)
-            except Exception:
-                sdf = None
+            for _sc, _n in ((1, 1000), (5, 400)):
+                try:
+                    sdf = sina_index.fetch_index_minutes(sym, scale=_sc, datalen=_n)
+                except Exception:
+                    sdf = None
+                if sdf is not None and not getattr(sdf, "empty", True):
+                    break
             if not _empty(sdf) and not _stale_day(sdf):
                 degraded.append("index_minute_sina")
                 return sdf
@@ -4674,7 +4682,14 @@ class Api:
 
         # 北交所腿：只能走新浪（见 sina_index 模块 docstring）。取不到则**如实降级为沪深口径**，
         # 而不是静默少算 ~120 亿 —— 那正是本次与同花顺对不上的原因。
-        bse = sina_index.fetch_index_minutes("bj899050", scale=5, datalen=400)
+        bse = None
+        for _sc, _n in ((1, 1000), (5, 400)):     # 同 `_leg_frame`：1min 不可用退回 5min
+            try:
+                bse = sina_index.fetch_index_minutes("bj899050", scale=_sc, datalen=_n)
+            except Exception:
+                bse = None
+            if bse is not None and not getattr(bse, "empty", True):
+                break
         bse_included = (bse is not None and not bse.empty
                         and float(bse["amount"].sum()) > 0 and not _stale_day(bse))
         if bse_included:
@@ -4762,12 +4777,34 @@ class Api:
                 _run += _by_hm[_h]
                 prev_cum.append([_h, round(_run, 2)])
 
+        # 2026-11-24 owner：「双击成交额卡片后要支持**成交量能全天分布**」。
+        # 给浮窗下发今昨两天的**逐 1min 成交额**（不是累计；累计前端可自算）。
+        # 口径与 amount 完全同源：同一批指数分钟线按腿合计，bar 时间戳是**右端**
+        # （09:31 = 09:30~09:31），别在前端重贴标签。
+        def _slot_sum(day, trunc=None):
+            _acc = {}
+            for _d in per_leg.values():
+                _sub = _d[_d["_day"] == day]
+                for _h, _a in zip(_sub["_hm"].tolist(), _sub["amount"].tolist()):
+                    _acc[_h] = _acc.get(_h, 0.0) + float(_a)
+            _keys = [h for h in sorted(_acc) if (not trunc or h <= trunc)]
+            return [[_h, round(_acc[_h], 2)] for _h in _keys]
+
+        # 今日截到当前时刻（与 amount 同口径，含"正在走的 bar 不计入"）；昨日给全量槽位
+        # ⚠️ 变量名不要叫 intraday：上面那个布尔还用于 basis（"同期"/"全日"）。
+        _intra_bars = {"day": cur_day, "prev_day": prev_trading_day,
+                       "bars": _slot_sum(cur_day, hm if intraday else None)}
+        if prev_trading_day:
+            _intra_bars["prev_bars"] = _slot_sum(prev_trading_day)
+
         out = {
             "available": True,
             "amount": amount, "amount_prev": amount_prev,
+            # 浮窗「量能全天分布」小图：今昨两天逐 1min 成交额（元）
+            "intraday": _intra_bars,
             # 浮窗的「同期」分母（元）；开盘首 5 分钟昨日还没有任何 bar ⇒ None，宁可不给对比
             "amount_prev_same_hm": amount_prev_same_hm,
-            # 上一交易日逐 5min 的**累计**成交额 [[HH:MM, 元], …]（浮窗按秒插值用）
+            # 上一交易日逐 **1min** 的累计成交额 [[HH:MM, 元], …]（浮窗按秒插值用）
             "prev_cum": prev_cum,
             "prev_trading_day": prev_trading_day,
             "hm": hm,

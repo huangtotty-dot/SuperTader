@@ -2172,6 +2172,10 @@ function openTurnoverWin() {
   _bindHeaderDrag(win, document.getElementById("turnoverWinTitle"), null, true);
   _turnoverWinMsg("");
   drawTurnoverWin();
+  setTimeout(() => {   // 显示后按实际尺寸重排一次（首开时实例可能按 0 宽 init）
+    const _i = echInstances["echTurnoverIntraday"];
+    if (_i) { try { _i.resize(); } catch (e) { /* 忽略 */ } }
+  }, 30);
   if (turnoverWinTimer) clearInterval(turnoverWinTimer);
   turnoverWinTimer = setInterval(drawTurnoverWin, TURNOVER_WIN_PERIOD_MS);
 }
@@ -2232,6 +2236,77 @@ function _turnoverWinHead(t) {
     + (t.basis === "同期" ? `\n（盘中口径：两边都只算到 ${t.as_of}）` : "\n（已收盘口径：两边都是全日）");
 }
 
+/* 量能全天分布（2026-11-24 owner：双击成交额卡片后要能看「成交量能全天分布」）。
+   数据 = `load_market_turnover().intraday`（后端用**1 分钟**指数分钟线按腿合计，含北交所腿）。
+     · x 轴 = 1min 时间槽，标签是 **bar 右端**（09:31 = 09:30~09:31），与后端 amount 同口径；
+     · 今日 = 实心蓝柱（几乎无间隙，成"量能柱带"，能量出开盘/尾盘的尖峰）；
+       上一交易日 = 同槽位灰线（step）叠加对比 —— 1min 下再画双柱会挤成糊；
+     · 今日只画已完成的分钟（进行中的那根收完才出现），hover 看两边亿数与增减。
+   为什么不做累计线：owner 要看的是「量能怎么分布」（前后半场/尾盘放不放量），累计线把分布抹平。 */
+function _renderTurnoverIntraday(t) {
+  const el = document.getElementById("echTurnoverIntraday");
+  if (!el) return;
+  const ia = (t && t.intraday) || null;
+  const tBars = (ia && ia.bars) || [];
+  const pBars = (ia && ia.prev_bars) || [];
+  if (!tBars.length && !pBars.length) {
+    if (echInstances["echTurnoverIntraday"]) {
+      try { echInstances["echTurnoverIntraday"].dispose(); } catch (e) { /* 已销毁 */ }
+      delete echInstances["echTurnoverIntraday"];
+    }
+    el.innerHTML = '<div class="empty cell-dim" style="font-size:11px;padding:6px 12px">'
+      + (t && t.available ? "分时量能不可得（分钟线降级/快照）" : "分时量能取数中…") + "</div>";
+    return;
+  }
+  const xs = tBars.length ? tBars.map(b => b[0]) : pBars.map(b => b[0]);
+  const tm = Object.fromEntries(tBars.map(([h, a]) => [h, a]));
+  const pm = Object.fromEntries(pBars.map(([h, a]) => [h, a]));
+  const sToday = xs.map(h => (tm[h] == null ? null : +(tm[h] / 1e8).toFixed(1)));
+  const sPrev = xs.map(h => (pm[h] == null ? null : +(pm[h] / 1e8).toFixed(1)));
+  const dTxt = (ia.day || "").slice(5) || "今日";
+  const pTxt = (ia.prev_day || "").slice(5) || "上一交易日";
+  // 容器里若残留过"无数据/取数中"文案，echarts.init 是**追加**的 ⇒ 先清掉再画
+  if (!echInstances["echTurnoverIntraday"]) el.innerHTML = "";
+  const fmtYi = v => (v == null ? "—" : Math.round(v / 1e8).toLocaleString("en-US") + " 亿");
+  echRender("echTurnoverIntraday", {
+    ...ECH_BASE,
+    grid: { left: 46, right: 14, top: 26, bottom: 24 },
+    legend: {
+      top: 0, itemWidth: 10, itemHeight: 8,
+      textStyle: { color: "#8b949e", fontSize: 10 },
+      data: [`今日 ${dTxt}`, `昨日 ${pTxt}`],
+    },
+    tooltip: {
+      ...ECH_BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" },
+      formatter: (ps) => {
+        if (!ps || !ps.length) return "";
+        const h = xs[ps[0].dataIndex];
+        const a = tm[h], b = pm[h];
+        const d = (a != null && b != null && b > 0) ? (a / b - 1) * 100 : null;
+        return [`<b>${h}</b> 结束的 1 分钟`,
+          `今日 ${fmtYi(a)}`,
+          `昨日 ${fmtYi(b)}`,
+          d == null ? "" : `<span style="color:${d >= 0 ? "#f85149" : "#3fb950"}">${d >= 0 ? "+" : ""}${d.toFixed(1)}%</span>`,
+        ].filter(Boolean).join("<br>");
+      },
+    },
+    xAxis: {
+      ...ECH_BASE.xAxis, type: "category", data: xs,
+      axisLabel: { ...ECH_BASE.xAxis.axisLabel, interval: (i) => i % 30 === 0 },
+    },
+    yAxis: {
+      ...ECH_BASE.yAxis, type: "value",
+      axisLabel: { ...ECH_BASE.yAxis.axisLabel, formatter: v => v + "亿" },
+    },
+    series: [
+      { name: `今日 ${dTxt}`, type: "bar", data: sToday, barCategoryGap: "8%",
+        itemStyle: { color: "#58a6ff" }, z: 2 },
+      { name: `昨日 ${pTxt}`, type: "line", data: sPrev, step: "end", symbol: "none",
+        lineStyle: { color: "rgba(139,148,158,.55)", width: 1 }, z: 3 },
+    ],
+  });
+}
+
 /* 每 10s 刷新一次。只打 `load_market_turnover`（与卡片同一个接口），不再取历史序列。 */
 async function drawTurnoverWin() {
   if (_turnoverWinBusy) return;
@@ -2250,6 +2325,7 @@ async function drawTurnoverWin() {
     if (win.style.display === "none") return;   // 期间被关掉了
     _turnoverWinMsg("");
     _turnoverWinHead(t);
+    _renderTurnoverIntraday(t);      // 量能全天分布（2026-11-24）
   } finally {
     _turnoverWinBusy = false;
   }
@@ -2271,6 +2347,10 @@ function turnoverEnterWindowMode() {
   win.style.width = "100%"; win.style.height = "100%";
   win.style.minWidth = "0"; win.style.minHeight = "0";
   drawTurnoverWin();
+  setTimeout(() => {
+    const _i = echInstances["echTurnoverIntraday"];
+    if (_i) { try { _i.resize(); } catch (e) { /* 忽略 */ } }
+  }, 30);
   if (turnoverWinTimer) clearInterval(turnoverWinTimer);
   turnoverWinTimer = setInterval(drawTurnoverWin, TURNOVER_WIN_PERIOD_MS);
 }

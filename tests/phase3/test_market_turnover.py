@@ -598,3 +598,37 @@ class TestHsFreezeCache(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+class TestIntradayBars(unittest.TestCase):
+    """2026-11-24 owner：双击成交额卡片要看「量能全天分布」⇒ 后端必须下发逐 5min 桶。
+
+    口径：①按腿合计；②今日截到当前时刻（与 amount 同口径，进行中的 bar 不计）；
+    ③昨日给全量槽位供同槽对比；④桶时间戳是 bar **右端**（09:35 = 09:30~09:35）。
+    """
+
+    def _legs(self):
+        cur = _leg("2026-09-30")
+        prev = _leg("2026-09-29")
+        return {"sh000001": pd.concat([cur, prev]).reset_index(drop=True),
+                "sz399106": pd.concat([_leg("2026-09-30", scale=2.0),
+                                       _leg("2026-09-29", scale=2.0)]).reset_index(drop=True)}
+
+    def test_按腿合计且今日截到当前时刻(self):
+        r = CALC(self._legs(), datetime(2026, 9, 30, 14, 30))
+        ia = r["intraday"]
+        self.assertEqual(ia["day"], "2026-09-30")
+        self.assertEqual(ia["prev_day"], "2026-09-29")
+        d = dict(ia["bars"])
+        # 10:00 槽：沪 100 亿 + 深 200 亿 = 300 亿
+        self.assertAlmostEqual(d["10:00"], 300e8, delta=1)
+        # 14:30 时今日只有 10:00/11:30/14:00 三根；昨日是全天四根
+        self.assertEqual([h for h, _ in ia["bars"]], ["10:00", "11:30", "14:00"])
+        self.assertEqual([h for h, _ in ia["prev_bars"]], ["10:00", "11:30", "14:00", "15:00"])
+
+    def test_收盘后今日给全量且与累计一致(self):
+        r = CALC(self._legs(), datetime(2026, 9, 30, 15, 30))
+        ia = r["intraday"]
+        self.assertEqual(len(ia["bars"]), 4)
+        # 今日槽位合计 == payload.amount（同一批分钟线、同一截断规则）
+        self.assertAlmostEqual(sum(a for _, a in ia["bars"]), r["amount"], delta=1)
+

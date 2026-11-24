@@ -778,7 +778,8 @@
      双击成交额图/成交额卡片弹出。复用 .mw-win 外壳：标题栏可拖、右下角可改大小。
      图表仍留在「盘中状态」卡里；这里只显示今日成交额/涨跌/增量/预计全日。
      ⚠️ 数字与指数板「两市成交额」卡片同接口同格式化 ⇒ 两处必然一致。 -->
-<div id="turnoverWin" class="mw-win" style="display:none;width:380px;height:132px;min-width:220px;min-height:100px">
+<!-- 2026-11-24 owner：浮窗追加「量能全天分布」（今昨逐 5min 成交额柱），默认尺寸同步放大 -->
+<div id="turnoverWin" class="mw-win" style="display:none;width:460px;height:340px;min-width:300px;min-height:200px">
   <div class="mw-title" id="turnoverWinTitle">
     <span style="min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">📊 两市成交额</span>
     <span style="display:flex;gap:6px">
@@ -788,7 +789,9 @@
     </span>
   </div>
   <div id="turnoverWinHead" class="mono"></div>
-  <div id="turnoverWinMsg" class="cell-dim" style="font-size:11px;padding:0 12px 6px"></div>
+  <div id="turnoverWinMsg" class="cell-dim" style="font-size:11px;padding:0 12px 2px"></div>
+  <!-- 量能全天分布（2026-11-24）：今昨同槽位对比；高度吃剩余空间 -->
+  <div id="echTurnoverIntraday" style="width:100%;flex:1 1 auto;min-height:110px"></div>
 </div>
 
 <!-- 多窗口看盘（2026-10-21 owner）：**独立浮窗** —— 不铺全屏遮罩，
