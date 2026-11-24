@@ -71,22 +71,41 @@ for r in rows[-15:]:
     zb = f"{r['zb_rate']*100:.1f}" if r.get("zb_rate") is not None else "—"
     print(f"{r['date']:<12}{r['sent_ma']!s:>8}{r['slope5']!s:>8}{r['zone']!s:>6}{r['zt']:>5}{r['dt']:>4}{r['touch']!s:>6}{zb:>7}")
 
-# H1/H2 触发日全历史扫描
-h1_days, h2_days = [], []
+# H1/H2 触发日全历史扫描（原口径 + 修正候选口径双轨，2026-11-24 核实修正）
+h1_days, h2_days, h1b_days, h2b_days = [], [], [], []
+# H1-b: ≤25 段内首个上升日；H2-b: ≥70 段峰后首个下跌日
+def _segments(vals, cond):
+    segs, s = [], None
+    for j, v in enumerate(vals):
+        if v is not None and cond(v):
+            if s is None: s = j
+        else:
+            if s is not None: segs.append((s, j-1)); s = None
+    if s is not None: segs.append((s, len(vals)-1))
+    return segs
+sv = [r["sent_ma"] for r in rows]
+for a, b in _segments(sv, lambda v: v <= 25):
+    for j in range(a+1, b+2):
+        if j < len(sv) and sv[j] is not None and sv[j-1] is not None and sv[j] > sv[j-1]:
+            h1b_days.append(rows[j]["date"]); break
+for a, b in _segments(sv, lambda v: v >= 70):
+    pk = max(range(a, b+1), key=lambda j: sv[j])
+    if pk < b: h2b_days.append(rows[pk+1]["date"])
+    elif b+1 < len(sv) and sv[b+1] is not None and sv[b+1] < sv[b]: h2b_days.append(rows[b+1]["date"])
 for j in range(1, len(rows)):
     a, b = rows[j-1], rows[j]
     if a["sent_ma"] is None or b["sent_ma"] is None: continue
-    # H1: 昨日 ≤20 且（单日 +5 以上 或 slope5 连续 2 日为正）
+    # H1-a 原口径: 昨日 ≤20 且（单日 +5 以上 或 slope5 连续 2 日为正）
     if a["sent_ma"] <= 20 and (b["sent_ma"] - a["sent_ma"] >= 5 or
        (b.get("slope5") or 0) > 0 and (a.get("slope5") or 0) > 0):
         h1_days.append(b["date"])
-    # H2: 昨日 ≥70 且 slope5 转负
+    # H2-a 原口径: 昨日 ≥70 且 slope5 转负
     if a["sent_ma"] >= 70 and (b.get("slope5") or 0) < 0 and (a.get("slope5") or 0) >= 0:
         h2_days.append(b["date"])
-print(f"\nH1 触发日（全历史 {rows[0]['date']}~{rows[-1]['date']}）: {len(h1_days)} 天")
-print("  近 10 次:", h1_days[-10:])
-print(f"H2 触发日: {len(h2_days)} 天")
-print("  近 10 次:", h2_days[-10:])
+print(f"\nH1-a 原口径触发: {len(h1_days)} 天 {h1_days[-6:]}")
+print(f"H1-b 修正候选(≤25段内拐点日): {len(h1b_days)} 天 ≈{len(h1b_days)/3.33:.1f}/年 {h1b_days[-6:]}")
+print(f"H2-a 原口径触发: {len(h2_days)} 天 {h2_days[-6:]}")
+print(f"H2-b 修正候选(≥70段峰后首日跌): {len(h2b_days)} 天 ≈{len(h2b_days)/3.33:.1f}/年 {h2b_days[-6:]}")
 
 # ── qt.gtimg.cn 批量快照（f[3]=现价 f[4]=昨收 f[5]=开 f[33]=高 f[34]=低）──
 def qt_batch(codes):
