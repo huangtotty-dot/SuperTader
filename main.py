@@ -36,6 +36,7 @@ from core.gui_subprocess import close_gui, launch_gui
 from core.scan_timing import _log_scan_round
 from core.eod_tasks import _maybe_backfill_sentiment
 from core.price_alert_watch import _start_price_alert_watch
+from core.limitup_alert_watch import _start_limitup_alert_watch
 from core.hunter_watch import (
     _start_hunter_ma5_watch, _start_ma5_pullback_watch, _start_ma60_pullback_watch,
     _start_summary_regen,
@@ -166,4 +167,5 @@ if __name__ == "__main__":
         _validate_pool_split_or_exit()
         launch_gui()
         _start_price_alert_watch()      # 价格突破提醒（K线画线 → 飞书，10s 一拍）
+        _start_limitup_alert_watch()    # 全市场涨停快报（飞书，10s 一拍，回封也报）
         run_watch()
