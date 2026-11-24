@@ -642,6 +642,17 @@ body.mw-winmode #multiWatchWin {
 /* ---- 市场风向标：方格布局（2026-10-18 owner「使用方格显示」）----
    每个板块一张方格卡；点格子展开成整行（.open → grid-column:1/-1）放明细表。
    目标：一屏看到更多板块（原来每板块一条全宽横条，25 个板块要滚很久）。 */
+/* 风向标「龙头实时涨幅」单独一行（2026-11-24 owner）：方格卡默认收起，这里一行看全板块龙头。
+   每条 = 板块名 + 龙头名 + 实时涨幅（红涨绿跌）；点条目展开该板块明细。 */
+.beacon-leadstrip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 16px;
+  padding: 2px 2px 9px; margin-top: -4px; font-size: 11px; color: var(--text-dim);
+  border-bottom: 1px dashed var(--border-soft); margin-bottom: 8px; }
+.beacon-leadstrip .bl-tag { color: var(--text-faint); flex: none; }
+.beacon-leadstrip .bl-tag::after { content: "："; }
+.beacon-leadstrip .bl { white-space: nowrap; cursor: pointer; }
+.beacon-leadstrip .bl:hover { text-decoration: underline dotted; }
+.beacon-leadstrip .bl > b { color: var(--text); font-weight: 600; margin-right: 2px; }
+.beacon-leadstrip .bl-nm { color: var(--text-dim); }
 .beacon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 8px; align-items: start; }
 .beacon-tile { margin: 0; padding: 0; overflow: hidden; border-left: 4px solid var(--border-soft); }

@@ -1064,6 +1064,8 @@ function renderMarketBeacon(d) {
         <span style="color:#2ea043;margin-left:6px">■</span> 其余
       </span>
     </div>
+    <div id="beaconLeadStrip" class="beacon-leadstrip"
+         title="各板块龙头公司的实时涨幅（与明细表同一次行情刷新，约 15s 一拍；点条目展开该板块）">${_beaconLeadStripHtml(d)}</div>
     <div class="beacon-grid">` + secs.map((sec, i) => {
     const leads = (sec.rows || []).filter(r => r.tier === "龙头").map(r => r.name);
     const mids = (sec.rows || []).filter(r => r.tier === "中军").length;
@@ -1147,6 +1149,44 @@ function _applyBeaconQuotes() {
     const q = _beaconQ.cache[td.getAttribute("data-hcode")];
     if (q) td.innerHTML = hunterMktcapHtml(q);
   });
+  _refreshBeaconLeadStrip();     // 2026-11-24：龙头实时涨幅条同拍刷新
+}
+
+/* ── 风向标「龙头实时涨幅」单独一行（2026-11-24 owner）──
+   每个板块列出它的龙头公司（tier==="龙头"，最多 3 只）+ **实时涨幅**；
+   数据复用 `_beaconQ.cache`（与明细表「价/涨幅」列**同一次** load_quotes_for，约 15s 一拍），
+   所以不需要新增接口。点条目 = 展开/收起对应板块明细。
+   为什么单独一行：方格卡默认收起，原来只有卡片底部一行"龙头 名字"，没有任何实时数字；
+   盘中想知道"今天各个板块的龙头在不在"，得逐个展开 20 多张卡。 */
+function _blPct(q) {
+  if (!q || q.change_pct == null) return '<span class="cell-dim">⏳</span>';
+  const v = Number(q.change_pct);
+  const cls = v > 0.005 ? "up" : v < -0.005 ? "down" : "cell-dim";
+  return `<span class="${cls}"><b>${v >= 0 ? "+" : ""}${fmt(v, 2)}%</b></span>`;
+}
+
+function _beaconLeadStripHtml(d) {
+  const secs = (d && d.sectors) || [];
+  if (!secs.length) return "";
+  const items = secs.map((sec, i) => {
+    const leads = (sec.rows || []).filter(r => r.tier === "龙头").slice(0, 3);
+    const body = leads.length
+      ? leads.map(r => {
+          const q = _beaconQ.cache[String(r.code).split("_")[0]];
+          return `<span class="bl-nm">${esc(r.name)}</span> ${_blPct(q)}`;
+        }).join(" / ")
+      : '<span class="cell-dim" title="该板块当日无最强一档（不硬凑）">无龙头</span>';
+    return `<span class="bl" onclick="beaconToggle(${i})" title="${esc(sec.name)} · 点击展开/收起该板块明细">`
+      + `<b>${esc(sec.name)}</b> ${body}</span>`;
+  });
+  return `<span class="bl-tag">龙头实时</span>` + items.join("");
+}
+
+function _refreshBeaconLeadStrip() {
+  const el = document.getElementById("beaconLeadStrip");
+  if (!el || !_beacon || !_beacon.data) return;
+  const html = _beaconLeadStripHtml(_beacon.data);
+  if (html && el.innerHTML !== html) el.innerHTML = html;
 }
 
 function _tabActive(id) {
