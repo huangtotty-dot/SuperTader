@@ -1204,6 +1204,9 @@ _POOL_ROWS_RUN: set = set()          # 正在算的 key（前台同步算 + 后�
 # 等于每次轮询都全量重算（avg 6.6s / max 84s 压在 js_api 线程上）。
 _POOL_ROWS_MEM: dict = {}
 _POOL_ROWS_LOCK = threading.Lock()
+# 2026-11-24：冷算默认**挪后台**（646 只 43s 会堵死 js_api 串行队列）。
+# 测试/离线工具需要同步语义时置 True（只影响「无旧值同步算」那条分支）。
+_POOL_ROWS_SYNC_COLD = False
 _POOL_ROWS_TTL = 30.0                # 整表缓存新鲜期（秒）
 # 市场情绪面板的数据源：同花顺涨停池按日缓存（`analysis.index_regime` 每天 14:30 落盘一次，
 # append-only）。面板**只读、零网络**；测试会 patch 这个常量。
@@ -2918,13 +2921,18 @@ _REDMARK_LOCK = threading.Lock()
 
 
 def _redmark_load() -> dict:
-    """读标红表；损坏/缺失 → 空表（绝不抛）。"""
+    """读标红表；**缺失/损坏 → 空表（绝不抛）**。
+
+    2026-11-24：文件不存在是常态（没人点过标红），不该按"吞异常"计数——metrics 里
+    10 次/分 的 swallow 噪音就是它，查卡顿时会误导归因。"""
     try:
         d = json.loads(_REDMARK_FP.read_text(encoding="utf-8"))
         if isinstance(d, dict) and isinstance(d.get("codes"), list):
             return d
+    except FileNotFoundError:
+        pass
     except Exception:
-        _swallow("gui._redmark_load")  # 原裸 pass：计数化（P1-6），行为等价
+        _swallow("gui._redmark_load")
     return {"codes": []}
 
 
@@ -4392,36 +4400,55 @@ class Api:
 
     # 证券/银行/保险 涨幅 + 涨跌家数（2026-11-21 owner）：多窗口看盘标题栏、10 秒级。
     _SECTOR_PCT_MEM: dict = {"ts": 0.0, "val": None}
+    _SECTOR_PCT_RUN: dict = {"running": False}
+    _SECTOR_PCT_LOCK = threading.Lock()
 
     def load_mw_head_stats(self):
-        """多窗口标题栏：证券/银行/保险 涨幅 + 沪深涨跌家数（10 秒刷新）。
+        """多窗口标题栏：证券/银行/保险 涨幅 + 沪深北涨跌家数（10 秒刷新）。
 
-        两个轻请求：
-          · 腾讯指数快照三腿 → 证券公司 399975 / 中证银行 399986 / 保险主题 399809（~50ms）；
-          · 东财 ulist 沪深两指数 → 上涨/下跌/平盘家数（f104/f105/f106，~200ms）。
-        **12 秒内存缓存**（2026-11-22 P0-3：8.0 → 12.0。TTL 8s < 前端 10s 轮询 ⇒ 每拍穿透
-        缓存、每拍双网络 avg 4.1s。错位论证同 `_INDICES_TTL`：TTL 必须**大于**轮询周期，
-        隔拍命中内存热缓存，读数最多陈旧 ~12s 可接受，网络减半）。
-        返回 {available, items:[{name,price,pct}], up, down, flat, ts}；板块全缺 → available=False
-        （家数单独缺失时对应字段为 None，前端显示 —）。
+        **SWR，js_api 线程零网络**（2026-11-24 owner 报 UI 卡顿；AGENTS.md 铁律②）：
+          · 有旧值 ⇒ **立即返回**（哪怕略旧），过期(≥12s)时后台单飞刷新；
+          · 从未成功过 ⇒ 返回 {warming: True}，前端显示"读取中"；
+          · 绝不在调用线程上打网络：此前每 10s 一拍在本线程同步跑 1(THS×3)+1(东财) 个请求，
+            慢网下 0.8~4s，pywebview 串行队列被堵 ⇒ 整界面"点了没反应"。
+        返回 {available, items:[{name,price,pct}], up, down, flat, src, ts}。
         """
         now = _time_mod.time()
         mem = self._SECTOR_PCT_MEM
-        if mem.get("val") and (now - float(mem.get("ts") or 0.0)) < 12.0:
-            return mem["val"]
-        rows = _ths_sector_pcts()
-        items = [{"name": n, "price": p, "pct": c} for n, p, c in rows if c is not None]
-        up, dn, fl, _src = _em_market_breadth()
-        if items:
-            out = {"available": True, "items": items, "up": up, "down": dn, "flat": fl,
-                   "src": _src, "ts": datetime.now().strftime("%H:%M:%S")}
-        elif up is not None:
-            out = {"available": True, "items": [], "up": up, "down": dn, "flat": fl,
-                   "src": _src, "ts": datetime.now().strftime("%H:%M:%S")}
-        else:
-            out = {"available": False}
-        self._SECTOR_PCT_MEM.update({"ts": now, "val": out})
-        return _clean(out)
+        val = mem.get("val")
+        age = now - float(mem.get("ts") or 0.0)
+        if val is None or age >= 12.0:
+            with self._SECTOR_PCT_LOCK:
+                if not self._SECTOR_PCT_RUN["running"]:
+                    self._SECTOR_PCT_RUN["running"] = True
+                    threading.Thread(target=self._refresh_mw_head_stats, daemon=True,
+                                     name="mw-head-stats").start()
+        if val is None:
+            return _clean({"available": False, "warming": True})
+        return val
+
+    def _refresh_mw_head_stats(self):
+        """后台刷新（单飞）。成功才写内存；失败保持旧值，下一拍再试。"""
+        try:
+            rows = _ths_sector_pcts()
+            items = [{"name": n, "price": p, "pct": c} for n, p, c in rows if c is not None]
+            up, dn, fl, _src = _em_market_breadth()
+            _ts = datetime.now().strftime("%H:%M:%S")
+            if items:
+                out = {"available": True, "items": items, "up": up, "down": dn, "flat": fl,
+                       "src": _src, "ts": _ts}
+            elif up is not None:
+                out = {"available": True, "items": [], "up": up, "down": dn, "flat": fl,
+                       "src": _src, "ts": _ts}
+            else:
+                out = None
+            if out is not None:
+                self._SECTOR_PCT_MEM.update({"ts": _time_mod.time(), "val": _clean(out)})
+        except Exception:
+            _swallow("gui._refresh_mw_head_stats")
+        finally:
+            with self._SECTOR_PCT_LOCK:
+                self._SECTOR_PCT_RUN["running"] = False
 
     def _market_turnover_impl(self):
         now = _time_mod.time()
@@ -6328,7 +6355,9 @@ class Api:
             snaps = None
             try:
                 from core.market_data.quote_bus import get_quotes as _bus_get_quotes
-                snaps = _bus_get_quotes(want, max_age_sec=8.0)
+                # 2026-11-24：8→15s。前端 `HUNTER_QUOTE_TTL_MS=15000` 才再来问一次，
+                # 8s 的 bus 年龄几乎每拍必 miss ⇒ 在本线程同步打网络（慢日志 0.6~2s）。
+                snaps = _bus_get_quotes(want, max_age_sec=15.0)
             except Exception:
                 snaps = None
             if snaps is None:
@@ -10594,6 +10623,8 @@ class Api:
         codes = [str(c).split("_")[0] for c in (codes or []) if c]
         if not codes:
             return
+        if (_time_mod.time() - self._PROC_T0) < self._WARM_STAGGER_SEC:
+            return                      # 启动错峰：20s 内不排（下一拍轮询会再进来）
         slot = _min_bars_slot()
         with _PB_M30_WARM_LOCK:
             if _PB_M30_WARM.get("slot") != slot:
@@ -10639,7 +10670,7 @@ class Api:
                             if len(_PB_M30_CACHE) > _PB_M30_MAX:
                                 _PB_M30_CACHE.clear()
                             _PB_M30_CACHE[key] = snap
-                    with ThreadPoolExecutor(max_workers=3,
+                    with ThreadPoolExecutor(max_workers=2,   # 2026-11-24：3→2（同上，让 GIL）
                                             thread_name_prefix="pb-m30") as ex:
                         list(ex.map(_one, batch))
             except Exception:
@@ -11223,6 +11254,12 @@ class Api:
             _PB_STRUCT_HIST[key] = _st
         return _st
 
+    # 2026-11-24：GUI 启动后 20s 内**不排**「仓位结构 / 30min 判定」预热 —— 重启瞬间
+    # tags/beacon/ma-reclaim 已经在抢 CPU，再叠 7 个 pandas 线程 ⇒ 60~70% 占用，
+    # js_api 排队到 10s+（owner 报"卡顿"）。错峰后由后续轮询自然补排。
+    _WARM_STAGGER_SEC = 20.0
+    _PROC_T0 = _time_mod.time()
+
     def _kick_pb_struct_warm(self, codes, force=False):
         """后台预热「仓位结构」（守护线程）。磁盘优先（`load_structure` 内部：新鲜 plain 档 →
         陈旧才出网补并落盘）。`max_workers=2`：比 30min 判定列克制——本层每只要多打一次 5min（~0.5s）。
@@ -11235,6 +11272,8 @@ class Api:
         codes = [str(c).split("_")[0] for c in (codes or []) if c]
         if not codes:
             return
+        if not force and (_time_mod.time() - self._PROC_T0) < self._WARM_STAGGER_SEC:
+            return                      # 启动错峰：20s 内不排（下一拍轮询会再进来）
         slot = _min_bars_slot()
         with _PB_STRUCT_WARM_LOCK:
             if _PB_STRUCT_WARM.get("slot") != slot:
@@ -11316,7 +11355,11 @@ class Api:
                     # 2026-10-30：命名（"pb-struct"）。此前是**未命名**的 ThreadPoolExecutor，
                     # 在 `thread_cpu.jsonl` 里与其它十几个池混成一组 ⇒ 每 30 分钟边界的 60% 单核
                     # 尖峰无法归因（占全部线程采样 60%）。命名后 `--threads-report` 可直接点名。
-                    with ThreadPoolExecutor(max_workers=4,
+                    # 2026-11-24 owner 报 UI 卡顿：4→2。4 物理核上同时跑
+                    # tags×3 + pb-struct×4 + pb-m30×3 + beacon/ma-reclaim 时 CPU 60~68%，
+                    # pywebview 主线程抢不到 GIL ⇒ js_api 排队 1~14s。2 线程排干 10 只
+                    # 持仓约 4s（可接受），换取 UI 响应。
+                    with ThreadPoolExecutor(max_workers=2,
                                             thread_name_prefix="pb-struct") as ex:
                         list(ex.map(_one, batch))
             except Exception:
@@ -11957,8 +12000,8 @@ class Api:
                 from analysis.trend30.adapter import prefetch_30min as _pf30
             except Exception:
                 _pf30 = None
-            with ThreadPoolExecutor(max_workers=3,
-                                    thread_name_prefix="tags") as ex:   # 6→3（2026-10-21）：纯 GIL 活，别和 UI 抢
+            with ThreadPoolExecutor(max_workers=2,
+                                    thread_name_prefix="tags") as ex:   # 6→3（2026-10-21）→2（2026-11-24：纯 GIL 活，让 UI）
                 for _i in range(0, len(codes), _CHUNK):
                     part = codes[_i:_i + _CHUNK]
                     if _pf30 is not None:
@@ -15134,6 +15177,22 @@ class Api:
             if (ent is not None and (now - ent.get("ts", 0.0)) < _POOL_ROWS_TTL
                     and (fp is None or ent.get("fp") == fp)):
                 return ent["payload"]                       # ① 新鲜直返
+            if (ent is not None and fp is not None and ent.get("fp") != fp
+                    and len(codes) <= 24 and key not in _POOL_ROWS_RUN):
+                # ②小池（≤24 只，如避风港湾/手动池）**池子被改**（加票/删票/改涨停原因）
+                #   ⇒ 同步重算，保证"改完立刻看到"（2026-11-24：P1-1 的纯 SWR 会让这类
+                #   编辑最多滞后 30s；单测 test_set_and_read_back 等 4 例也因此挂红）。
+                #   大池（异常监控池 646 只）仍走下面的 SWR：冷/热算一次 43s，绝不能堵 js_api。
+                _POOL_ROWS_RUN.add(key)
+                try:
+                    payload = self._pool_rows_compute(stocks, date, note)
+                    if len(_POOL_ROWS_MEM) > 8:
+                        _POOL_ROWS_MEM.clear()
+                    _POOL_ROWS_MEM[key] = {"payload": payload,
+                                           "ts": _time_mod.time(), "fp": fp}
+                    return payload
+                finally:
+                    _POOL_ROWS_RUN.discard(key)
             if ent is not None and key not in _POOL_ROWS_RUN:
                 # ② 过期/指纹变但有旧值 ⇒ 立返旧值，后台单飞重算（SWR）
                 _POOL_ROWS_RUN.add(key)
@@ -15154,17 +15213,51 @@ class Api:
                 threading.Thread(target=_bg, daemon=True, name="pool-rows-swr").start()
             if ent is not None:
                 return ent["payload"]
-            _POOL_ROWS_RUN.add(key)                         # ③ 无旧值（首次）⇒ 同步算
-        try:
-            payload = self._pool_rows_compute(stocks, date, note)
-            with _POOL_ROWS_LOCK:
-                if len(_POOL_ROWS_MEM) > 8:
-                    _POOL_ROWS_MEM.clear()
-                _POOL_ROWS_MEM[key] = {"payload": payload, "ts": _time_mod.time(), "fp": fp}
-            return payload
-        finally:
-            with _POOL_ROWS_LOCK:
-                _POOL_ROWS_RUN.discard(key)
+            # ③ 无旧值（首次/池子刚增删且无缓存）：**不再同步算**。
+            #    2026-11-24 实测：异常监控池 646 只冷算 **43s**，在 pywebview 串行队列里
+            #    把后面所有 js_api 一起堵死（期间 hunter_progress/beacon 全部 10s+）。
+            #    改为后台单飞算、本拍回 warming；前端按 pending/warming 15s 短轮询自取。
+            if ent is None and _POOL_ROWS_SYNC_COLD:
+                # 测试/离线工具路径：同步算（生产不走这里）
+                _POOL_ROWS_RUN.add(key)
+                try:
+                    payload = self._pool_rows_compute(stocks, date, note)
+                    if len(_POOL_ROWS_MEM) > 8:
+                        _POOL_ROWS_MEM.clear()
+                    _POOL_ROWS_MEM[key] = {"payload": payload,
+                                           "ts": _time_mod.time(), "fp": fp}
+                    return payload
+                finally:
+                    _POOL_ROWS_RUN.discard(key)
+            if key not in _POOL_ROWS_RUN:
+                _POOL_ROWS_RUN.add(key)
+
+                def _bg_cold(_stocks=stocks, _date=date, _note=note, _key=key, _fp=fp):
+                    try:
+                        payload = self._pool_rows_compute(_stocks, _date, _note)
+                        with _POOL_ROWS_LOCK:
+                            if len(_POOL_ROWS_MEM) > 8:
+                                _POOL_ROWS_MEM.clear()
+                            _POOL_ROWS_MEM[_key] = {"payload": payload,
+                                                    "ts": _time_mod.time(), "fp": _fp}
+                    except Exception:
+                        pass
+                    finally:
+                        with _POOL_ROWS_LOCK:
+                            _POOL_ROWS_RUN.discard(_key)
+                _th = threading.Thread(target=_bg_cold, daemon=True,
+                                       name="pool-rows-cold")
+                _th.start()
+                # 小池（测试/避风港湾十几只）1.2s 内就绪 ⇒ 同步语义保留给调用方；
+                # 大池（646 只 43s）必然超时 ⇒ 回 warming，后台继续算，前端 15s 短轮询自取。
+                _th.join(1.2)
+                with _POOL_ROWS_LOCK:
+                    _ready = _POOL_ROWS_MEM.get(key)
+                if _ready is not None:
+                    return _ready["payload"]
+        return _clean({"has_data": True, "date": date, "rows": [], "counts": {},
+                       "cond_labels": COND_LABELS, "note": note, "pending": 0,
+                       "warming": True})
 
     def _pool_rows_compute(self, stocks, date, note):
         """`_pool_rows` 的实算部分（见上）。"""

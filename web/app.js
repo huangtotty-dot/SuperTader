@@ -5036,7 +5036,10 @@ function renderAbnormalPool(d) {
   // 连板天梯（2026-11-15 owner：按连板高度分列 + 断板观察）——放在明细表上方，先渲染。
   renderAbnormalLadder(rows);
   if (!rows.length) {
-    el.innerHTML = '<div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div>';
+    // 2026-11-24：后端冷算（646 只 43s）已挪后台，本拍回 warming —— 别显示成"池子是空的"
+    el.innerHTML = d.warming
+      ? '<div class="empty">⏳ 首次计算中（整表 646 只，约 1 分钟）…算完自动出现，无需操作</div>'
+      : '<div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div>';
     applyAbnFilter();
     return;
   }
@@ -5549,7 +5552,9 @@ function renderShelterPool(d) {
   if (!el) return;
   const rows = d.rows || [];
   if (!rows.length) {
-    el.innerHTML = '<div class="empty">避风港湾还是空的。上面输代码/名称 → ＋加入</div>';
+    el.innerHTML = d.warming
+      ? '<div class="empty">⏳ 首次计算中…算完自动出现，无需操作</div>'
+      : '<div class="empty">避风港湾还是空的。上面输代码/名称 → ＋加入</div>';
     return;
   }
   const labels = d.cond_labels || {};
@@ -11346,26 +11351,36 @@ function _applyHunterQuotes() {
   const el = document.getElementById("hunterBody");
   if (!el) return 0;
   let n = 0;
+  // 2026-11-24 owner 报 UI 卡顿：这里原来把 `hunterBody` 里**全部已渲染行**（≈2300 行 ×
+  // 3 列 = 6871 格）每 15s 全量重写 innerHTML —— 而该次请求只带 60 个码，其余行刷了也是
+  // 同一份旧值。JS 主线程被堵 1~1.6s（jsblock 实测 3.7s@猎手跑完那一拍）。
+  // 现在：只写「缓存里有值」的码 + 内容没变不碰 DOM（两次遍历都是 data-hcode 定位，语义不变）。
+  const _set = (td, html) => {
+    if (td.innerHTML === html) return 0;
+    td.innerHTML = html;
+    return 1;
+  };
   el.querySelectorAll(".h-expand-row td.h-price[data-hcode]").forEach(td => {
+    const c = td.getAttribute("data-hcode");
+    if (!(c in hunterQuoteCache)) return;
     // 与初始渲染共用 `hunterPriceHtml`；取不到就回落成 ⏳/—（**不回落到扫描时的旧值**）
-    td.innerHTML = hunterPriceHtml(hunterQuoteCache[td.getAttribute("data-hcode")]);
-    n++;
+    n += _set(td, hunterPriceHtml(hunterQuoteCache[c]));
   });
   // 市值列与价同源（同一次 load_quotes_for 的返回），一起补
   el.querySelectorAll(".h-expand-row td.h-mktcap[data-hcode]").forEach(td => {
-    td.innerHTML = hunterMktcapHtml(hunterQuoteCache[td.getAttribute("data-hcode")]);
-    n++;
+    const c = td.getAttribute("data-hcode");
+    if (!(c in hunterQuoteCache)) return;
+    n += _set(td, hunterMktcapHtml(hunterQuoteCache[c]));
   });
   // 2026-11-13：站上5日线天数（与价同源同拍）。**只补本次返回里有的码** ——
   // 拿不到就保留标签批那份，别刷成「—」冒充"已破线"。
   el.querySelectorAll(".h-expand-row td.h-ma5streak[data-hcode]").forEach(td => {
     const c = td.getAttribute("data-hcode");
     if (Object.prototype.hasOwnProperty.call(hunterStreakLive, c)) {
-      td.innerHTML = ma5StreakHtml(hunterStreakLive[c]);
-      n++;
+      n += _set(td, ma5StreakHtml(hunterStreakLive[c]));
     }
   });
-  return n;   // 返回命中格数 ⇒ 诊断能分辨"没拿到值"与"没命中 DOM"
+  return n;   // 返回命中/变更格数 ⇒ 诊断能分辨"没拿到值"与"没命中 DOM"
 }
 
 function applySectorTags(tbody, category) {
@@ -13923,7 +13938,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  _reportSlow("app_boot_20261123", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
+  _reportSlow("app_boot_20261124e", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
   // 2026-11-23（P2-5）：echarts（~1MB）空闲预热。已是按需加载（首屏不阻塞），但首次开图
   // 要现场下载+解析 1MB（冷开图可感到顿挫）⇒ 启动后浏览器空闲期先拉下来编一遍，
   // 用户第一次开 K 线即热。requestIdleCallback 缺席时退化 setTimeout；失败静默不碍启动。

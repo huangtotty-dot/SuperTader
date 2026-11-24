@@ -64,9 +64,11 @@ _LIVE_BUNDLE_RE = r'_startStaggered\("live"[\s\S]{0,300}?,\s*(\d+)\s*,\s*\d+\s*\
 
 _TTL_REGISTRY = [
     dict(endpoint="load_mw_head_stats", ttl_name="_SECTOR_PCT_MEM",
-         ttl_re=r"_SECTOR_PCT_MEM[\s\S]{0,1200}?<\s*(\d+(?:\.\d+)?)",
+         # 2026-11-24：改为 **SWR**（有旧值立即返，过期才后台单飞刷新；js_api 零网络），
+         # 判定式由 `< 12.0`（同步直返）变为 `age >= 12.0`（触发后台刷新）。
+         ttl_re=r"_SECTOR_PCT_MEM[\s\S]{0,1600}?age\s*>=\s*(\d+(?:\.\d+)?)",
          poll_re=r"setInterval\(mwSectorTick,\s*(\d+)\)",
-         exempt=None),                       # 12s > 10s：P0-3 由 8s 调大（原 8<10 每拍穿透）
+         exempt=None),                       # 12s > 10s：隔拍命中内存热缓存（SWR 后不再阻塞桥）
     dict(endpoint="load_sentiment_live", ttl_name="_SENT_LIVE_MEM（盘中 TTL）",
          ttl_re=r"_ttl\s*=\s*(\d+(?:\.\d+)?)\s+if\s+_in_sess\b",
          poll_re=r"setTimeout\(loadSentimentLive,\s*(\d+)\)",
