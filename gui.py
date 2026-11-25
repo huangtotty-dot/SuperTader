@@ -4402,6 +4402,10 @@ class Api:
     _SECTOR_PCT_MEM: dict = {"ts": 0.0, "val": None}
     _SECTOR_PCT_RUN: dict = {"running": False}
     _SECTOR_PCT_LOCK = threading.Lock()
+    # 最后一次**成功**的涨跌家数（2026-11-25 owner「实时未更新」）：情绪面板那条 60s 盘中
+    # 读数首拍常撞上"内存还没热"（东财 12s SWR 冷启）⇒ 显示 —。这里留一份 last-good，
+    # 只要成功过一次就永远有数（带来源时间，前端如实标）。
+    _BREADTH_LAST: dict = {"up": None, "down": None, "flat": None, "ts": "", "src": ""}
 
     def load_mw_head_stats(self):
         """多窗口标题栏：证券/银行/保险 涨幅 + 沪深北涨跌家数（10 秒刷新）。
@@ -4444,6 +4448,9 @@ class Api:
                 out = None
             if out is not None:
                 self._SECTOR_PCT_MEM.update({"ts": _time_mod.time(), "val": _clean(out)})
+                if up is not None:
+                    Api._BREADTH_LAST.update({"up": up, "down": dn, "flat": fl,
+                                              "ts": _ts, "src": _src})
         except Exception:
             _swallow("gui._refresh_mw_head_stats")
         finally:
@@ -5233,6 +5240,16 @@ class Api:
         if not rows:
             return _clean({"available": False, "error": "涨跌停缓存里没有有效记录"})
 
+        # 2026-11-25 owner：「加一张每日涨跌家数图，5 日均线平滑，并类比画出三区」。
+        # 涨跌家数来自本地日线全池自算（`core.breadth_daily`，日频缓存 + 后台重建），
+        # 与涨跌停家数**来源独立** ⇒ 每行按 date 补 up/dn/flat/n，缺的日期给 None。
+        _bd_meta = {}
+        try:
+            from core import breadth_daily as _bd
+            _bd_meta = _bd.merge_into(rows, 86400.0)   # 日频缓存（盘后重建一次/天）
+        except Exception:
+            _swallow("gui.load_market_sentiment.breadth")
+
         # ── 情绪温度指数（0~100）：owner 2026-11-13「指标太多看着乱，加权合成一个指数」。
         # 权重按**证据**定（scripts/experiment/sentiment_index_screen_20261113.py）：
         #   0.5 × 触板总数的 60 日分位      —— 单项信息量最大（IC −0.259）；"今天有多少票去摸过板"
@@ -5380,6 +5397,10 @@ class Api:
                        "days": days, "series": series, "last": last, "stats": stats,
                        "weights": {"touch": 0.5, "zb": 0.3, "dt": 0.2},
                        "transitions": transitions,
+                       # 每日涨跌家数（2026-11-25）：缓存元信息给前端做「重建中→30s 后重取」
+                       "breadth": {"built_at": (_bd_meta or {}).get("built_at") or "",
+                                   "n_days": int((_bd_meta or {}).get("n_days") or 0),
+                                   "pending": bool((_bd_meta or {}).get("stale"))},
                        "start": series[0]["date"], "end": last["date"],
                        "latest_date": last["date"]})
 
@@ -5432,19 +5453,45 @@ class Api:
                 val = _limit_counts_from_ths(now.strftime("%Y-%m-%d"))
             except Exception:
                 val = None
-            self._SENT_LIVE_MEM = {"ts": now, "date": today, "val": val}
+            if val:
+                self._SENT_LIVE_MEM = {"ts": now, "date": today, "val": val}
+            elif mem.get("date") == today:
+                # 2026-11-25 owner 报「运行一段时间后整条消失」：THS 涨停池偶发返空/超时，
+                # 原来会把 val=None **缓存 75s** ⇒ 面板读数连消失 1~2 拍。
+                # 现在失败**不写缓存**（下一拍立即重试），并沿用今天最后一次成功值。
+                val = mem.get("val")
         else:
             val = mem.get("val")
-        if not val:
+        # —— 先把今日涨跌家数取出来（后面既做可用性兜底，也作为宽度口径下发）——
+        _up = _dn = _fl = None
+        _bts = _bsrc = None
+        try:
+            _hs = self.load_mw_head_stats() or {}
+            _up, _dn, _fl = _hs.get("up"), _hs.get("down"), _hs.get("flat")
+            _bts, _bsrc = _hs.get("ts"), _hs.get("src")
+            if _up is None and Api._BREADTH_LAST.get("up") is not None:
+                # 冷启动/瞬时失败 ⇒ 用最后一次成功值兜底（绝不显示 —）
+                _up = Api._BREADTH_LAST.get("up")
+                _dn = Api._BREADTH_LAST.get("down")
+                _fl = Api._BREADTH_LAST.get("flat")
+                _bts, _bsrc = Api._BREADTH_LAST.get("ts"), Api._BREADTH_LAST.get("src")
+        except Exception:
+            _swallow("gui.load_sentiment_live.breadth")
+        if not val and _up is None:
             return _clean({"available": False, "intraday": bool(_in_sess or _lunch),
                            "date": now.strftime("%Y-%m-%d")})
+        _val = val or {}
         out = {"available": True, "intraday": bool(_in_sess or _lunch),
                "paused": bool(_lunch),          # 午休：数字停在上午收盘，前端据此换标签
                "date": now.strftime("%Y-%m-%d"),
-               "zt": val.get("zt"), "dt": val.get("dt"),
-               "touch": val.get("touch"), "zb_rate": val.get("zb_rate"),
+               "zt": _val.get("zt"), "dt": _val.get("dt"),
+               "touch": _val.get("touch"), "zb_rate": _val.get("zb_rate"),
+               "ths_missing": val is None,
                "fetched_at": now.strftime("%H:%M:%S")}
-        out.update(self._sent_today_parts(val, today=out["date"]))
+        # 今日家数已在上面取好（`load_mw_head_stats` SWR：只读内存 + 踢后台刷新，零网络）
+        out["up"], out["dn"], out["flat"] = _up, _dn, _fl
+        out["breadth_ts"], out["breadth_src"] = _bts, _bsrc
+        out.update(self._sent_today_parts(_val, today=out["date"]))
         return _clean(out)
 
     def _sent_today_parts(self, val, today=None):
@@ -17583,6 +17630,18 @@ if __name__ == "__main__":
     try:
         from core import index_leaders as _il0
         _il0.get_cached(86400.0)
+    except Exception:
+        pass
+    # 涨跌家数首帧（2026-11-25）：情绪面板盘中读数 60s 才来一发，冷启动时那份指数家数
+    # 还是空的 ⇒ 先起一个后台线程把「沪深北涨跌家数」热起来，首拍就有数。
+    try:
+        def _warm_breadth():
+            try:
+                Api()._refresh_mw_head_stats()
+            except Exception:
+                pass
+        _th0 = threading.Thread(target=_warm_breadth, daemon=True, name="breadth-warm")
+        _th0.start()
     except Exception:
         pass
 

@@ -284,6 +284,21 @@
       <div id="sentLiveMeta" style="font-size:12px;margin-bottom:6px;display:none"></div>
       <div id="sentMeta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
       <div id="sentChart" class="echart" style="height:240px"></div>
+      <!-- 2026-11-25 owner：「加一张每日涨跌家数图，5 日均线平滑，并类比画出三区」。
+           数据 = core.breadth_daily（本地日线全池自算：close vs 前收，排除今日 forming bar）。 -->
+      <div class="cell-dim" style="font-size:11px;margin:8px 0 4px">
+        <b>每日涨跌家数</b>（历史 = 本地日线全池自算 close 对比前收；<b>今日那根带橙色描边 = 盘中实时</b>，
+        来源东财沪深北家数，随情绪盘中读数 60s 刷新）。<b>右轴 = 上涨占比的 5 日均值</b>，
+        三区同温度口径 0~40 弱势 / 40~60 平稳 / 60~100 强势
+      </div>
+      <div id="sentBreadthChart" class="echart" style="height:210px"></div>
+      <!-- 2026-11-25 owner：「第三个图标：把上面两个温度合成综合温度，权重 1:1」 -->
+      <div class="cell-dim" style="font-size:11px;margin:8px 0 4px">
+        <b>综合情绪温度</b> = 0.5 × ①涨停/跌停温度（上方大数字那条 `sent_ma`）
+        + 0.5 × ②涨跌家数温度（上涨占比 5 日均值）。两条虚线是分项，粗线是合成值；
+        三区同口径 0~40 弱势 / 40~60 平稳 / 60~100 强势
+      </div>
+      <div id="sentCompositeChart" class="echart" style="height:190px"></div>
     </div>
     <div class="section" id="market-beacon">
       <!-- ⚠️ **必须是独立 section、不能长在 `#liveBody` 里**（2026-10-13 实测教训）：
@@ -866,6 +881,6 @@
      `_ensureEcharts()` 在首次真正画图时动态注入（单飞 + 排队补画，见 app.js ECharts 辅助段）。 -->
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261124h"></script>
+<script src="app.js?v=20261125f"></script>
 </body>
 </html>

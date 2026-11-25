@@ -1,23 +1,13 @@
 {
-  "updated_at": "2026-11-24 14:50:01",
+  "updated_at": "2026-11-25 14:50:07",
   "open": {
-    "300508": {
-      "entry_date": "2026-11-24",
-      "entry_price": 43.7824,
-      "qty": 2100,
-      "dev20": -0.094633,
-      "gap": 0.14014560582423297,
+    "301079": {
+      "entry_date": "2026-11-25",
+      "entry_price": 28.02,
+      "qty": 3500,
+      "dev20": -0.163939,
+      "gap": 0.07028265851795257,
       "board": "机器人",
-      "days_held": 0,
-      "last_check_date": null
-    },
-    "300354": {
-      "entry_date": "2026-11-24",
-      "entry_price": 28.4233,
-      "qty": 300,
-      "dev20": -0.087783,
-      "gap": 0.12896825396825395,
-      "board": "物理AI",
       "days_held": 0,
       "last_check_date": null
     }
@@ -716,6 +706,43 @@
       "exit_qty": 6400,
       "exit_reason": "horizon_expired",
       "exit_fee": 99.01551038097287,
+      "closed_by": "fill_event"
+    },
+    "300508": {
+      "entry_date": "2026-11-24",
+      "entry_price": 43.7824,
+      "qty": 2100,
+      "dev20": -0.094633,
+      "gap": 0.14014560582423297,
+      "board": "机器人",
+      "days_held": 0,
+      "last_check_date": null,
+      "exit_date": "2026-11-25",
+      "exit_price": 41.869524819510325,
+      "exit_qty": 2100,
+      "exit_reason": "pop_sell",
+      "exit_fee": 106.39046403707471,
+      "closed_by": "fill_event"
+    },
+    "300354": {
+      "entry_date": "2026-11-24",
+      "entry_price": 28.4233,
+      "qty": 300,
+      "dev20": -0.087783,
+      "gap": 0.12896825396825395,
+      "board": "物理AI",
+      "days_held": 1,
+      "last_check_date": "2026-11-25",
+      "days_held_calendar_fixed": {
+        "from": 0,
+        "to": 1,
+        "date": "2026-11-25"
+      },
+      "exit_date": "2026-11-25",
+      "exit_price": 24.706666310628254,
+      "exit_qty": 300,
+      "exit_reason": "sl5_deep",
+      "exit_fee": 8.968519994735269,
       "closed_by": "fill_event"
     }
   },

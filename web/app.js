@@ -1337,6 +1337,8 @@ function resizeAllEch() {
   if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
   if (ma20Inst) { try { ma20Inst.resize(); } catch (e) { } }
   if (sentInst) { try { sentInst.resize(); } catch (e) { } }
+  if (sentBreadthInst) { try { sentBreadthInst.resize(); } catch (e) { } }
+  if (sentCompositeInst) { try { sentCompositeInst.resize(); } catch (e) { } }
 }
 window.addEventListener("resize", () => {
   Object.values(echInstances).forEach(i => i.resize());
@@ -3594,7 +3596,11 @@ function _breadthChartOption(series, label, note) {
         if (!x) return "";
         const prev = i > 0 ? series[i - 1] : null;
         const chg = prev && prev.pct != null ? x.pct - prev.pct : null;
-        return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}</div>`
+        return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}`
+          + (x.breadth_live ? (x.provisional === false
+            ? ' <span style="color:#d29922">📡 今日实时家数（收盘口径）</span>'
+            : ' <span style="color:#d29922">📡 今日盘中（实时，未定型）</span>') : "")
+          + `</div>`
           + `${label} <b style="color:${x.pct >= (prev ? prev.pct : x.pct) ? MA365_UP : MA365_DOWN}">${fmt(x.pct, 2)}%</b>`
           + `<br>站上 ${x.above} / ${x.total} 只`
           + (chg != null ? `<br>较前日 ${chg >= 0 ? "+" : ""}${chg.toFixed(2)}pp` : "")
@@ -3703,6 +3709,36 @@ function renderMa20Breadth(d) {
    ⇒ 只画原始三件套当温度计：涨停/跌停家数（柱）+ 炸板率（右轴线）。不做合成分。
    数据来自 `load_market_sentiment`（只读 index_regime 的涨跌停缓存，零网络）。 */
 let sentInst = null, sentNode = null, sentSig = "";
+let sentBreadthInst = null, sentBreadthNode = null, sentBreadthSig = "";
+let sentCompositeInst = null, sentCompositeNode = null, sentCompositeSig = "";
+let _sentZoomSyncing = false;
+/* 两张图（情绪温度 / 涨跌家数）**缩放联动**：拖任意一张的底部滑条或滚轮缩放，
+   另一张跟着走 —— 两块共用同一条日期轴，不联动就得手动对两次。
+   用 flag 防回环；dispatchAction 只在目标实例存在时发。 */
+function _bindSentZoomSync() {
+  const list = [sentInst, sentBreadthInst, sentCompositeInst].filter(Boolean);
+  if (list.length < 2) return;
+  list.forEach(src => {
+    if (src.__zoomBound) return;
+    src.__zoomBound = true;
+    src.on("dataZoom", (e) => {
+      if (_sentZoomSyncing) return;
+      _sentZoomSyncing = true;
+      try {
+        const bats = e && e.batch ? e.batch[0] : e;
+        const start = (bats && bats.start != null) ? bats.start : (e && e.start);
+        const end = (bats && bats.end != null) ? bats.end : (e && e.end);
+        if (start != null && end != null) {
+          list.forEach(dst => {
+            if (dst === src) return;
+            try { dst.dispatchAction({ type: "dataZoom", start, end }); } catch (err) { /* 忽略 */ }
+          });
+        }
+      } catch (err) { /* 忽略 */ }
+      setTimeout(() => { _sentZoomSyncing = false; }, 60);
+    });
+  });
+}
 let sentTimer = null, sentInflight = false, sentData = null;
 let sentLiveTimer = null, sentLiveInflight = false, sentLive = null;
 let sentRange = 120;
@@ -3736,6 +3772,8 @@ async function loadMarketSentiment() {
       sentData = d;
       renderMarketSentiment(d);
       nextMs = 300000;
+      // 涨跌家数缓存正在盘后重建（约 25s）⇒ 30s 后重取，别等满 5 分钟才显示新一天
+      if (d.breadth && d.breadth.pending) nextMs = 30000;
       if (!sentLiveTimer) loadSentimentLive();   // 盘中实时读数：独立 60s 轮询（懒启动）
     } else {
       const meta = document.getElementById("sentMeta");
@@ -3782,10 +3820,12 @@ async function loadSentimentLive() {
       // 标签如实写"午休"，别让 owner 以为数字卡住了/接口挂了。
       const _tag = d.paused ? "📡 今日午休（停在上午收盘读数）"
         : (d.intraday ? "📡 今日盘中（实时，未定型）" : "📡 今日收盘（已定型）");
+      const _zv = v => (v == null ? "—" : v);
       let html = `<span style="color:#d29922;font-weight:600">${_tag}`
         + ` ${esc(d.date || "")} ${esc(d.fetched_at || "")}</span> `
-        + `涨停 <b style="color:${MA365_UP}">${d.zt}</b> 家`
-        + ` · 跌停 <b style="color:${MA365_DOWN}">${d.dt}</b> 家`;
+        + `涨停 <b style="color:${MA365_UP}">${_zv(d.zt)}</b> 家`
+        + ` · 跌停 <b style="color:${MA365_DOWN}">${_zv(d.dt)}</b> 家`;
+      if (d.ths_missing) html += '<span class="cell-dim">（涨停池暂不可得，宽度读数照常）</span>';
       if (d.touch != null) html += ` · 触板 <b>${d.touch}</b>`;
       if (d.zb_rate != null) html += ` · 炸板率 <b>${d.zb_rate}%</b>`;
       if (bd) {
@@ -3800,9 +3840,9 @@ async function loadSentimentLive() {
       el.innerHTML = "";
     }
   } catch (e) {
-    sentLive = null;
-    el.style.display = "none";
-    el.innerHTML = "";
+    // 2026-11-25：**保留上一帧** —— 一次超时/网络抖动不该让"今日柱"整根消失
+    // （真·非交易时段后端会给 available:false，走上面的 else 分支隐藏）。
+    if (!sentLive) { el.style.display = "none"; el.innerHTML = ""; }
   } finally {
     sentLiveInflight = false;
     if (sentData) renderMarketSentiment(sentData);   // 大数字/图末尾跟盘中读数一起翻新
@@ -3830,13 +3870,37 @@ function sentBand(v) {
 function _sentSeriesWithLive(base) {
   const lv = sentLive;
   const last = base[base.length - 1] || {};
-  if (!(lv && lv.available && lv.date && String(lv.date) > String(last.date || ""))) return base;
+  if (!(lv && lv.available && lv.date) || !base.length) return base;
+  const _same = String(lv.date) === String(last.date || "");
+  if (_same) {
+    /* 2026-11-25 owner 报「收盘后今日柱消失」：14:30 之后日频序列**已经有今天**那一行
+       （同花顺尾盘快照），旧逻辑用严格 `>` 比较 ⇒ 不再补 tail ⇒ 而日线自算的宽度历史
+       又**不含今天** ⇒ 今日那根柱 up/dn 为空直接消失。
+       现在同一天就**并入最后一行**：只补 up/dn/flat（宽度实时值），
+       并把 `breadth_live` 标出来（temp 图的 📡 语义不受影响）。 */
+    const merged = base.slice();
+    merged[merged.length - 1] = {
+      ...last,
+      up: (lv.up == null ? last.up : lv.up),
+      dn: (lv.dn == null ? last.dn : lv.dn),
+      flat: (lv.flat == null ? last.flat : lv.flat),
+      breadth_live: (lv.up != null || lv.dn != null),
+      provisional: !!lv.intraday,
+    };
+    return merged;
+  }
+  if (String(lv.date) < String(last.date || "")) return base;
   return base.concat([{
     date: String(lv.date), zt: lv.zt, dt: lv.dt,
     net: (lv.zt || 0) - (lv.dt || 0), touch: lv.touch, zb_rate: lv.zb_rate,
     seal_rate: (lv.zb_rate == null) ? null : +(100 - lv.zb_rate).toFixed(2),
     sent: (lv.sent == null ? null : lv.sent),
     sent_ma: (lv.sent_ma == null ? null : lv.sent_ma),
+    // 今日实时涨跌家数（2026-11-25 owner）：来自多窗口标题栏同一条 SWR（东财沪深北家数）
+    up: (lv.up == null ? null : lv.up),
+    dn: (lv.dn == null ? null : lv.dn),
+    flat: (lv.flat == null ? null : lv.flat),
+    breadth_live: (lv.up != null || lv.dn != null),
     intraday: true,
     provisional: !!lv.intraday,      // false = 收盘后读到的已定型数（只是日频档还没落）
   }]);
@@ -3915,6 +3979,12 @@ function renderMarketSentiment(d) {
   const sig = `${d.days}|${series.length}|${series[0] && series[0].date}|${d.end}`
     + `|${(d.last || {}).zt}|${(d.last || {}).sent_ma}`
     + `|${tail.intraday ? `L:${tail.date}:${tail.sent_ma}:${tail.zt}:${tail.dt}` : ""}`;
+  // 2026-11-25 修复：两张副图**必须早于**下面 temp 图的"sig 未变就 return"闸 ——
+  // 同日并入实时家数时 temp 的 sig 不变，早退会把副图一起跳过 ⇒ 今日柱"永远不出现"。
+  // 副图自身有 sig 闸，重复调用零成本。
+  _renderSentBreadth(series, d);
+  _renderSentComposite(series, d);
+  _bindSentZoomSync();
   const _canvasOk = !!(el.querySelector && el.querySelector("canvas"));
   if (sentInst && sentNode === el && _canvasOk && sig === sentSig) return;
   if (sentInst && (sentNode !== el || !_canvasOk)) {
@@ -4021,7 +4091,8 @@ function renderMarketSentiment(d) {
           + `<span style="color:${bd.color};margin-left:6px">情绪温度(5日均) ${x.sent_ma == null ? "—" : x.sent_ma.toFixed(1)}（${bd.name}）</span>
             <span style="color:#8b949e;margin-left:6px">当日 ${_raw}</span></div>`
           + (_tr ? `<div style="color:${SENT_BANDS[2].color}">▲ 弱势→强势：自 ${esc(_tr.from)} 起跨越 <b>${_tr.days}</b> 个交易日</div>` : "")
-          + `涨停 <b style="color:${MA365_UP}">${x.zt}</b> 家 · 跌停 <b style="color:${MA365_DOWN}">${x.dt}</b> 家`
+          + `涨停 <b style="color:${MA365_UP}">${x.zt == null ? "—" : x.zt}</b> 家 · 跌停 `
+          + `<b style="color:${MA365_DOWN}">${x.dt == null ? "—" : x.dt}</b> 家`
           + ` · 净涨停 <b>${x.net >= 0 ? "+" : ""}${x.net}</b>`
           + ` · 5日斜率 <b style="color:${(slopes[i] != null && slopes[i] >= (steepTh || 1e9)) ? "#d29922" : "#8b949e"}">`
           + `${slopes[i] == null ? "—" : (slopes[i] >= 0 ? "+" : "") + slopes[i]}/日</b>`
@@ -4096,6 +4167,259 @@ function renderMarketSentiment(d) {
     },
   });
   sentInst.resize();
+}
+
+/* 上涨占比与其 5 日均值（涨跌家数图 / 综合温度图共用）：
+   占比 = 上涨 /(上涨+下跌) ×100；MA5 窗口内至少 3 个有效值才出数。 */
+function _sentBreadthRatio(series) {
+  return series.map(x => {
+    const u = x.up, n = x.dn;
+    if (u == null || n == null || (u + n) <= 0) return null;
+    return u / (u + n) * 100;
+  });
+}
+
+function _sentBreadthRatioMa5(series) {
+  const ratio = _sentBreadthRatio(series);
+  return ratio.map((v, i) => {
+    const w = ratio.slice(Math.max(0, i - 4), i + 1).filter(y => y != null);
+    return w.length >= 3 ? +(w.reduce((a, b) => a + b, 0) / w.length).toFixed(1) : null;
+  });
+}
+
+/* ── 每日涨跌家数（2026-11-25 owner）────────────────────────────────────────
+   柱 = 当日上涨/下跌家数（后端 core.breadth_daily 全池自算，来源与涨跌停家数独立）；
+   右轴线 = **上涨占比的 5 日均值**（上涨家数 /(上涨+下跌) ×100，窗口 ≥3 个有效值才出数）；
+   三区 = 与情绪温度同一套阈值 0~40 / 40~60 / 60~100（markArea 垫在柱子后面）。
+   ⚠️ 只做宽度温度计：它回答"今天赚钱面有多大"，不是买卖信号。 */
+function _renderSentBreadth(series, d) {
+  const el = document.getElementById("sentBreadthChart");
+  if (!el) return;
+  const dates = series.map(x => String(x.date).slice(5));
+  const up = series.map(x => (x.up == null ? null : x.up));
+  const dn = series.map(x => (x.dn == null ? null : x.dn));
+  // 上涨占比（%）→ 5 日均值（平滑；窗口内至少 3 个有效值）
+  const ratio = _sentBreadthRatio(series);      // 当日上涨占比（%）
+  const ratioMa5 = _sentBreadthRatioMa5(series);
+  const lastRow = series[series.length - 1] || {};
+  const _tailIdx = lastRow.breadth_live ? series.length - 1 : -1;
+  const sig = `B|${series.length}|${series[0] && series[0].date}|${d && d.end}`
+    + `|${ratioMa5[ratioMa5.length - 1]}`
+    + (_tailIdx >= 0 ? `|L:${lastRow.date}:${lastRow.up}:${lastRow.dn}` : "");
+  const _canvasOk = !!(el.querySelector && el.querySelector("canvas"));
+  if (sentBreadthInst && sentBreadthNode === el && _canvasOk && sig === sentBreadthSig) return;
+  if (sentBreadthInst && (sentBreadthNode !== el || !_canvasOk)) {
+    try { sentBreadthInst.dispose(); } catch (e) { /* 已销毁 */ }
+    sentBreadthInst = null; sentBreadthNode = null;
+  }
+  if (!sentBreadthInst) {
+    el.innerHTML = "";
+    sentBreadthInst = echarts.init(el);
+    sentBreadthNode = el;
+  }
+  sentBreadthSig = sig;
+  const _band = (lo, hi, fill, color, name) => ([
+    { yAxis: lo, itemStyle: { color: fill },
+      label: { show: true, position: "insideTopRight", fontSize: 10, fontWeight: "bold",
+               color: color, opacity: 0.85, formatter: name } },
+    { yAxis: hi },
+  ]);
+  sentBreadthInst.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    grid: { left: 44, right: 52, top: 26, bottom: 34 },
+    dataZoom: [
+      { type: "inside", xAxisIndex: 0, filterMode: "none" },
+      { type: "slider", xAxisIndex: 0, height: 12, bottom: 4,
+        borderColor: "#30363d", backgroundColor: "rgba(255,255,255,.03)",
+        fillerColor: "rgba(88,166,255,.16)",
+        handleStyle: { color: "#58a6ff", borderColor: "#58a6ff" },
+        moveHandleStyle: { color: "#58a6ff" },
+        dataBackground: { lineStyle: { color: "#30363d" }, areaStyle: { color: "rgba(139,148,158,.10)" } },
+        textStyle: { color: "#8b949e", fontSize: 9 } },
+    ],
+    legend: { top: 0, left: 6, itemGap: 12, itemWidth: 14, itemHeight: 8,
+      textStyle: { color: "#8b949e", fontSize: 10 } },
+    tooltip: {
+      trigger: "axis", axisPointer: { type: "shadow" },
+      backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
+      borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
+      formatter: (ps) => {
+        const i = ps && ps[0] ? ps[0].dataIndex : -1;
+        const x = series[i];
+        if (!x) return "";
+        const r0 = ratio[i], m5 = ratioMa5[i];
+        const band = (m5 == null) ? "" : (m5 >= 60 ? "强势区" : m5 >= 40 ? "平稳区" : "弱势区");
+        const bcol = (m5 == null) ? "#8b949e" : (m5 >= 60 ? SENT_BANDS[2].color : m5 >= 40 ? SENT_BANDS[1].color : SENT_BANDS[0].color);
+        return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}`
+          + (x.breadth_live ? (x.provisional === false
+            ? ' <span style="color:#d29922">📡 今日实时家数（收盘口径）</span>'
+            : ' <span style="color:#d29922">📡 今日盘中（实时，未定型）</span>') : "")
+          + `</div>`
+          + `上涨 <b style="color:${MA365_UP}">${x.up == null ? "—" : x.up}</b> 家 · `
+          + `下跌 <b style="color:${MA365_DOWN}">${x.dn == null ? "—" : x.dn}</b> 家 · `
+          + `平盘 ${x.flat == null ? "—" : x.flat}`
+          + (r0 == null ? "" : `<br>上涨占比 <b>${r0.toFixed(1)}%</b>`)
+          + (m5 == null ? "" : ` · 5日均 <b>${m5.toFixed(1)}%</b>`
+              + ` <span style="color:${bcol}">${band}</span>`)
+          + `<br><span style="color:#8b949e">${x.breadth_live
+              ? "今日为实时家数（东财沪深北，随情绪盘中读数 60s 刷新）"
+              : "本地日线全池自算（close vs 前收）"}，只做宽度温度计</span>`;
+      },
+    },
+    xAxis: {
+      type: "category", data: dates,
+      axisLine: { lineStyle: { color: "#e4e8ef" } },
+      axisLabel: { color: "#8b949e", fontSize: 9,
+        interval: Math.max(0, Math.ceil(dates.length / 12) - 1) },
+    },
+    yAxis: [
+      { type: "value", name: "家数", nameTextStyle: { color: "#8b949e", fontSize: 9 },
+        axisLabel: { color: "#8b949e", fontSize: 9 },
+        splitLine: { lineStyle: { color: "rgba(139,148,158,.2)" } } },
+      { type: "value", name: "上涨占比MA5", min: 0, max: 100, position: "right",
+        nameTextStyle: { color: "#8b949e", fontSize: 9 },
+        axisLabel: { color: "#8b949e", fontSize: 9, formatter: v => v + "%" },
+        splitLine: { show: false } },
+    ],
+    series: [
+      { name: "上涨家数", type: "bar", yAxisIndex: 0, barMaxWidth: 7,
+        // 今日盘中那根加橙色描边（数据是**实时**家数，不是收盘口径）
+        data: up.map((v, i) => (i === _tailIdx)
+          ? { value: v, itemStyle: { color: "rgba(248,81,73,.95)",
+                                     borderColor: "#d29922", borderWidth: 1,
+                                     borderRadius: [2, 2, 0, 0] } }
+          : v),
+        itemStyle: { color: "rgba(248,81,73,.65)", borderRadius: [2, 2, 0, 0] } },
+      { name: "下跌家数", type: "bar", yAxisIndex: 0, barMaxWidth: 7,
+        data: dn.map((v, i) => (i === _tailIdx)
+          ? { value: v, itemStyle: { color: "rgba(46,160,67,.95)",
+                                     borderColor: "#d29922", borderWidth: 1,
+                                     borderRadius: [2, 2, 0, 0] } }
+          : v),
+        itemStyle: { color: "rgba(46,160,67,.65)", borderRadius: [2, 2, 0, 0] } },
+      { name: "上涨占比(5日均)", type: "line", data: ratioMa5, yAxisIndex: 1,
+        symbol: "none", connectNulls: false, z: 5,
+        lineStyle: { width: 2.2, color: "#58a6ff" },
+        // 三区垫在柱子/线**下面**（z:1）：0~40 弱势（蓝）·40~60 平稳（灰）·60~100 强势（红）
+        markArea: { silent: true, z: 1, data: SENT_BANDS.map(b =>
+          _band(b.lo, b.hi, b.fill, b.color, b.name)) } },
+      /* 今日盘中（实时家数，未定型）：右轴空心点 + "盘中"，与上方温度图的 📡 点同款语义 */
+      { name: "今日盘中", type: "scatter", yAxisIndex: 1, z: 7,
+        data: (_tailIdx >= 0 && ratioMa5[_tailIdx] != null)
+          ? [[_tailIdx, ratioMa5[_tailIdx]]] : [],
+        symbol: "circle", symbolSize: 9,
+        itemStyle: { color: "rgba(0,0,0,0)", borderColor: "#d29922", borderWidth: 2 },
+        label: { show: true, position: "top", distance: 5, fontSize: 9,
+                 fontWeight: "bold", color: "#d29922",
+                 formatter: lastRow.provisional === false ? "收盘" : "盘中" },
+        tooltip: { show: false } },
+    ],
+  });
+  sentBreadthInst.resize();
+}
+
+/* ── 综合情绪温度（2026-11-25 owner：两张图的温度 1:1 合成）──────────────────
+     · 温度①（涨停/跌停）= 上方大数字那条 `sent_ma`（触板/封板/跌停三因子加权后的 5 日均）；
+     · 温度②（涨跌家数）= 上涨占比的 5 日均值（涨跌家数图右轴那条蓝线）；
+     · 综合 = (温度① + 温度②) / 2（**权重 1:1**，owner 指定）。
+   任一成分缺失 ⇒ 当日综合为 None（不拿半条线冒充）。
+   三区仍是 0~40 弱势 / 40~60 平稳 / 60~100 强势。 */
+function _renderSentComposite(series, d) {
+  const el = document.getElementById("sentCompositeChart");
+  if (!el) return;
+  const dates = series.map(x => String(x.date).slice(5));
+  const t1 = series.map(x => (x.sent_ma == null ? null : x.sent_ma));
+  const t2 = _sentBreadthRatioMa5(series);
+  const comp = series.map((x, i) => {
+    if (t1[i] == null || t2[i] == null) return null;
+    return +(((t1[i] + t2[i]) / 2).toFixed(1));
+  });
+  const _last = comp.length ? comp[comp.length - 1] : null;
+  const sig = `C|${series.length}|${series[0] && series[0].date}|${d && d.end}|${_last}`;
+  const _canvasOk = !!(el.querySelector && el.querySelector("canvas"));
+  if (sentCompositeInst && sentCompositeNode === el && _canvasOk && sig === sentCompositeSig) return;
+  if (sentCompositeInst && (sentCompositeNode !== el || !_canvasOk)) {
+    try { sentCompositeInst.dispose(); } catch (e) { /* 已销毁 */ }
+    sentCompositeInst = null; sentCompositeNode = null;
+  }
+  if (!sentCompositeInst) {
+    el.innerHTML = "";
+    sentCompositeInst = echarts.init(el);
+    sentCompositeNode = el;
+  }
+  sentCompositeSig = sig;
+  const _area = (lo, hi, fill, color, name) => ([
+    { yAxis: lo, itemStyle: { color: fill },
+      label: { show: true, position: "insideTopRight", fontSize: 10, fontWeight: "bold",
+               color: color, opacity: 0.85, formatter: name } },
+    { yAxis: hi },
+  ]);
+  sentCompositeInst.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    grid: { left: 44, right: 52, top: 26, bottom: 34 },
+    dataZoom: [
+      { type: "inside", xAxisIndex: 0, filterMode: "none" },
+      { type: "slider", xAxisIndex: 0, height: 12, bottom: 4,
+        borderColor: "#30363d", backgroundColor: "rgba(255,255,255,.03)",
+        fillerColor: "rgba(88,166,255,.16)",
+        handleStyle: { color: "#58a6ff", borderColor: "#58a6ff" },
+        moveHandleStyle: { color: "#58a6ff" },
+        dataBackground: { lineStyle: { color: "#30363d" }, areaStyle: { color: "rgba(139,148,158,.10)" } },
+        textStyle: { color: "#8b949e", fontSize: 9 } },
+    ],
+    legend: { top: 0, left: 6, itemGap: 12, itemWidth: 14, itemHeight: 8,
+      textStyle: { color: "#8b949e", fontSize: 10 } },
+    tooltip: {
+      trigger: "axis", axisPointer: { type: "cross" },
+      backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
+      borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
+      formatter: (ps) => {
+        const i = ps && ps[0] ? ps[0].dataIndex : -1;
+        const x = series[i];
+        if (!x) return "";
+        const c = comp[i];
+        const bd = sentBand(c);
+        return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}</div>`
+          + `综合温度 <b style="color:${bd.color}">${c == null ? "—" : c.toFixed(1)}（${c == null ? "—" : bd.name}）</b>`
+          + `<br>① 涨停/跌停温度 <b>${t1[i] == null ? "—" : t1[i].toFixed(1)}</b>`
+          + ` · ② 涨跌家数温度 <b>${t2[i] == null ? "—" : t2[i].toFixed(1)}</b>`
+          + `<br><span style="color:#8b949e">综合 = 0.5×① + 0.5×②（都是 5 日均值），只做温度计</span>`;
+      },
+    },
+    xAxis: {
+      type: "category", data: dates,
+      axisLine: { lineStyle: { color: "#e4e8ef" } },
+      axisLabel: { color: "#8b949e", fontSize: 9,
+        interval: Math.max(0, Math.ceil(dates.length / 12) - 1) },
+    },
+    yAxis: { type: "value", name: "综合温度", min: 0, max: 100, position: "right",
+      nameTextStyle: { color: "#8b949e", fontSize: 9 },
+      axisLabel: { color: "#8b949e", fontSize: 9 },
+      splitLine: { lineStyle: { color: "rgba(139,148,158,.2)" } } },
+    series: [
+      { name: "综合温度(1:1)", type: "line", data: comp, symbol: "none",
+        connectNulls: false, z: 5, lineStyle: { width: 2.6 },
+        markArea: { silent: true, z: 1, data: SENT_BANDS.map(b =>
+          _area(b.lo, b.hi, b.fill, b.color, b.name)) } },
+      { name: "① 涨停/跌停温度", type: "line", data: t1, symbol: "none",
+        connectNulls: false, z: 3,
+        lineStyle: { width: 1, color: "rgba(139,148,158,.65)", type: "dashed" } },
+      { name: "② 涨跌家数温度", type: "line", data: t2, symbol: "none",
+        connectNulls: false, z: 3,
+        lineStyle: { width: 1, color: "rgba(88,166,255,.65)", type: "dashed" } },
+    ],
+    visualMap: {
+      type: "piecewise", show: false, seriesIndex: 0, dimension: 1,
+      pieces: [
+        { lt: 40, color: SENT_BANDS[0].color },
+        { gte: 40, lt: 60, color: SENT_BANDS[1].color },
+        { gte: 60, color: SENT_BANDS[2].color },
+      ],
+    },
+  });
+  sentCompositeInst.resize();
 }
 
 /* ---- 盘中实时 ---- */
@@ -13848,6 +14172,8 @@ function switchTab(tab) {
       if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
       if (ma20Inst) { try { ma20Inst.resize(); } catch (e) { } }
       if (sentInst) { try { sentInst.resize(); } catch (e) { } }
+  if (sentBreadthInst) { try { sentBreadthInst.resize(); } catch (e) { } }
+  if (sentCompositeInst) { try { sentCompositeInst.resize(); } catch (e) { } }
       // 市场情绪（日频、只读本地缓存）：首次进页拉一次；已有数据就地重画
       if (!sentData) loadMarketSentiment();
       else renderMarketSentiment(sentData);
@@ -14114,7 +14440,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  _reportSlow("app_boot_20261124h", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
+  _reportSlow("app_boot_20261125f", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
   // 2026-11-23（P2-5）：echarts（~1MB）空闲预热。已是按需加载（首屏不阻塞），但首次开图
   // 要现场下载+解析 1MB（冷开图可感到顿挫）⇒ 启动后浏览器空闲期先拉下来编一遍，
   // 用户第一次开 K 线即热。requestIdleCallback 缺席时退化 setTimeout；失败静默不碍启动。

@@ -156,6 +156,19 @@ def _maybe_run_tdx_calibrate(now: datetime) -> None:
                     log.info("日线 forming 根修复：%s", _st)
             except Exception as e:
                 log.warning("日线 forming 根修复失败：%s", e)
+            # 2026-11-25（候选㊴，owner 批准）：「今日行 + forming 标记已清」的快照污染
+            # 上面的 forming 修复命中不了（它只修「过去某天仍挂 forming」）。
+            # 这里对「末行==今天」的缓存逐只用 quote 快照比对，不一致就整行补丁——
+            # 保护 H4 假说结算、复盘脚本等一切盘后读 daily_kline 的模块。
+            try:
+                from core import daily_repair as _dr2
+                _log_fp2 = os.path.join(_ROOT, "t_io", "logs",
+                                        f"repair_today_bar_{now.strftime('%Y%m%d')}.jsonl")
+                _st2 = _dr2.fix_today_rows(workers=6, log_fp=_log_fp2)
+                if _st2.get("patched") or _st2.get("fetch_err"):
+                    log.info("今日行校验修复：%s", _st2)
+            except Exception as e:
+                log.warning("今日行校验修复失败：%s", e)
 
         _threading.Thread(target=_work, daemon=True, name="tdx-calibrate").start()
     except Exception:

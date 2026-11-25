@@ -196,3 +196,119 @@ def fix_forming_tails(codes=None, date=None, workers=4, limit=0, cache_dir=None,
         for _code, st, _detail, _newc in ex.map(lambda it: fix_one(it, log_fp), targets):
             stats[st] = stats.get(st, 0) + 1
     return stats
+
+
+# ---------------------------------------------------------------------------
+# 候选㊴（2026-11-25 owner 批准）：「今日行」快照污染的 EOD 校验修复
+#
+# 事故：11-25 复盘发现 300508/300354 的**当日行**是早盘 forming 快照
+# （300508 收 43.57/量 1.4 万，真实收 40.09/量 10.1 万；300354 假收 27.58 vs
+# 真实 24.72），且 forming 标记已被清空、saved_at 是盘后 15:15 ——
+# `find_forming_tails` 只修「过去某天仍挂 forming」的，命中不了这种
+# 「今日行 + 标记已清」的污染；H4 假说结算脚本直接读缓存，300354 的假收盘
+# 足以把「破 MA5 卖出」翻转成「继续持有」。
+#
+# 对策：盘后（≥15:10，快照已结算）扫「末行==今天」的缓存，逐只用
+# `quote_daily_bar`（qt.gtimg.cn 当日结算快照）比对，close 偏差 >0.1% 或
+# volume 偏差 >1% 就整行补丁（与 equity_daily._quote_patch_cache_file 同口径，
+# 打 `src=tencent_quote` 标记）。
+# ---------------------------------------------------------------------------
+
+def find_today_rows(date=None, cache_dir=None, mtime_today_only=True):
+    """扫缓存 → [(code, fp, close, volume)]：末行==目标日（默认今天）的行。
+
+    `mtime_today_only`：只看今天被写动过的文件（没被写动的没有污染窗口，省一轮全量读盘）。
+    """
+    root = Path(cache_dir) if cache_dir else CACHE
+    target = str(date or datetime.now().strftime("%Y-%m-%d"))[:10]
+    today = datetime.now().strftime("%Y-%m-%d")
+    out = []
+    for fp in sorted(root.glob("*.json")):
+        c = fp.stem
+        if not c.isdigit():
+            continue
+        try:
+            if mtime_today_only and target == today:
+                if datetime.fromtimestamp(fp.stat().st_mtime).strftime("%Y-%m-%d") != today:
+                    continue
+            d = json.loads(fp.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        rows = d.get("rows") or []
+        if not rows:
+            continue
+        last = rows[-1]
+        if str(last.get("date") or "")[:10] != target:
+            continue
+        if last.get("src") == "tencent_quote":
+            continue  # 已是补丁行（幂等：重跑直接跳过）
+        out.append((c, fp, float(last.get("close") or 0), float(last.get("volume") or 0)))
+    return out
+
+
+def _fix_today_row_one(item, target, dry_run, log_fp):
+    """校验一只：quote 快照比对 → 不一致就整行补丁。返回 (code, status, detail, new_close)。"""
+    code, fp, old_close, old_vol = item
+    try:
+        from core.market_data.tencent_provider import quote_daily_bar
+        bar = quote_daily_bar(code)
+    except Exception as e:
+        return code, "fetch_err", f"{type(e).__name__}: {str(e)[:60]}", None
+    if not bar or str(bar.get("date") or "")[:10] != target:
+        return code, "provider_no_bar", str((bar or {}).get("date") or ""), None
+    try:
+        new_close, new_vol = float(bar["close"]), float(bar.get("volume") or 0)
+    except Exception:
+        return code, "provider_bad_bar", "", None
+    close_ok = old_close > 0 and abs(new_close - old_close) / old_close <= 0.001
+    vol_ok = old_vol > 0 and abs(new_vol - old_vol) / old_vol <= 0.01
+    if close_ok and vol_ok:
+        return code, "ok", "", new_close
+    if new_vol <= 0:
+        # 快照量 0：停牌/数据异常，不拿它盖缓存
+        return code, "provider_zero_vol", f"cache_close={old_close}", None
+    if dry_run:
+        return code, "would_patch", f"close {old_close}->{new_close} vol {old_vol:.0f}->{new_vol:.0f}", new_close
+    try:
+        d = json.loads(fp.read_text(encoding="utf-8"))
+        rows = d.get("rows") or []
+        if not rows or str(rows[-1].get("date") or "")[:10] != target:
+            return code, "race_skip", "", new_close
+        rows[-1] = {"date": target, "open": float(bar["open"]), "close": new_close,
+                    "high": float(bar["high"]), "low": float(bar["low"]),
+                    "volume": new_vol, "amount": float(bar.get("amount") or 0),
+                    "src": "tencent_quote",
+                    "repaired_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        d["rows"] = rows
+        # 今日行已被真数据确认 ⇒ 清掉今日 forming 标记（若有）
+        d["forming"] = [x for x in (d.get("forming") or []) if str(x)[:10] != target]
+        d["saved_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " today_bar_repair"
+        from core.utils import write_json_atomic
+        write_json_atomic(str(fp), d)
+    except Exception as e:
+        return code, "patch_err", f"{type(e).__name__}: {str(e)[:60]}", new_close
+    _log(log_fp, code, target, old_close, new_close, "today_patched")
+    return code, "patched", f"close {old_close}->{new_close} vol {old_vol:.0f}->{new_vol:.0f}", new_close
+
+
+def fix_today_rows(codes=None, date=None, workers=6, limit=0, cache_dir=None,
+                   log_fp=None, dry_run=False, mtime_today_only=True):
+    """批量校验修复「今日行」。`codes` 限定代码集合；`dry_run` 只报告不写盘；返回统计 dict。"""
+    target = str(date or datetime.now().strftime("%Y-%m-%d"))[:10]
+    targets = find_today_rows(date=target, cache_dir=cache_dir,
+                              mtime_today_only=mtime_today_only)
+    if codes:
+        cs = {str(c).split("_")[0].zfill(6) for c in codes}
+        targets = [t for t in targets if t[0] in cs]
+    if limit and len(targets) > int(limit):
+        targets = targets[:int(limit)]
+    stats = {"date": target, "total": len(targets), "ok": 0, "patched": 0, "would_patch": 0,
+             "fetch_err": 0, "provider_no_bar": 0, "provider_bad_bar": 0,
+             "provider_zero_vol": 0, "patch_err": 0, "race_skip": 0}
+    if not targets:
+        return stats
+    with ThreadPoolExecutor(max_workers=max(1, int(workers))) as ex:
+        for _code, st, _detail, _newc in ex.map(
+                lambda it: _fix_today_row_one(it, target, dry_run, log_fp), targets):
+            stats[st] = stats.get(st, 0) + 1
+    return stats
