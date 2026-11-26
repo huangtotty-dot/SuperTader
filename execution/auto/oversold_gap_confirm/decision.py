@@ -103,7 +103,8 @@ def evaluate(prev_close: Mapping[str, float],
              bars: Mapping[str, Mapping[str, float]],
              board: Mapping[str, str] | None = None,
              allowed_boards: Sequence[str] | None = None,
-             top_n: int = DEFAULT_TOP_N) -> dict:
+             top_n: int = DEFAULT_TOP_N,
+             gap_cap: float | None = None) -> dict:
     """池级评估（**这是给自动盘调的入口**）。
 
     参数
@@ -113,6 +114,10 @@ def evaluate(prev_close: Mapping[str, float],
         board           : {code: 板块名}（缺省=不启用板块过滤）
         allowed_boards  : 允许的板块集合（缺省/空=None=不过滤；非 None 则只在这些板块里选）
         top_n           : 每日按 gap 降序取前 N（≤0 ⇒ 不下单）
+        gap_cap         : 开盘跳空上限（G8，2026-11-26 owner 直投；None=关闭）。
+                          开盘跳空 > gap_cap 的信号标 NO_TRADE('gap_capped')——
+                          **排序阶段剔除**：picks 由 tradable 切出自然顺移，
+                          build_spares 只取 TRADE 也不会漏进候补。
 
     返回
         {
@@ -193,7 +198,16 @@ def evaluate(prev_close: Mapping[str, float],
             signals.append({'code': code, 'gap': gap, 'board': b,
                             'decision': NO_TRADE, 'reason': 'board_filtered'})
             continue
-        signals.append({'code': code, 'gap': gap, 'board': b,
+        # G8：开盘跳空（bar.open/prev_close；无 open 字段时退化为 10:00 涨幅口径）
+        _og = gap
+        _o = _bar_field(bar, 'open')
+        if _valid(_o):
+            _og = float(_o) / pc_f - 1.0
+        if gap_cap is not None and np.isfinite(_og) and _og > float(gap_cap):
+            signals.append({'code': code, 'gap': gap, 'open_gap': _og, 'board': b,
+                            'decision': NO_TRADE, 'reason': 'gap_capped'})
+            continue
+        signals.append({'code': code, 'gap': gap, 'open_gap': _og, 'board': b,
                         'decision': TRADE, 'reason': why})
 
     # 10:00 棒缺失的候选：主循环在 `pool_n` 递增**之前**就 continue 了，所以它既不进
@@ -220,7 +234,10 @@ def evaluate(prev_close: Mapping[str, float],
         'pool_n': pool_n,
         'signals': signals,
         'picks': picks,
-        'rejected_board': sum(1 for s in signals if s['decision'] == NO_TRADE),
+        'rejected_board': sum(1 for s in signals
+                              if s['decision'] == NO_TRADE and s.get('reason') == 'board_filtered'),
+        # G8（2026-11-26）：被开盘跳空上限剔除的信号数（纯展示，剔除动作在上面）
+        'rejected_gap': sum(1 for s in signals if s.get('reason') == 'gap_capped'),
         'n_tradable': len(tradable),
         # 展示用（2026-10-15）：逐关通过数 / 首个未过关的分布 / gap 最高的未过票明细。
         # 纯附加字段，`signals`/`picks` 语义与加它之前逐位一致。

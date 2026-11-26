@@ -539,6 +539,7 @@ def _apply_buy(book, open_pos, book_dir, date, code, qty, price, fee, order_id, 
             "entry_date": date, "entry_price": round(float(price), 4), "qty": qty,
             "dev20": None, "gap": (picks.get(code) or {}).get("gap"),
             "board": (picks.get(code) or {}).get("board", ""),
+            "temp": executor._latest_sent_ma(),   # Tcombo 温度标签（同 register 口径）
             "days_held": 0, "last_check_date": None,
             "created_by": "fill_event_no_fills_rec"}
         log("[FB] ⚠️ BUY %s %d股@%.4f 无匹配委托留痕 ⇒ 兜底新建入账" % (code, qty, price))
@@ -576,6 +577,7 @@ def _apply_buy(book, open_pos, book_dir, date, code, qty, price, fee, order_id, 
             "entry_date": date, "entry_price": round(float(price), 4), "qty": qty,
             "dev20": None, "gap": (picks.get(code) or {}).get("gap"),
             "board": (picks.get(code) or {}).get("board", ""),
+            "temp": executor._latest_sent_ma(),   # Tcombo 温度标签（同 register 口径）
             "days_held": 0, "last_check_date": None,
             "created_by": "fill_event"}
         log("[FB] BUY %s %d股@%.4f 新建入账（回调先于 register 的异常次序）"

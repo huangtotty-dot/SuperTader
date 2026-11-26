@@ -29,6 +29,18 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _sentiment_eod_state = {"date": "", "attempts": 0, "next_try": 0.0}
 # 2026-10-30：通达信日线校准的「当日已跑」标记（进程内；跨进程标记在 core.tdx_calibrate）
 _tdx_cal_state = {"date": ""}
+# 2026-11-26（候选㊴）：「今日行校验修复」的当日已跑标记（独立于 tdx 校准，主钩门 15:12）
+_today_bar_repair_state = {"date": ""}
+
+
+def _run_today_bar_repair(now: datetime) -> None:
+    """实际执行「今日行校验修复」一次（15:12 主钩与 15:40 tdx 兜底共用）。"""
+    from core import daily_repair as _dr
+    _log_fp = os.path.join(_ROOT, "t_io", "logs",
+                           f"repair_today_bar_{now.strftime('%Y%m%d')}.jsonl")
+    _st = _dr.fix_today_rows(workers=6, log_fp=_log_fp)
+    if _st.get("patched") or _st.get("fetch_err"):
+        log.info("今日行校验修复：%s", _st)
 
 
 def _launch_sentiment_subprocess(date_str: str, mode: str = "eod", tag: str = "sentiment_backfill"):
@@ -160,17 +172,47 @@ def _maybe_run_tdx_calibrate(now: datetime) -> None:
             # 上面的 forming 修复命中不了（它只修「过去某天仍挂 forming」）。
             # 这里对「末行==今天」的缓存逐只用 quote 快照比对，不一致就整行补丁——
             # 保护 H4 假说结算、复盘脚本等一切盘后读 daily_kline 的模块。
+            # 2026-11-26：本修复已提前到 15:12 独立钩（_maybe_run_today_bar_repair，
+            # 复盘脚本 15:00 出头就跑，15:40 太晚——当日实测 98.6% 今日行仍是快照）。
+            # 此处仅在「15:12 钩今天没跑过」（如主循环 15:12 后才启动）时兜底；幂等。
             try:
-                from core import daily_repair as _dr2
-                _log_fp2 = os.path.join(_ROOT, "t_io", "logs",
-                                        f"repair_today_bar_{now.strftime('%Y%m%d')}.jsonl")
-                _st2 = _dr2.fix_today_rows(workers=6, log_fp=_log_fp2)
-                if _st2.get("patched") or _st2.get("fetch_err"):
-                    log.info("今日行校验修复：%s", _st2)
+                _today = now.strftime("%Y-%m-%d")
+                if _today_bar_repair_state.get("date") != _today:
+                    _today_bar_repair_state["date"] = _today
+                    _run_today_bar_repair(now)
             except Exception as e:
                 log.warning("今日行校验修复失败：%s", e)
 
         _threading.Thread(target=_work, daemon=True, name="tdx-calibrate").start()
+    except Exception:
+        pass
+
+
+def _maybe_run_today_bar_repair(now: datetime) -> None:
+    """15:12 后交易日每日一次：修复 daily_kline 缓存里「末行==今天」的盘中快照污染。
+
+    为什么提前到 15:12（候选㊴，2026-11-26）：复盘脚本/假说结算 15:00 出头就读
+    daily_kline，而本修复原先挂在 15:40 的通达信校准钩里——11-26 实测复盘时点
+    2860 只里 2822 只（98.6%）的今日行还是盘中 forming 快照。15:12 时腾讯 quote
+    已是真收盘，修复后 15:15 的复盘/15:30 的 EOD 落库读到的就是干净数据。
+    15:40 的 tdx 钩里保留兜底（仅当本钩今天没跑过才补跑，幂等）。
+    """
+    try:
+        _st = _today_bar_repair_state
+        today = now.strftime("%Y-%m-%d")
+        if _st.get("date") == today:
+            return
+        if now.weekday() >= 5 or now.strftime("%H:%M") < "15:12":
+            return
+        _st["date"] = today
+
+        def _work():
+            try:
+                _run_today_bar_repair(now)
+            except Exception as e:
+                log.warning("今日行校验修复失败：%s", e)
+
+        _threading.Thread(target=_work, daemon=True, name="today-bar-repair").start()
     except Exception:
         pass
 

@@ -211,6 +211,8 @@ class TestRunBuyExecWiresIt(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             ex.run_buy_exec(gw, "2026-10-17", prev_close, ma20, bars,
                             board={c: "医药" for c in codes}, book_dir=td,
+                            # fixture gap=+15%，与 G8 无关，显式关闭（默认 DEFAULTS=0.08）
+                            params={"gap_cap": None},
                             dry_run=True, sleep_fn=lambda *_: None,
                             log=lambda *_: None,
                             names={c: "测试股" for c in codes},
@@ -317,9 +319,9 @@ class TestZeroCandidateBuyRecord(unittest.TestCase):
 
 
 class TestIndexRegimeBuyGate(unittest.TestCase):
-    """uni_down 首轮熔断：合法候选也零 BUY，且不得先读个股行情。"""
+    """uni_down 首轮熔断：候选㊸（2026-11-26）默认撤闸，osc_regime_gate_enabled=1 走旧熔断。"""
 
-    def _run(self, regime, book_dir):
+    def _run(self, regime, book_dir, regime_gate="1", board_regime=None):
         from datetime import datetime
         import pandas as pd
         from oversold_gap_confirm import hooks
@@ -370,6 +372,10 @@ class TestIndexRegimeBuyGate(unittest.TestCase):
             def param(self, key, default=None):
                 return {"osc_top_n": 4, "osc_single_budget": 100000.0,
                         "osc_daily_budget": 400000.0, "osc_cash_headroom": 0.95,
+                        # 本组用例 fixture gap=+15%，与 pack_v2/G8 无关，显式关总开关
+                        "osc_pack_v2": "0",
+                        # 候选㊸默认已撤总闸；本组有两条用例专测旧熔断路径，显式开回滚开关
+                        "osc_regime_gate_enabled": regime_gate,
                         "osc_order_poll_rounds": 1, "osc_order_poll_sleep_sec": 0.0
                         }.get(key, default)
 
@@ -383,11 +389,11 @@ class TestIndexRegimeBuyGate(unittest.TestCase):
                 pass
 
         rt = _RT()
-        board = {"SHSE.000001": regime}
+        board = {"SHSE.000001": board_regime or regime}
         context = type("_Ctx", (), {
             "last_index_regime": regime, "board_regime": board,
             "board_regime_ctx": {"SHSE.000001": valid_regime_ctx(
-                "2026-10-26", "SHSE.000001", regime)}})()
+                "2026-10-26", "SHSE.000001", board_regime or regime)}})()
         n = hooks.try_buy(rt, context, datetime(2026, 10, 26, 10, 0))
         return n, rt, gw
 
@@ -412,6 +418,19 @@ class TestIndexRegimeBuyGate(unittest.TestCase):
             self.assertEqual(n, 3)
             self.assertEqual(rt.sdk_calls, ["osc_10am_bars"])
             self.assertEqual(len(gw.placed), 3)
+
+    def test_uni_down_default_gate_removed_buys_proceed(self):
+        """候选㊸默认行为：uni_down 不再零 BUY——照常读行情下单，审计只留 osc_regime_note。"""
+        with tempfile.TemporaryDirectory() as td:
+            n, rt, gw = self._run("uni_down", td, regime_gate="0", board_regime="range")
+            self.assertEqual(n, 3, "㊸ 撤闸后 uni_down 日照常买入")
+            self.assertEqual(rt.sdk_calls, ["osc_10am_bars"])
+            self.assertEqual(len(gw.placed), 3)
+            self.assertFalse(any(a.get("reason") == "index_regime_uni_down" for a in rt.audits))
+            self.assertTrue(any(a.get("event") == "osc_regime_note"
+                                and a.get("gate") == "removed_cand43" for a in rt.audits))
+            fills = json.loads(Path(td, "fills_2026-10-26.json").read_text(encoding="utf-8"))
+            self.assertEqual(fills["summary"]["buys_placed"], 3)
 
 
 if __name__ == "__main__":

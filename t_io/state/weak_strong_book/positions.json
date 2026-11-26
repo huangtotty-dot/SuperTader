@@ -1,17 +1,6 @@
 {
-  "updated_at": "2026-11-25 14:50:07",
-  "open": {
-    "301079": {
-      "entry_date": "2026-11-25",
-      "entry_price": 28.02,
-      "qty": 3500,
-      "dev20": -0.163939,
-      "gap": 0.07028265851795257,
-      "board": "机器人",
-      "days_held": 0,
-      "last_check_date": null
-    }
-  },
+  "updated_at": "2026-11-26 14:50:06",
+  "open": {},
   "closed": {
     "301373": {
       "entry_date": "2026-10-14",
@@ -743,6 +732,27 @@
       "exit_qty": 300,
       "exit_reason": "sl5_deep",
       "exit_fee": 8.968519994735269,
+      "closed_by": "fill_event"
+    },
+    "301079": {
+      "entry_date": "2026-11-25",
+      "entry_price": 28.02,
+      "qty": 3500,
+      "dev20": -0.163939,
+      "gap": 0.07028265851795257,
+      "board": "机器人",
+      "days_held": 1,
+      "last_check_date": "2026-11-26",
+      "days_held_calendar_fixed": {
+        "from": 0,
+        "to": 1,
+        "date": "2026-11-26"
+      },
+      "exit_date": "2026-11-26",
+      "exit_price": 25.257143020629883,
+      "exit_qty": 3500,
+      "exit_reason": "sl5_deep",
+      "exit_fee": 106.96400217099489,
       "closed_by": "fill_event"
     }
   },

@@ -3679,6 +3679,18 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
     # 任一行转不动 = 整档跳过（原 try/except → None，层内吞异常 → ((),()) → n<365 → None）。
     from core.chart_cache import daily_close_series as _daily_close_series
     latest = _market_latest_date()
+    # 2026-11-26 修复（owner 报「年限宽度 09:30 只剩 1 只样本」）：指数的当日 forming bar
+    # 会在 09:1x 就写进指数缓存 ⇒ `latest` 已是"今天"，而个股缓存**还没有**今天的 bar
+    # ⇒ 末行闸 `dates[-1] == latest` 把全市场都筛掉，cohort 只剩 1 只（恰好有集合竞价根的）。
+    # 开盘前（<09:35）额外接受"上一交易日"作为末行；数据日仍按**实际有数据的最后一天**显示。
+    _accept_prev = None
+    try:
+        _rows0 = (_load_json(_DAILY_KLINE_DIR / "index_sh000001.json", {}) or {}).get("rows") or []
+        _ds0 = [str(r.get("date"))[:10] for r in _rows0 if r.get("date")]
+        _ds0 = [d for d in _ds0 if d < latest]
+        _accept_prev = _ds0[-1] if _ds0 else None
+    except Exception:
+        _accept_prev = None
     files = [p for p in _DAILY_KLINE_DIR.glob("*.json")
              if p.stem.isdigit() and len(p.stem) == 6]
     total = len(files)
@@ -3693,8 +3705,8 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
         n = len(closes)
         if n < 365:
             return None
-        if dates[-1] != latest:
-            return None
+        if dates[-1] != latest and not (_accept_prev and dates[-1] == _accept_prev):
+            return None     # 只接受"最新交易日"或"上一交易日"末行（盘中个股当日 bar 可能还没生成）
         start = max(364, n - days)
         s = sum(closes[start - 364:start + 1])
         out = []
@@ -3740,19 +3752,27 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
     except Exception:
         _swallow("gui._compute_ma365_breadth")  # 原裸 pass：计数化（P1-6），行为等价
 
+    _MIN_SAMPLE = 200      # 当日样本 <200 只 ⇒ 该日不计入（开盘头几分钟只有少数票有当日 bar，
+                           # 0%/100% 这类读数纯属噪声；等盘中有量了自然补上）
+
     def _to_series(cnt, keep):
         out = []
         for d in sorted(cnt):
             above, tot = cnt[d]
-            if tot:
+            if tot >= _MIN_SAMPLE:
                 out.append({"date": d, "above": above, "total": tot,
                             "pct": round(above / tot * 100, 2)})
         return out[-keep:]
 
     series = _to_series(counts, days)
     series20 = _to_series(counts20, _MA20_MAX_DAYS)
+    # 数据日 = **series 里最后真正有数据的那天**（盘前没 today 的 bar 时就是昨天），
+    # 别写 latest（指数 forming bar 的"今天"），否则面板会显示"今天 0%"误导。
+    _last_data_day = (series[-1]["date"] if series else
+                      (series20[-1]["date"] if series20 else latest))
     rec = {"computed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-           "latest_date": latest, "series": series, "series20": series20,
+           "latest_date": _last_data_day, "ref_latest": latest,
+           "series": series, "series20": series20,
            "coverage": {"files": total, "cohort": cohort}}
     try:
         _MA365_CACHE_FP.parent.mkdir(parents=True, exist_ok=True)
@@ -8172,6 +8192,66 @@ class Api:
             self._log_turnover_win(f"DESTROY FAIL: {type(e).__name__}: {e}")
             return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:100]}"}
 
+    # 多日分时（2026-11-25 owner）：上证/科创50/创业板指 · 若干天连排 · 量能对昨日 · 强实时。
+    # 服务周期：今日 tail 3s（> 前端 5s 轮询的 0.8×=4s？不，3 ≤ 4 ✓ 拍内去重），
+    # 历史 600s 后台单飞；js_api 线程只读内存。
+    _INTRADAY_MULTI_MIN_REFRESH = 3.0
+
+    def load_intraday_multi(self, days=5, hist_sig=None, codes=None, labels=None):
+        """多日分时 + 今日实时尾 → {items, days, warming}（口径见 core.intraday_multi）。
+
+        codes 省略 = 三大指数；K 线窗里点「多日分时」会传该股（如 ["sh600584"]）+ labels。
+        """
+        try:
+            from core import intraday_multi as _im
+            return _clean(_im.get_cached(days, hist_sig, codes, labels))
+        except Exception:
+            _swallow("gui.load_intraday_multi")
+            return _clean({"items": {}, "days": days, "warming": True})
+
+    def open_intraday_window(self):
+        """把「多日分时」开成独立原生窗口（`?mode=intraday`）；失败返回 ok=False，前端退回浮层。"""
+        try:
+            import webview
+        except Exception as e:
+            return {"ok": False, "error": f"webview 不可用: {e}"}
+        w = getattr(self, "_intraday_window", None)
+        if w is not None:
+            try:
+                w.show()
+                w.restore()
+                return {"ok": True, "reused": True}
+            except Exception:
+                self._intraday_window = None
+        entry = Path(__file__).parent / "web" / "index.html"
+        try:
+            win = webview.create_window("多日分时 · 上证/科创50/创业板指",
+                                        str(entry) + "?mode=intraday",
+                                        js_api=self, width=1180, height=900,
+                                        min_size=(720, 520))
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:150]}"}
+        self._intraday_window = win
+        try:
+            def _closed():
+                self._intraday_window = None
+            win.events.closed += _closed
+        except Exception:
+            pass
+        return {"ok": True}
+
+    def close_intraday_window(self):
+        """关掉独立多日分时窗（窗口模式里 × 走这条）。"""
+        w = getattr(self, "_intraday_window", None)
+        self._intraday_window = None
+        if w is None:
+            return {"ok": True, "already": True}
+        try:
+            w.destroy()
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:100]}"}
+
     def load_multi_chart(self, codes, period="min5", tail=90, known_sigs=None):
         """**多窗口看盘**：一次给多只票的实时尾。
 
@@ -8205,8 +8285,12 @@ class Api:
                     "sig": fr.get("sig") or "",
                     "name": self._instrument_name(_c),
                     "quote": _q,
-                    # 日线 MA5/10/20：六宫格与单图一样要画「日线均线」参考线
-                    "dma": self._daily_ma_bundle(_c, _q.get("price")),
+                    # 日线 MA5/13/21/34/55 参考线：**只在 5/10 分格子里画**
+                    # （2026-11-25 owner：30/60/日/周 不需要这些"当日 5/13/21 等均线"）
+                    "dma": (self._daily_ma_bundle(_c, _q.get("price"))
+                            if _p in ("min5", "min10") else {}),
+                    # 日线 MA5「走平上翘」标记（2026-11-26 owner：多窗口要能看出来）
+                    "ma5flag": self._ma5_flag(_c, _q.get("price")),
                     # 支撑/压力位（同单图同一个 `_calc_support_resistance`）
                     "levels": self._daily_levels(_c),
                     # 买卖点（券商成交台账）—— 裁到本格窗口内，前端按 5 分钟桶归位
@@ -8221,6 +8305,9 @@ class Api:
                         "dates": _at(fr.get("dates")), "ohlc": _at(fr.get("ohlc")),
                         "volume": _at(fr.get("volume")), "amount": _at(fr.get("amount")),
                         "ma5": _at(fr.get("ma5")),
+                        # 量差·昨日（2026-11-25）：**别漏**——前端没有它就只能退回"120 根内自算"，
+                        # 显示区第一天会因找不到前一日基准而整段空白（owner 截图实报）
+                        "voldiff": _at(fr.get("voldiff")),
                         # 本周期斐波那契均线 5/13/21/34/55（2026-11-20；**别漏**：这里曾只拷
                         # ma5/macd 的白名单，`_mw_compute` 新加的 mas/rsi 因此到不了前端）
                         "mas": [_at(a) for a in (fr.get("mas") or [])],
@@ -8250,7 +8337,8 @@ class Api:
         except Exception:
             return []
 
-    _MW_PERIODS = ("min5", "min10", "min30", "min60")
+    # 2026-11-25 owner：「多窗口看盘要支持日线、周线」
+    _MW_PERIODS = ("min5", "min10", "min30", "min60", "day", "week")
 
     def _mw_frame(self, code, period="min5"):
         """多窗口专用的**轻量帧**（SWR 取）：返回 `(frame|None, state)`。
@@ -8305,16 +8393,78 @@ class Api:
         # ⚠️ 直接用**腾讯 m5 尾 340 根**，不走 `_fetch_min_df`：后者会再跟「3 个月深档」
         # （近 3000 行）做一次 concat+去重，而九宫格每格只要 120 根 —— 实测白烧 ~80ms/只/轮。
         # 340 根也够 MACD 收敛（EMA26 的 3 倍预热期 ≈ 78 根），与单图逐位一致（见测试）。
-        _freq = {"min5": "5min", "min10": "10min",
-                 "min30": "30min", "min60": "60min"}.get(period, "5min")
-        df = _fetch_min_bars_tencent(code, _freq)
-        if df is None or getattr(df, "empty", True):
-            df = self._fetch_min_df(code, period if period in self._MW_PERIODS else "min5")
-        if df is None or getattr(df, "empty", True):
-            return None
+        if period in ("day", "week"):
+            # 日线/周线（2026-11-25 owner）：日线走腾讯优先的 `_fetch_daily_bounded`（带磁盘缓存），
+            # 周线 = 日线按"周五收盘"重采样（开=首、高=max、低=min、收=末、量=求和）。
+            _c0 = str(code).split("_")[0]
+            # 腾讯日线只认 6 位码；指数要带 sh/sz 前缀（`_fetch_daily_bounded` 内部据此走 index_daily）
+            _arg = _c0 if _index_code(_c0) else (
+                _c0[2:] if _c0[:2].lower() in ("sh", "sz", "bj") else _c0)
+            df = self._fetch_daily_bounded(_arg, min_rows=600)
+            if (df is None or getattr(df, "empty", True)) and _index_code(_c0):
+                # 指数日线兜底：GM 终端离线 + 腾讯 fqkline 被 WAF 501 时，
+                # `_fetch_daily_bounded` 会整条空 ⇒ 直接读本地共享缓存 index_shXXXXXX.json
+                try:
+                    import json as _json2
+                    import pandas as _pd0
+                    _fp0 = BASE / "t_io" / "cache" / "daily_kline" / f"index_{_c0}.json"
+                    _rows0 = (_json2.loads(_fp0.read_text(encoding="utf-8")) or {}).get("rows") or []
+                    if _rows0:
+                        df = _pd0.DataFrame(_rows0)
+                except Exception:
+                    pass
+            if df is None or getattr(df, "empty", True):
+                return None
+            try:
+                import pandas as _pd
+                d0 = df.copy()
+                d0["time"] = _pd.to_datetime(d0["date"])
+                if period == "week":
+                    # 按自然周（周五收）聚合；标签用该周**最后一个实际交易日**
+                    # （resample 的 W-FRI 会标成周五，遇节假日/未收盘那周会与真实日期不符）
+                    d0["_wk"] = d0["time"].dt.to_period("W-FRI")
+                    g = d0.groupby("_wk")
+                    agg = g.agg(open=("open", "first"), high=("high", "max"),
+                                low=("low", "min"), close=("close", "last"),
+                                volume=("volume", "sum"), date=("date", "last"))
+                    d0 = agg.reset_index(drop=True)
+                    d0["time"] = _pd.to_datetime(d0["date"])
+                else:
+                    d0["date"] = d0["time"].dt.strftime("%Y-%m-%d")
+                df = d0[["time", "open", "high", "low", "close", "volume"]].reset_index(drop=True)
+            except Exception:
+                return None
+        else:
+            _freq = {"min5": "5min", "min10": "10min",
+                     "min30": "30min", "min60": "60min"}.get(period, "5min")
+            df = _fetch_min_bars_tencent(code, _freq)
+            if df is None or getattr(df, "empty", True):
+                df = self._fetch_min_df(code, period if period in self._MW_PERIODS else "min5")
+            if df is None or getattr(df, "empty", True):
+                return None
         _closes_all = [float(x) for x in df["close"].astype(float).values]
         _dif, _dea, _hist = _ema_macd(_closes_all)
         n = len(df)
+        # 量差（对昨日同一时刻，2026-11-25 owner：「前一天的也要显示」）：
+        # 必须用**完整 340 根**里的前一日做基准 —— 只用截尾后的 120 根时，第一天找不到前一日
+        # ⇒ 那一整天的量差全是空的。
+        _is_idx = _index_code(code)
+        _dates_all = [str(x)[:16] for x in df["time"].astype(str).values]
+        _vol_all = [float(v) for v in df["volume"]]
+        _amt_all = (None if _is_idx else [
+            round(((float(h) + float(l) + float(c)) / 3.0) * float(v) * 100.0)
+            for h, l, c, v in zip(df["high"], df["low"], df["close"], df["volume"])])
+        _metric_all = _vol_all if _is_idx else _amt_all
+        _day_hh = [(d[:10], d[11:16]) for d in _dates_all]
+        _prev_same = {}
+        _days_seen = []
+        for _i, (_d0, _h0) in enumerate(_day_hh):
+            if not _days_seen or _days_seen[-1] != _d0:
+                _days_seen.append(_d0)
+            _prev_same[(_d0, _h0)] = _i
+        _prev_day = {}
+        for _k, _d0 in enumerate(_days_seen):
+            _prev_day[_d0] = _days_seen[_k - 1] if _k > 0 else None
         df = df.tail(120).reset_index(drop=True)
         _cut = max(0, n - 120)
         _closes = _closes_all[_cut:]
@@ -8347,6 +8497,24 @@ class Api:
             round(((float(h) + float(l) + float(c)) / 3.0) * float(v) * 100.0)
             for h, l, c, v in zip(df["high"], df["low"], df["close"], df["volume"])]
         _dates_out = [str(x)[:16] for x in df["time"].astype(str).values]
+        # 逐根量差 → 按日累计（零轴上下红/绿面积），单位与上面的 amount/volume 一致
+        _voldiff = []
+        _cum = 0.0
+        _cur_day = ""
+        _has_prev = False
+        for _k2, _d2 in enumerate(_dates_out):
+            _day2, _hh2 = _d2[:10], _d2[11:16]
+            if _day2 != _cur_day:
+                _cum, _has_prev, _cur_day = 0.0, False, _day2
+            _pd2 = _prev_day.get(_day2)
+            _j = _prev_same.get((_pd2, _hh2)) if _pd2 else None
+            _v2 = _metric_all[_cut + _k2]
+            if _j is not None and _v2 is not None:
+                _pv2 = _metric_all[_j]
+                if _pv2 is not None:
+                    _has_prev = True
+                    _cum += float(_v2) - float(_pv2)
+            _voldiff.append(round(_cum, 3) if _has_prev else None)
         _close_last = float(df["close"].iloc[-1])
         # 版本签名（2026-11-05）：末根 (时间:收:根数)。与单图 `load_chart_realtime` 同一约定——
         # 前端把它传回来，没变就**不回序列**，省掉每格 ~30KB × 6 格过桥的串行 evaluate_js。
@@ -8358,6 +8526,8 @@ class Api:
                       round(float(hi), 3)]
                      for o, c, lo, hi in zip(df["open"], df["close"], df["low"], df["high"])],
             "volume": [round(float(v)) for v in df["volume"]],
+            # 量差（按日累计，单位与 amount/volume 一致）：与「多日分时」同款口径
+            "voldiff": _voldiff,
             "amount": _amt,
             "ma5": _ma5,
             # 本周期斐波那契均线 5/13/21/34/55（与单图 _CHART_MA_PERIODS 前 5 条同序）
@@ -8404,6 +8574,70 @@ class Api:
                 _swallow("gui._go")  # 原裸 pass：计数化（P1-6），行为等价
 
         threading.Thread(target=_go, daemon=True, name=f"idx-daily-{k}").start()
+
+    def _ma5_flag(self, code, price=None):
+        """日线 MA5「走平上翘」判定（2026-11-26 owner；口径按 603667 实盘校正过）。
+
+        口径（本地日线缓存，零网络；60s 记忆）：
+          · MA5 = (前 4 个完成日收盘 + 当日现价) / 5；
+          · **走平**：最近 4 个完成日的 MA5 极差 / 均值 ≤ 1.5%
+            （原先取 5 个完成日且阈值 0.6%，会把"刚跌完刚开始横"误判成不平 —— 603667 实报）；
+          · **上翘**：今日 MA5 斜率 ≥ +0.15%/日，且此前 3 日的 MA5 净变化 ≤ +2.0%
+            （即"之前基本是平的/微升，今天开始翘"）。
+          · 返回 state ∈ {flat_turn_up, flat, up, down, ""} + ma5/slope1/flat_range（tooltip 用）。
+        """
+        try:
+            _c = str(code).split("_")[0]
+            _now = _time_mod.time()
+            _memo = getattr(self, "_ma5flag_memo", None)
+            if _memo is None:
+                _memo = self._ma5flag_memo = {}
+            _hit = _memo.get(_c)
+            if _hit is not None and (_now - _hit[0]) < 60:
+                return _hit[1]
+            import core.chart_cache as _cc
+            df = _cc.load_daily_display(_c)
+            if df is None or getattr(df, "empty", True):
+                return {}
+            _dates = [str(x)[:10] for x in df["date"].astype(str).values]
+            _cl = [float(x) for x in df["close"].astype(float).values]
+            _today = datetime.now().strftime("%Y-%m-%d")
+            if _dates and _dates[-1] == _today:
+                _dates, _cl = _dates[:-1], _cl[:-1]     # 今天用现价，不用缓存里的半成品
+            if len(_cl) < 10:
+                return {}
+            # 完成日的 MA5 序列（不含今天）
+            _ma5c = [sum(_cl[i - 4:i + 1]) / 5.0 for i in range(4, len(_cl))]
+            if len(_ma5c) < 4:
+                return {}
+            _px = float(price) if price else _cl[-1]
+            _today_ma5 = (sum(_cl[-4:]) + _px) / 5.0
+            _prev4 = _ma5c[-4:]                          # 最近 4 个完成日 MA5
+            _avg = sum(_prev4) / len(_prev4)
+            _flat_range = (max(_prev4) - min(_prev4)) / _avg * 100 if _avg > 0 else 999.0
+            _slope1 = ((_today_ma5 - _ma5c[-1]) / _ma5c[-1] * 100) if _ma5c[-1] else 0.0
+            _slope3_prev = ((_ma5c[-1] - _ma5c[-4]) / _ma5c[-4] * 100) if _ma5c[-4] else 0.0
+            _FLAT = 2.0       # 走平：最近 4 根 MA5 振幅 ≤2.0%（603667 实盘校正）
+            _UP = 0.15        # 上翘：今日斜率 ≥0.15%/日
+            _PRE3 = 2.0       # 上翘前提：之前 3 日净变化 ≤2.0%（基本平）
+            if _flat_range <= _FLAT and _slope1 >= _UP and _slope3_prev <= _PRE3:
+                _state = "flat_turn_up"
+            elif _flat_range <= _FLAT and abs(_slope1) < _UP:
+                _state = "flat"
+            elif _slope1 >= _UP:
+                _state = "up"
+            elif _slope1 <= -_UP:
+                _state = "down"
+            else:
+                _state = ""
+            out = {"state": _state, "ma5": round(_today_ma5, 3),
+                   "slope1": round(_slope1, 3), "flat_range": round(_flat_range, 3),
+                   "slope3_prev": round(_slope3_prev, 3)}
+            _memo[_c] = (_now, out)
+            return out
+        except Exception:
+            _swallow("gui._ma5_flag")
+            return {}
 
     def _daily_ma_bundle(self, code, price=None):
         """日线斐波那契均线 MA5/13/21/34/55（**含当日**）：`MA_n = (前 n-1 个完成日收盘 + 现价) / n`。

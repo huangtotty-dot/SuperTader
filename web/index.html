@@ -215,6 +215,9 @@
              原生窗口不可用时自动退回页面内浮层（见 openMultiWatchWindow）。 -->
         <button class="mini-btn" id="obMultiBtn" onclick="openMultiWatchWindow()"
                 title="多窗口看盘：3×3 / 3×2 / 2×2 可选，每格自选一只股票，周期 5/10/30/60 分钟可切（实时刷新）。开成**独立窗口**，可拖到任意位置/另一个显示器">🔲 多窗口看盘</button>
+        <!-- 2026-11-25 owner：多日分时（上证/科创50/创业板指），分时若干天连排 + 量能对昨日 -->
+        <button class="mini-btn" id="obIntradayBtn" onclick="openIntradayWindow()"
+                title="多日指数分时：上证/科创50/创业板指，若干天连排；量能柱红=高于昨日同一分钟、绿=低于；盘中 5 秒刷新。可开成独立原生窗口">📈 多日分时</button>
       </h2>
       <div id="obBody"></div>
     </div>
@@ -670,6 +673,8 @@
         <label class="toggle-item" title="K线形态自动标注：吞没/锤子/射击之星/十字星/孕线（只标注，不构成买卖信号）"><input type="checkbox" id="tgPattern" checked onchange="chartToggleChanged()"> 形态</label>
         <button class="mini-btn" onclick="toggleChartHelp()" title="上行/下行区域使用说明">?</button>
         <button class="mini-btn" onclick="toggleStockProfile()" title="公司业务简介 / 所属行业 / 概念板块">📋 公司资料</button>
+        <button class="mini-btn" id="chartIntradayBtn" onclick="openIntradayForChart()"
+                title="该股多日分时：若干天连排，量能=累计 vs 昨日同一分钟（红放量/绿缩量），盘中 5 秒刷新">📈 多日分时</button>
         <!-- 2026-10-26 owner：通达信本地分钟数据下载完之后，不用关窗重开 -->
         <button class="mini-btn" id="chartReloadBtn" onclick="reloadStockChart(true)"
                 title="强制重读数据：绕过内存/磁盘缓存，重新读通达信本地 .day/.lc5 与日线缓存（下载完分钟线后点这个）">🔄 重读</button>
@@ -789,6 +794,46 @@
   </div>
 </div>
 
+<!-- 多日指数分时（2026-11-25 owner）：上证/科创50/创业板指 · 分时若干天连排 · 量能对昨日同分钟。
+     强实时：今日 tail 来自腾讯分时（3s 缓存），前端 5s 轮询；历史一次性下发（指纹不变只发 tail）。 -->
+<div id="intradayWin" class="mw-win" style="display:none;width:1180px;height:980px;min-width:720px;min-height:560px">
+  <div class="mw-title" id="intradayWinTitle">
+    <span>📈 多日分时 · 上证 / 科创50 / 创业板指</span>
+    <span id="intradayDaysBar" style="display:flex;gap:4px;align-items:center">
+      <span class="cell-dim" style="font-size:11px">天数</span>
+      <button class="mini-btn" id="imDays3" onclick="setIntradayDays(3)">3</button>
+      <button class="mini-btn primary" id="imDays5" onclick="setIntradayDays(5)">5</button>
+      <button class="mini-btn" id="imDays10" onclick="setIntradayDays(10)">10</button>
+      <button class="mini-btn" id="imDays20" onclick="setIntradayDays(20)">20</button>
+      <button class="mini-btn" id="imDays30" onclick="setIntradayDays(30)">30</button>
+      <button class="mini-btn" id="imDays50" onclick="setIntradayDays(50)">50</button>
+      <button class="mini-btn" id="imDays100" onclick="setIntradayDays(100)">100</button>
+      <button class="mini-btn primary" id="imNormBtn" onclick="toggleIntradayNorm()"
+              title="按日归一（默认开）：每一天的价格/量能都按**当日自身幅度**缩放到满格，
+                     单日形态最清楚；关掉 = 价格用统一涨跌幅%、量能用绝对亿元（跨天可比）">📐 按日归一</button>
+      <span class="cell-dim" id="intradayAsOf" style="font-size:11px;margin-left:8px"></span>
+    </span>
+    <span style="display:flex;gap:6px">
+      <button class="mini-btn" id="intradayDetachBtn" onclick="openIntradayWindow()"
+              title="开成独立原生窗口 —— 可拖到另一个显示器（主界面照常可用）">⧉</button>
+      <button class="mini-btn" onclick="closeIntradayWin()" title="关闭">×</button>
+    </span>
+  </div>
+  <div id="intradayBody" style="flex:1 1 auto;min-height:0;overflow:auto;padding:2px 8px 8px">
+    <div class="cell-dim" style="font-size:11px;padding:2px 2px 6px">
+      上方分时：白线 = 指数点数（纵轴），<b style="color:#f0b90b">黄线 = 30 分钟平滑线（趋势，加粗置顶）</b>，
+      <span style="color:#58a6ff">日MA5</span>/<span style="color:#bc8cff">日MA13</span>/<span style="color:#2dd4bf">日MA21</span>/<span style="color:#f0883e">日MA34</span>
+      按天画横线（不同颜色），涨跌幅见 tooltip；「📐 量能按日归一」默认开
+      （每天量能按自身最大累计差铺满，单日形态最清楚；关掉则用绝对亿元、跨天可比）。
+      下方 = **累计成交额 − 昨日同时刻**：
+      <span class="up">红面积 = 累计放量</span> · <span class="down">绿面积 = 累计缩量</span> · 黄线 = 10 点均线；
+      <b>竖向虚线 = 日期分隔</b>；最右为今日实时（5 秒刷新）
+    </div>
+    <!-- pane 由 JS 动态生成：指数模式=3 张；K 线窗点「多日分时」=该股 1 张 -->
+    <div id="imPanes"></div>
+  </div>
+</div>
+
 <!-- 两市成交额·数字浮窗（2026-10-27 owner 改需求：**只要数字，不要图**）
      双击成交额图/成交额卡片弹出。复用 .mw-win 外壳：标题栏可拖、右下角可改大小。
      图表仍留在「盘中状态」卡里；这里只显示今日成交额/涨跌/增量/预计全日。
@@ -839,6 +884,9 @@
         <button class="mini-btn" id="mwPermin10" onclick="mwSetPeriod('min10')" title="10 分钟 K">10分</button>
         <button class="mini-btn" id="mwPermin30" onclick="mwSetPeriod('min30')" title="30 分钟 K">30分</button>
         <button class="mini-btn" id="mwPermin60" onclick="mwSetPeriod('min60')" title="60 分钟 K">60分</button>
+        <!-- 2026-11-25 owner：「多窗口看盘要支持日线 以及周线的显示」 -->
+        <button class="mini-btn" id="mwPerday" onclick="mwSetPeriod('day')" title="日线 K">日</button>
+        <button class="mini-btn" id="mwPerweek" onclick="mwSetPeriod('week')" title="周线 K（按周五收盘聚合，标签=该周最后一个交易日）">周</button>
       </span>
       <span class="mw-lay" id="mwLayBox">
         <button class="mini-btn" id="mwLay3x3" onclick="mwSetLayout('3x3')"
@@ -852,6 +900,10 @@
       <!-- 2026-11-14 owner：多图同步十字光标 —— 一格动、其它格跟着动（认同一根） -->
       <label class="toggle-item" title="一格十字光标动、其它格跟着动（认同一根；跨周期对不上就跳过）"
              style="margin:0 2px;color:#c9d1d9"><input type="checkbox" id="tgMwXhair" checked> 光标同步</label>
+      <!-- 2026-11-25 owner：「多窗口看盘增加一个指标：跟前日的成交量对比」；
+           同日追加：「和昨天对比增量/缩量要和多日分时图一致」⇒ 改成**累计差额**面积。 -->
+      <label class="toggle-item" title="量差·昨日（与多日分时同款）：按日累计 (本根量 − 昨日同一时刻那根量)，零轴上方红=累计放量、下方绿=累计缩量，黄线=10 点均线"
+             style="margin:0 2px;color:#c9d1d9"><input type="checkbox" id="tgMwVolCmp" checked onchange="mwTick()"> 量差·昨日</label>
       <!-- 2026-11-02 owner：多窗口也要显示密集成交区；与 K 线弹窗里的开关是同一状态 -->
       <button class="mini-btn" id="mwVpBtn" onclick="toggleVolumeProfile()"
               title="显示/隐藏每格的密集成交区（右侧横向直方图 + POC 点线；与 K 线弹窗里的「◫ 密集区」同一开关）">◫ 密集区</button>
@@ -881,6 +933,6 @@
      `_ensureEcharts()` 在首次真正画图时动态注入（单飞 + 排队补画，见 app.js ECharts 辅助段）。 -->
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261125f"></script>
+<script src="app.js?v=20261126f"></script>
 </body>
 </html>

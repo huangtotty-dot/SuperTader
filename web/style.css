@@ -817,6 +817,26 @@ body.twin-winmode #turnoverWin {
 body.twin-winmode #turnoverWinDetachBtn { display: none; }
 body.twin-winmode #turnoverWinTitle { cursor: default; }
 
+/* 多日分时浮窗：**必须高于 K 线弹窗**（#stockModal 是 .modal-mask z-index:400）。
+   .mw-win 默认 380 ⇒ 从 K 线窗里点「多日分时」会开到弹窗背后，看起来"点了没反应"（2026-11-25 实报）。 */
+#intradayWin { z-index: 620; }
+/* 多日指数分时（2026-11-25 owner）：三张 pane（分时上 / 量能下），天与天用竖虚线分隔 */
+.im-pane { border: 1px solid var(--border-soft); border-radius: 8px; margin: 0 0 8px;
+  background: rgba(139, 148, 158, .03); overflow: hidden; }
+.im-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  font-size: 11px; color: var(--text-dim); padding: 4px 8px 2px; }
+.im-head b { color: var(--text); font-size: 12px; }
+.im-chart { width: 100%; height: 246px; }
+/* 独立原生窗口模式：只留本窗，铺满 */
+body.im-winmode { overflow: hidden; background: var(--bg); }
+body.im-winmode > *:not(#intradayWin) { display: none !important; }
+body.im-winmode #intradayWin {
+  position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+  min-width: 0; min-height: 0; border: none; border-radius: 0;
+  box-shadow: none; resize: none;
+}
+body.im-winmode #intradayDetachBtn { display: none; }
+body.im-winmode #intradayWinTitle { cursor: default; }
 /* ===== 重点关注标记（2026-10-31 owner）=====
    五个表每行一颗星：点击变**紫色**（#8250df）= 重点盯的票，再点取消。
    刻意用紫色：红=涨/风险、绿=跌/通过、橙=盯紧、黄=预警，都不与它撞色。

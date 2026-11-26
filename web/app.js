@@ -14437,10 +14437,532 @@ function startLivePoll() {
   pollBuyConfirm();
 }
 
+/* ══════════ 多日指数分时（2026-11-25 owner）══════════════════════════════
+   · 上证指数 / 科创50 / 创业板指 三张 pane：上=分时（每分钟收盘连线），下=量能柱；
+   · 量能柱颜色 = 该分钟成交额 vs **昨日同一分钟**：红=增、绿=缩、灰=无基准；
+   · 若干天连排（3/5/10 可选），天与天之间画竖虚线 + 日期标签；
+   · 强实时：今日 tail 由后端 3s 缓存、前端 INTRADAY_POLL_MS=5s 轮询；
+     历史只在指纹变化时下发一次（hist_sig 握手），5s 轮询实际只过今日 ~240 个点。
+   数据契约见 core/intraday_multi.py（hhm=分钟右端, px1000=价×1000, amt_wan=万元）。 */
+const IM_INDICES = [["sh000001", "上证指数"], ["sh000688", "科创50"], ["sz399006", "创业板指"]];
+const INTRADAY_POLL_MS = 5000;
+let intradayDays = 5;
+// 2026-11-25 owner：「价格纵轴必须是具体点数，用涨幅是本质错误」⇒ 纵轴=点数；
+// 按日归一**只作用于量能副图**（每天按自身最大累计差铺满，单日形态最清楚）。
+let _imNorm = true;
+let _imWinMode = false;
+let _imTimer = null, _imBusy = false;
+let _imHist = {};        // code -> [{date, pts}]（不含今天）
+let _imHistSig = {};     // code -> 历史指纹
+let _imData = {};        // 最新 items
+const _imCharts = {};
+// 当前窗口展示哪些标的：默认三大指数；K 线窗点「📈 多日分时」= 该股一张
+let _imCodes = IM_INDICES.map(([c]) => c);
+let _imLabels = Object.fromEntries(IM_INDICES.map(([c, n]) => [c, n]));
+
+/* 动态生成 pane（代码变了就重建容器；旧的 ECharts 实例一并 dispose） */
+function _imEnsurePanes() {
+  const wrap = document.getElementById("imPanes");
+  if (!wrap) return;
+  const sig = _imCodes.join(",");
+  if (wrap.dataset.sig === sig) return;
+  Object.values(_imCharts).forEach(c => { try { c.dispose(); } catch (e) { } });
+  Object.keys(_imCharts).forEach(k => { delete _imCharts[k]; });
+  wrap.dataset.sig = sig;
+  wrap.innerHTML = _imCodes.map(c => `<div class="im-pane">
+      <div class="im-head" id="imHead_${c}"></div>
+      <div id="imChart_${c}" class="im-chart"></div>
+    </div>`).join("");
+}
+
+function _imSetDaysBtn() {
+  [3, 5, 10, 20, 30, 50, 100].forEach(d => {
+    const el = document.getElementById("imDays" + d);
+    if (el) el.classList.toggle("primary", d === intradayDays);
+  });
+}
+
+/* K 线窗 → 该股多日分时（2026-11-25 owner）：复用同一窗口，只放这一只 */
+function openIntradayForChart() {
+  try { _openIntradayForChartImpl(); }
+  catch (e) { alert("多日分时打开失败：" + (e && e.message ? e.message : e)); }
+}
+
+function _openIntradayForChartImpl() {
+  const code = String(stockChartCode || "").split("_")[0];
+  if (!code) { alert("先打开一只股票的 K 线"); return; }
+  const mkt = (code[0] === "6" || code[0] === "5") ? "sh"
+    : (code.startsWith("4") || code.startsWith("8") || code.startsWith("92")) ? "bj" : "sz";
+  const full = mkt + code;
+  _imCodes = [full];
+  _imLabels = { [full]: stockChartName || code };
+  _imHist = {}; _imHistSig = {}; _imData = {};
+  const t = document.getElementById("intradayWinTitle");
+  if (t && t.firstElementChild) {
+    t.firstElementChild.textContent = `📈 多日分时 · ${stockChartName || code}（${code}）`;
+  }
+  // 个股模式不支持"独立原生窗口"（副窗没法带代码），隐藏 ⧉
+  const det = document.getElementById("intradayDetachBtn");
+  if (det) det.style.display = "none";
+  openIntradayWin();
+}
+
+/* 回到三大指数模式（标题/按钮恢复；若当前是个股，点开浮层时用这个复位） */
+function _imResetToIndices() {
+  _imCodes = IM_INDICES.map(([c]) => c);
+  _imLabels = Object.fromEntries(IM_INDICES.map(([c, n]) => [c, n]));
+  _imHist = {}; _imHistSig = {}; _imData = {};
+  const t = document.getElementById("intradayWinTitle");
+  if (t && t.firstElementChild) t.firstElementChild.textContent = "📈 多日分时 · 上证 / 科创50 / 创业板指";
+  const det = document.getElementById("intradayDetachBtn");
+  if (det) det.style.display = "";
+}
+
+function toggleIntradayNorm() {
+  _imNorm = !_imNorm;
+  const b = document.getElementById("imNormBtn");
+  if (b) b.classList.toggle("primary", _imNorm);
+  _imRerender();
+}
+
+function _imRerender() {
+  _imCodes.forEach(c => { _renderImPane(c, _imLabels[c] || c); });
+}
+
+function setIntradayDays(d) {
+  if (intradayDays === d) return;
+  intradayDays = d;
+  _imHist = {}; _imHistSig = {};        // 天数变了历史窗口也变，强制重取
+  _imSetDaysBtn();
+  drawIntradayMulti();
+}
+
+async function openIntradayWin() {
+  const win = document.getElementById("intradayWin");
+  if (!win) return;
+  win.style.display = "flex";
+  _imEnsurePanes();
+  _bindHeaderDrag(win, document.getElementById("intradayWinTitle"), null, true);
+  _imSetDaysBtn();
+  // ⚠️ 独立窗口（?mode=intraday）不跑 init()，图库是按需注入的 ⇒ 这里必须显式等它。
+  // 2026-11-25 真机：打开后**整片空白**，头行有数字、图没有 —— echarts 未加载 + 异常被吞。
+  _ensureEcharts().catch(() => { }).then(() => drawIntradayMulti());
+  if (_imTimer) clearInterval(_imTimer);
+  _imTimer = setInterval(drawIntradayMulti, INTRADAY_POLL_MS);
+}
+
+function closeIntradayWin() {
+  if (_imWinMode) {                    // 原生窗口里 × = 关窗口
+    if (_imTimer) { clearInterval(_imTimer); _imTimer = null; }
+    try { window.pywebview.api.close_intraday_window(); } catch (e) { /* 忽略 */ }
+    return;
+  }
+  const win = document.getElementById("intradayWin");
+  if (win) win.style.display = "none";
+  if (_imTimer) { clearInterval(_imTimer); _imTimer = null; }
+}
+
+/* 原生窗口（index.html?mode=intraday）：铺满 + 起轮询；主界面照常可用 */
+function intradayEnterWindowMode() {
+  if (_imWinMode) return;
+  _imWinMode = true;
+  document.body.classList.add("im-winmode");
+  const win = document.getElementById("intradayWin");
+  if (!win) return;
+  win.style.display = "flex";
+  win.style.left = "0"; win.style.top = "0"; win.style.right = "auto";
+  win.style.width = "100%"; win.style.height = "100%";
+  win.style.minWidth = "0"; win.style.minHeight = "0";
+  _imSetDaysBtn();
+  _ensureEcharts().catch(() => { }).then(() => drawIntradayMulti());
+  if (_imTimer) clearInterval(_imTimer);
+  _imTimer = setInterval(drawIntradayMulti, INTRADAY_POLL_MS);
+}
+
+/* 开成独立原生窗口（可拖到另一个显示器）；不可用 ⇒ 退回页面内浮层 */
+async function openIntradayWindow() {
+  _imResetToIndices();     // 顶部按钮 = 三大指数（个股请从 K 线窗进入）
+  try {
+    const r = await apiCall("open_intraday_window");
+    if (r && r.ok) return;
+    if (r && r.error) console.warn("[多日分时] 原生窗口不可用，退回浮层：", r.error);
+  } catch (e) {
+    console.warn("[多日分时] 原生窗口调用失败，退回浮层：", e && e.message);
+  }
+  openIntradayWin();
+}
+
+async function drawIntradayMulti() {
+  if (_imBusy) return;
+  const win = document.getElementById("intradayWin");
+  if (!win || win.style.display === "none") return;
+  _imBusy = true;
+  try {
+    _imEnsurePanes();
+    const sigMap = {};
+    _imCodes.forEach(c => { if (_imHistSig[c]) sigMap[c] = _imHistSig[c]; });
+    const r = await apiCall("load_intraday_multi", intradayDays, sigMap, _imCodes, _imLabels);
+    if (!r || !r.items) return;
+    _imCodes.forEach(c => {
+      const it = r.items[c] || {};
+      if (it.hist) { _imHist[c] = it.hist; _imHistSig[c] = it.hist_sig || ""; }
+    });
+    _imData = r.items;
+    const first = r.items[_imCodes[0]] || {};
+    const asEl = document.getElementById("intradayAsOf");
+    if (asEl) {
+      const avail = first.avail_days || 0;
+      const short = intradayDays > avail
+        ? `（可用 ${avail}/${intradayDays} 天：历史来自 tushare / GM / 新浪 / 本地沉淀库，取最全者）`
+        : "";
+      asEl.textContent = (first.as_of ? `更新 ${first.as_of}` :
+        (r.warming ? "历史准备中…" : "—")) + short;
+    }
+    _imCodes.forEach(c => { _renderImPane(c, _imLabels[c] || c); });
+    _bindImZoomSync();
+  } catch (e) {
+    /* 静默：保持上一帧 */
+  } finally {
+    _imBusy = false;
+  }
+}
+
+/* 组装一张 pane 的数据：把「历史 days 天 + 今日 live」连成一条 x 轴 */
+function _imBuildSeries(code) {
+  // 不含今天；丢掉"残日"（新浪截断的半个交易日常见，点数很少）
+  const hist = (_imHist[code] || []).filter(d => (d.pts || []).length >= 100).slice();
+  const it = _imData[code] || {};
+  const all = hist.map(d => ({ date: d.date, pts: d.pts, live: false }));
+  if (it.today && it.today.length && it.today_date) {
+    all.push({ date: it.today_date, pts: it.today, live: true });
+  }
+  if (!all.length) return null;
+  const start = Math.max(0, all.length - Math.max(1, intradayDays));
+  const shown = all.slice(start);
+  const prevIdx = {};                                   // date -> 前一日（含被裁掉的基准日）
+  for (let i = 0; i < all.length; i++) prevIdx[all[i].date] = i > 0 ? all[i - 1] : null;
+  /* 2026-11-25 owner：「纵向比例放大，价格变化更陡峭；量能要看清一天的变化」。
+     ① 价格改成**当日涨跌幅%**（以"前一交易日收盘"为 0）——多天并排时绝对点位差异会把
+        每天的波动压平，归一化后每天的起伏幅度才可比、也才够"陡"；
+     ② 量能改成**相对昨日同分钟的 %**，并做 5 点平滑（原先是绝对亿元，跨日尺度差太大、
+        1min 噪声又把一天的形状糊成一团）；黄线 = 该 % 的 20 点均线（趋势）。 */
+  const xs = [], px = [], pct = [], pn = [], amt = [], diffP = [], vn = [], ma5 = [],
+    pma = [], hm = [], dates = [];
+  const dayStart = [];
+  let idx = 0;
+  shown.forEach(d => {
+    dayStart.push(idx);
+    const prev = prevIdx[d.date];
+    const prevMap = {};
+    let prevClose = null;
+    if (prev && prev.pts && prev.pts.length) {
+      prev.pts.forEach(p => { prevMap[p[0]] = p[2]; });
+      prevClose = prev.pts[prev.pts.length - 1][1] / 1000;   // 前一日收盘（最后一分钟）
+    }
+    /* 2026-11-25 二轮优化（owner：「与前一天量能的对比变化还是看不清」）：
+       改成**累计差额**曲线 —— diffCum(t) = Σ(今日分钟额 − 昨日同分钟额)，
+       零轴上方红面积 = 到此刻为止**比昨天多成交**的累计量，下方绿面积 = 少成交；
+       一天的"越走越放量/越走越缩量"直接由面积形状读出来（参考图那种驼峰就是它），
+       比"逐分钟差值的百分比"稳得多（后者被单分钟噪声主导）。黄线 = 该累计额的 10 点均线。 */
+    // 当日价格区间（按日归一：每天铺满纵轴 −1..1）
+    const _pxs = (d.pts || []).map(p => p[1] / 1000);
+    // 价格平滑线（2026-11-25 owner：「黄色线=做完平滑的线，能看到趋势」）：10 点均线，每日重置
+    const _pmaDay = [];
+    const _dmin = _pxs.length ? Math.min(..._pxs) : 0;
+    const _dmax = _pxs.length ? Math.max(..._pxs) : 0;
+    let cum = 0, hasPrev = false;
+    const dayCum = [];
+    (d.pts || []).forEach(p => {
+      const hh = p[0], price = p[1] / 1000, a = p[2];   // a=万元
+      const base = prevClose || price;
+      const pc = base > 0 ? (price / base - 1) * 100 : 0;
+      const pv = prevMap[hh];
+      if (pv != null) { hasPrev = true; cum += (a - pv) / 1e4; }   // 亿元
+      xs.push(idx); px.push(price); pct.push(+pc.toFixed(3)); amt.push(a / 1e4);
+      pn.push(_dmax > _dmin ? +(((price - _dmin) / (_dmax - _dmin)) * 2 - 1).toFixed(4) : 0);
+      _pmaDay.push(price);
+      dayCum.push(hasPrev ? +cum.toFixed(2) : null);
+      hm.push(hh); dates.push(d.date);
+      idx++;
+    });
+    // 2026-11-25 owner：「趋势线效果不明显」⇒ 窗口 10 → **30 分钟**，且先画白线后画黄线（黄在上）
+    const _pma = _pmaDay.map((v, i) => {
+      const w = _pmaDay.slice(Math.max(0, i - 29), i + 1);
+      return +(w.reduce((x, y) => x + y, 0) / w.length).toFixed(3);
+    });
+    pma.push(..._pma);
+    diffP.push(...dayCum);
+    const _cmax = Math.max(1e-6, ...dayCum.map(v => (v == null ? 0 : Math.abs(v))));
+    vn.push(...dayCum.map(v => (v == null ? null : +(v / _cmax).toFixed(4))));
+    const yellow = [];
+    for (let i = 0; i < dayCum.length; i++) {
+      const w = dayCum.slice(Math.max(0, i - 9), i + 1).filter(x => x != null);
+      yellow.push(w.length >= 3 ? +(w.reduce((x, y) => x + y, 0) / w.length).toFixed(2) : null);
+    }
+    ma5.push(...yellow);
+  });
+  // 总额对比（最后一个展示日 vs 其前一日）
+  const lastD = shown[shown.length - 1];
+  const prevD = prevIdx[lastD.date];
+  const sum = d => (d && d.pts ? d.pts.reduce((s, p) => s + (p[2] || 0), 0) / 1e4 : 0);
+  return {
+    xs, px, pct, pn, pma, amt, diffP, vn, ma5, hm, dates, dayStart,
+    dates0: shown.map(d => d.date),
+    lastDate: lastD.date, lastAmt: sum(lastD), prevDate: prevD ? prevD.date : "",
+    prevAmt: sum(prevD), live: !!lastD.live,
+    nPts: shown.reduce((s, d) => s + d.pts.length, 0),
+  };
+}
+
+function _imHeadHtml(name, S) {
+  if (!S) return `<b>${name}</b> <span class="cell-dim">（无数据）</span>`;
+  const dPct = (S.prevAmt > 0) ? (S.lastAmt / S.prevAmt - 1) * 100 : null;
+  const cls = dPct == null ? "cell-dim" : (dPct > 0 ? "up" : dPct < 0 ? "down" : "cell-dim");
+  const tag = S.live ? "今日" : "最近一日";
+  return `<b>${esc(name)}</b>`
+    + ` <span>${tag} ${esc(S.lastDate.slice(5))} 总额 <b>${S.lastAmt.toFixed(0)}</b> 亿</span>`
+    + (S.prevAmt > 0
+      ? ` <span class="cell-dim">${esc(S.prevDate.slice(5))} ${S.prevAmt.toFixed(0)} 亿</span>`
+        + ` <span class="${cls}">${dPct >= 0 ? "+" : ""}${dPct.toFixed(1)}%</span>` : "")
+    + ` <span class="cell-dim">${S.nPts} 点 · 量能对昨日同分钟（红增/绿缩）</span>`;
+}
+
+function _renderImPane(code, name) {
+  const el = document.getElementById("imChart_" + code);
+  const head = document.getElementById("imHead_" + code);
+  if (!el) return;
+  if (!echarts) {                      // 图库还没就绪：排队补画（别静默留白）
+    _ensureEcharts().then(() => _renderImPane(code, name)).catch(() => {
+      if (head) head.innerHTML = `<b>${esc(name)}</b> <span class="down">图表库加载失败</span>`;
+    });
+    return;
+  }
+  const S = _imBuildSeries(code);
+  if (!S || !S.xs.length) {
+    if (head) head.innerHTML = _imHeadHtml(name, null)
+      + ' <span class="cell-dim">历史准备中…（首次约 3~10s）</span>';
+    return;
+  }
+  if (head) head.innerHTML = _imHeadHtml(name, S);
+  let inst = _imCharts[code];
+  if (inst && inst.getDom && inst.getDom() !== el) { try { inst.dispose(); } catch (e) { } inst = null; }
+  if (!inst) { el.innerHTML = ""; inst = echarts.init(el); _imCharts[code] = inst; }
+  const isDayStart = {};
+  S.dayStart.forEach(i => { isDayStart[i] = S.dates[i]; });
+  const volBase = _imNorm ? S.vn : S.diffP;
+  const _vPrec = _imNorm ? 4 : 2;
+  /* 日线 MA5/13/21（2026-11-25 owner：多日分时里按天画横线、不同颜色）。
+     数据来自后端 `dmas: {date: [ma5, ma13, ma21]}`（本地日线缓存算，零网络）。 */
+  const _dm = ((_imData[code] || {}).dmas) || {};
+  // 日MA5 的**线色**跟状态走（2026-11-26）：走平=灰、走平上翘=金、其它=蓝
+  const _mf5 = ((_imData[code] || {}).ma5flag) || {};
+  const _cMa5 = _mf5.state === "flat_turn_up" ? "#f0b90b"
+    : _mf5.state === "flat" ? "#8b949e" : "#58a6ff";
+  const _wMa5 = _mf5.state === "flat_turn_up" ? 1.9 : 1.1;
+  /* 2026-11-26 owner 更正：「5/13/21 日均线要显示成**连续变化**的曲线」——
+     不再按天断开，而是一条贯穿整个多日 x 轴的连续折线（每个交易日内取该日的日线 MA 值，
+     跨日处直接连起来）；缺某天的值就沿用上一交易日的值（carry-forward），保证不断线。 */
+  const _dmDates = S.dates;
+  const _dmCarry = i0 => {
+    const out = [];
+    let last = null;
+    for (let i = 0; i < _dmDates.length; i++) {
+      const v = _dm[_dmDates[i]];
+      if (v && v[i0] != null) last = v[i0];
+      out.push(last);
+    }
+    return out;
+  };
+  const _dmArr = i0 => _dmCarry(i0);
+  const _dm5 = _dmArr(0), _dm13 = _dmArr(1), _dm21 = _dmArr(2), _dm34 = _dmArr(3);
+  const posData = volBase.map(v => (v == null || v <= 0 ? 0 : +v.toFixed(_vPrec)));
+  const negData = volBase.map(v => (v == null || v >= 0 ? 0 : +v.toFixed(_vPrec)));
+  // 价格纵轴 = **具体点数**（owner：指数就该给点数）；只留 4% 余量把纵轴拉满（越发陡）
+  const _pMin = Math.min(...S.px);
+  const _pMax = Math.max(...S.px);
+  const _pPad = Math.max((_pMax - _pMin) * 0.04, _pMax * 0.0005, 0.01);
+  // 量能纵轴（绝对亿元，用于关归一模式）
+  const _vMax = Math.max(10, ...S.diffP.map(v => (v == null ? 0 : Math.abs(v))));
+  const _vLim = +(_vMax * 1.05).toFixed(0);
+  const sepLines = S.dayStart.slice(1).map(i => ({ xAxis: i }));
+  inst.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    grid: [
+      { left: 52, right: 62, top: 6, height: "56%" },
+      { left: 52, right: 62, top: "69%", height: "21%" },
+    ],
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    tooltip: {
+      trigger: "axis", axisPointer: { type: "cross" },
+      backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
+      borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
+      formatter: (ps) => {
+        if (!ps || !ps.length) return "";
+        const i = ps[0].dataIndex;
+        const hh = String(S.hm[i]).padStart(4, "0");
+        const t = `${hh.slice(0, 2)}:${hh.slice(2)}`;
+        const dv = S.diffP[i];
+        return `<b>${esc(S.dates[i])} ${t}</b>`
+          + `<br>点位 <b>${S.px[i].toFixed(2)}</b>`
+          + ` · 涨跌幅 <b style="color:${S.pct[i] >= 0 ? "#f85149" : "#2ea043"}">`
+          + `${S.pct[i] >= 0 ? "+" : ""}${S.pct[i].toFixed(2)}%</b>`
+          + `<br>该分钟成交额 <b>${S.amt[i].toFixed(2)} 亿</b>`
+          + (() => {
+              const v = _dm[S.dates[i]];
+              if (!v) return "";
+              const f = x => (x == null ? "—" : Number(x).toFixed(2));
+              const stTxt = _mf5.state === "flat_turn_up"
+                ? `<b style="color:#f0b90b">（5日线走平上翘：斜率 +${_mf5.slope1}%/日，振幅 ${_mf5.flat_range}%）</b>`
+                : _mf5.state === "flat"
+                  ? `<span style="color:#8b949e">（5日线走平：振幅 ${_mf5.flat_range}%）</span>` : "";
+              return `<br><span style="color:${_cMa5}">日MA5 ${f(v[0])}</span>${stTxt}　`
+                + `<span style="color:#bc8cff">日MA13 ${f(v[1])}</span>　`
+                + `<span style="color:#2dd4bf">日MA21 ${f(v[2])}</span>　`
+                + `<span style="color:#f0883e">日MA34 ${f(v[3])}</span>`;
+            })()
+          + (dv == null ? ' <span style="color:#8b949e">（无昨日同分钟基准）</span>'
+            : `<br>累计较昨日 <b style="color:${dv >= 0 ? "#f85149" : "#2ea043"}">`
+              + `${dv >= 0 ? "+" : ""}${dv.toFixed(0)} 亿（${dv >= 0 ? "累计放量" : "累计缩量"}）</b>`)
+          + (_imNorm ? '<br><span style="color:#8b949e">量能按日归一：纵向为当日最大累计差的相对位置</span>' : "");
+      },
+    },
+    xAxis: [
+      { type: "category", data: S.xs, gridIndex: 0, boundaryGap: false,
+        axisLine: { lineStyle: { color: "#30363d" } }, axisLabel: { show: false },
+        splitLine: { show: false } },
+      { type: "category", data: S.xs, gridIndex: 1, boundaryGap: true,
+        axisLine: { lineStyle: { color: "#30363d" } },
+        axisLabel: {
+          color: "#8b949e", fontSize: 9, interval: (i) => {
+            if (isDayStart[i]) return true;
+            if (intradayDays > 7) return false;      // 天数多时只标日界，避免糊成一片
+            const hh = S.hm[i];
+            return hh != null && (hh % 100 === 30 || hh % 100 === 0);
+          },
+          formatter: (v, i) => {
+            if (isDayStart[i]) return isDayStart[i].slice(5);
+            const hh = String(S.hm[i]).padStart(4, "0");
+            return `${hh.slice(0, 2)}:${hh.slice(2)}`;
+          },
+        }, splitLine: { show: false } },
+    ],
+    yAxis: [
+      { type: "value", gridIndex: 0, position: "right",
+        min: +(_pMin - _pPad).toFixed(2), max: +(_pMax + _pPad).toFixed(2),
+        name: "点数", nameTextStyle: { color: "#8b949e", fontSize: 9 },
+        axisLabel: { color: "#8b949e", fontSize: 9,
+                     formatter: v => (v >= 1000 ? v.toFixed(0) : v.toFixed(2)) },
+        splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } } },
+      _imNorm
+        ? { type: "value", gridIndex: 1, position: "right", min: -1.05, max: 1.05, splitNumber: 2,
+            name: "量能(日归一)", nameTextStyle: { color: "#8b949e", fontSize: 9 },
+            axisLabel: { color: "#8b949e", fontSize: 9,
+                         formatter: v => (v > 0.9 ? "放量" : v < -0.9 ? "缩量" : "") },
+            splitLine: { lineStyle: { color: "rgba(139,148,158,.10)" } } }
+        : { type: "value", gridIndex: 1, position: "right", min: -_vLim, max: _vLim, splitNumber: 2,
+            name: "累计对比(亿)", nameTextStyle: { color: "#8b949e", fontSize: 9 },
+            axisLabel: { color: "#8b949e", fontSize: 9,
+                         formatter: v => (v > 0 ? "+" : "") + v.toFixed(0) },
+            splitLine: { lineStyle: { color: "rgba(139,148,158,.10)" } } },
+    ],
+    dataZoom: [
+      { type: "inside", xAxisIndex: [0, 1], filterMode: "none" },
+    ],
+    series: [
+      { name: "分时", type: "line", data: S.px, xAxisIndex: 0, yAxisIndex: 0,
+        sampling: "lttb", z: 2,
+        symbol: "none", showSymbol: false, lineStyle: { width: 0.9, color: "#9aa4af" },
+        markLine: sepLines.length ? {
+          silent: true, symbol: "none",
+          lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 },
+          label: { show: false }, data: sepLines,
+        } : undefined },
+      /* 日线均线 5/13/21（按天横线，不同颜色）——与多窗口日MA同色系 */
+      { name: "日MA5", type: "line", sampling: "lttb", data: _dm5, xAxisIndex: 0, yAxisIndex: 0,
+        symbol: "none", connectNulls: false, z: 4,
+        lineStyle: { width: _wMa5, color: _cMa5 } },
+      { name: "日MA13", type: "line", sampling: "lttb", data: _dm13, xAxisIndex: 0, yAxisIndex: 0,
+        symbol: "none", connectNulls: false, z: 3,
+        lineStyle: { width: 1.1, color: "#bc8cff" } },
+      { name: "日MA21", type: "line", sampling: "lttb", data: _dm21, xAxisIndex: 0, yAxisIndex: 0,
+        symbol: "none", connectNulls: false, z: 3,
+        lineStyle: { width: 1.1, color: "#2dd4bf" } },
+      /* 2026-11-26 owner：再加一条 34 日线（与多窗口日MA34 同色橙） */
+      { name: "日MA34", type: "line", sampling: "lttb", data: _dm34, xAxisIndex: 0, yAxisIndex: 0,
+        symbol: "none", connectNulls: false, z: 3,
+        lineStyle: { width: 1.1, color: "#f0883e" } },
+      /* 价格平滑线（黄）：30 点均线，用于看"趋势"而不是被 1 分钟噪声带节奏 */
+      { name: "平滑(30分)", type: "line", data: S.pma, xAxisIndex: 0, yAxisIndex: 0,
+        symbol: "none", showSymbol: false, sampling: "lttb", z: 6,
+        lineStyle: { width: 2, color: "#f0b90b", shadowBlur: 4,
+                     shadowColor: "rgba(240,185,11,.35)" } },
+      /* 量能对比（2026-11-25 owner：照参考图的"驼峰"效果）：
+         零轴上方红面积 = 该分钟比昨日同分钟**放量**的部分；下方绿面积 = 缩量部分；
+         黄线 = 当日 5 分钟均量（逐日重置）。三条都用 same category 轴，日分隔线同款。 */
+      { name: "放量", type: "line", data: posData, xAxisIndex: 1, yAxisIndex: 1,
+        sampling: "lttb",
+        symbol: "none", smooth: true, connectNulls: false, z: 3,
+        lineStyle: { width: 0.8, color: "rgba(248,81,73,.65)" },
+        areaStyle: { color: "rgba(248,81,73,.50)", origin: 0 },
+        markLine: sepLines.length ? {
+          silent: true, symbol: "none",
+          lineStyle: { color: "rgba(139,148,158,.35)", type: "dashed", width: 1 },
+          label: { show: false }, data: sepLines } : undefined },
+      { name: "缩量", type: "line", data: negData, xAxisIndex: 1, yAxisIndex: 1,
+        sampling: "lttb",
+        symbol: "none", smooth: true, connectNulls: false, z: 3,
+        lineStyle: { width: 0.8, color: "rgba(46,160,67,.65)" },
+        areaStyle: { color: "rgba(46,160,67,.50)", origin: 0 } },
+      { name: "累计均线", type: "line", xAxisIndex: 1, yAxisIndex: 1,
+        symbol: "none", connectNulls: false, z: 4,
+        lineStyle: { width: 1, color: "#f0b90b" },
+        data: volBase.map((v, i) => {
+          if (i > 0 && S.dates[i] !== S.dates[i - 1]) return null;   // 日界线断开
+          const from = Math.max(0, i - 9);
+          const w = volBase.slice(from, i + 1)
+            .filter((x, j) => x != null && S.dates[from + j] === S.dates[i]);
+          return w.length >= 3 ? +(w.reduce((x, y) => x + y, 0) / w.length).toFixed(_vPrec) : null;
+        }) },
+    ],
+  });
+  inst.resize();
+}
+
+function _bindImZoomSync() {
+  const list = _imCodes.map(c => _imCharts[c]).filter(Boolean);
+  if (list.length < 2) return;
+  let syncing = false;
+  list.forEach(src => {
+    if (src.__imZoomBound) return;
+    src.__imZoomBound = true;
+    src.on("dataZoom", (e) => {
+      if (syncing) return;
+      syncing = true;
+      try {
+        const b = e && e.batch ? e.batch[0] : e;
+        const st = (b && b.start != null) ? b.start : (e && e.start);
+        const en = (b && b.end != null) ? b.end : (e && e.end);
+        if (st != null && en != null) {
+          list.forEach(dst => {
+            if (dst === src) return;
+            try { dst.dispatchAction({ type: "dataZoom", start: st, end: en }); } catch (err) { }
+          });
+        }
+      } catch (err) { }
+      setTimeout(() => { syncing = false; }, 60);
+    });
+  });
+}
+
+window.addEventListener("resize", () => {
+  Object.values(_imCharts).forEach(c => { try { c.resize(); } catch (e) { } });
+});
+
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  _reportSlow("app_boot_20261125f", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
+  _reportSlow("app_boot_20261126f", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
   // 2026-11-23（P2-5）：echarts（~1MB）空闲预热。已是按需加载（首屏不阻塞），但首次开图
   // 要现场下载+解析 1MB（冷开图可感到顿挫）⇒ 启动后浏览器空闲期先拉下来编一遍，
   // 用户第一次开 K 线即热。requestIdleCallback 缺席时退化 setTimeout；失败静默不碍启动。
@@ -14676,7 +15198,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let _bootMode = "";
   try { _bootMode = new URLSearchParams(location.search || "").get("mode") || ""; }
   catch (e) { _bootMode = ""; }
-  const _bootEntry = () => ((_bootMode === "turnover") ? turnoverEnterWindowMode() : init());
+  const _bootEntry = () => ((_bootMode === "turnover") ? turnoverEnterWindowMode()
+    : (_bootMode === "intraday") ? intradayEnterWindowMode() : init());
   if (_apiReady()) {
     _bootEntry();
     return;
@@ -14726,7 +15249,8 @@ let mwLayout = "3x3";
 const mwN = () => (mwLayout === "3x2" ? 6 : mwLayout === "2x2" ? 4 : 9);
 const MW_LS_KEY = "multiWatchCodes";
 const MW_LS_PERIOD = "multiWatchPeriod";   // 2026-11-04：5/10/30/60 分钟
-const MW_PERIOD_LABEL = { min5: "5分", min10: "10分", min30: "30分", min60: "60分" };
+const MW_PERIOD_LABEL = { min5: "5分", min10: "10分", min30: "30分", min60: "60分",
+  day: "日", week: "周" };
 let mwPeriod = "min5";
 let _mwRemotePeriod = null;
 const MW_PERIOD_MS = 4000;      // 刷新间隔：九宫格 9 只 × 每轮 ~130ms 计算，4s 是 CPU 与实时性的折中（2026-10-21 抗卡顿）
@@ -14875,7 +15399,7 @@ function _mwLoadPeriod() {
 function _mwPeriodUI() {
   const el = document.getElementById("mwSubTitle");
   if (el) el.textContent = `${MW_PERIOD_LABEL[mwPeriod] || "5分"} K · 每 4 秒刷新`;
-  ["min5", "min10", "min30", "min60"].forEach(p => {
+  ["min5", "min10", "min30", "min60", "day", "week"].forEach(p => {
     const b = document.getElementById("mwPer" + p);
     if (b) b.classList.toggle("primary", mwPeriod === p);
   });
@@ -15511,7 +16035,7 @@ function _mwBoxMarkAreas(code, dates) {
   } catch (e) { return []; }
 }
 
-function _mwOption(s, dma, levels, trades, zoom, code) {
+function _mwOption(s, dma, levels, trades, zoom, code, mf) {
   // 2026-11-11：跟随工具栏「缺口 / 买卖点」开关（同上下文 multip窗口共用；独立窗口默认开）
   const _mwShowGaps = (document.getElementById("tgGaps") || {}).checked !== false;
   const _mwShowTrades = (document.getElementById("tgTrades") || {}).checked !== false;
@@ -15555,14 +16079,25 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     && y >= _lo * 0.995 && y <= _hi * 1.005);
   // 2026-11-20 owner：多窗口的**日线**均线也改斐波那契（5/13/21/34/55），
   // key 与后端 `_daily_ma_bundle` 同口径；34/55 远了不画（沿用"近的才画"）。
+  /* 2026-11-26 owner：「五洲新春 5 日线其实走平了，但线没有颜色变化」⇒
+     日MA5 这条线的颜色/标签跟着状态走：走平=灰、走平上翘=金色、其它=蓝。 */
+  const _mfSt = ((mf || {}).state) || "";
+  const _ma5Color = _mfSt === "flat_turn_up" ? "#f0b90b"
+    : _mfSt === "flat" ? "#8b949e" : "#58a6ff";
+  const _ma5Bg = _mfSt === "flat_turn_up" ? "rgba(240,185,11,.95)"
+    : _mfSt === "flat" ? "rgba(139,148,158,.95)" : "rgba(88,166,255,.95)";
+  const _ma5Txt = _mfSt === "flat_turn_up" ? "日MA5·走平上翘"
+    : _mfSt === "flat" ? "日MA5·走平" : "日MA5";
   const _dmaDefs = [
-    { key: "ma5", color: "#58a6ff", txt: "日MA5", bg: "rgba(88,166,255,.95)", pos: "insideStartTop", dist: 0 },
+    { key: "ma5", color: _ma5Color, txt: _ma5Txt, bg: _ma5Bg, pos: "insideStartTop", dist: 0 },
     { key: "ma13", color: "#bc8cff", txt: "日MA13", bg: "rgba(124,77,255,.95)", pos: "insideStartBottom", dist: 0 },
     { key: "ma21", color: "#2dd4bf", txt: "日MA21", bg: "rgba(13,148,136,.95)", pos: "insideStartBottom", dist: 16 },
     { key: "ma34", color: "#f0883e", txt: "日MA34", bg: "rgba(240,136,62,.95)", pos: "insideEndTop", dist: 0 },
     { key: "ma55", color: "#a371f7", txt: "日MA55", bg: "rgba(163,113,247,.95)", pos: "insideEndBottom", dist: 0 },
   ];
-  const _present = _dmaDefs
+  // 2026-11-25 owner：30/60/日/周 不画这些"日线 5/13/21 等均线"（只保留 5/10 分格子）
+  const _showDma = !["min30", "min60", "day", "week"].includes(mwPeriod);
+  const _present = !_showDma ? [] : _dmaDefs
     .map(d => ({ ...d, y: dma ? dma[d.key] : null }))
     .filter(d => d.y != null && isFinite(d.y))
     .filter(d => d.key === "ma5" || d.key === "ma13" || d.key === "ma21" || _near(d.y));
@@ -15592,10 +16127,75 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
   // 其余参考线（MA10/20、支撑压力、POC）；日MA5 单独抽出、最后画 ⇒ 永远压在最上层
   const _lines = _dmaData.concat(_lvlData);
   const dates = s.dates || [], ohlc = s.ohlc || [];
+  const _isDaily = (mwPeriod === "day" || mwPeriod === "week");   // 日线/周线：无日内口径
   const amtYi = (s.amount && s.amount.length === dates.length)
     ? s.amount.map(v => (v == null || isNaN(Number(v))) ? null : +(Number(v) / 1e8).toFixed(2))
     : null;
   const vals = amtYi || s.volume || [];
+  /* 日分隔竖线（2026-11-25 owner：「多窗口 K 线用竖线把每天隔开」）。
+     5 分 K 一格约 2.5 天 ⇒ 在每个"日期变化"的根下标画一条细虚线，四窗（K/量能/MACD/RSI）都加。 */
+  const _daySep = [];
+  for (let _i = 1; !_isDaily && _i < dates.length; _i++) {
+    if (String(dates[_i]).slice(0, 10) !== String(dates[_i - 1]).slice(0, 10)) {
+      _daySep.push({ xAxis: _i, label: { show: false },
+        lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 } });
+    }
+  }
+  /* 量差·昨日（2026-11-25 owner：与「多日分时」**同款口径**）：
+     按日累计 diffCum(t) = Σ(本根量 − 昨日同一时刻那根量)，单位跟随 vals（个股=亿、指数=手）。
+     零轴上方红面积 = 累计放量、下方绿面积 = 累计缩量；黄线 = 该累计额的 10 点均线（逐日重置）。
+     比"逐根量比"稳得多 —— 多窗口一格只有 ~120 根，逐根比值会被单根噪声主导。 */
+  const _volCmpOn = (() => {
+    if (_isDaily) return false;                 // 日/周线没有"昨日同一时刻"口径
+    if (window._mwVolCmpFallback) return false;   // 上一轮该指标渲染失败 ⇒ 本轮先不画，保证图能出来
+    const el = document.getElementById("tgMwVolCmp");
+    return el ? !!el.checked : true;
+  })();
+  const _volCum = (() => {
+    // 后端 `voldiff`（2026-11-25）：用完整 340 根里的**前一日**做基准 ⇒ 第一天也有对比
+    if (Array.isArray(s.voldiff) && s.voldiff.length === dates.length
+        && s.voldiff.every(v => v == null || Number.isFinite(+v))) {
+      return s.voldiff.map(v => (v == null ? null : +Number(v).toFixed(3)));
+    }
+    if (!dates.length) return [];
+    const hh = dates.map(d => String(d).slice(11, 16));
+    const dd = dates.map(d => String(d).slice(0, 10));
+    const byDay = {};
+    dates.forEach((d, i) => {
+      const day = dd[i];
+      if (!byDay[day]) byDay[day] = {};
+      byDay[day][hh[i]] = vals[i];
+    });
+    const days = Object.keys(byDay).sort();
+    const prevOf = {};
+    days.forEach((d, i) => { prevOf[d] = i > 0 ? days[i - 1] : null; });
+    const out = [];
+    let cum = 0, hasPrev = false, curDay = "";
+    dates.forEach((d, i) => {
+      const day = dd[i];
+      if (day !== curDay) { cum = 0; hasPrev = false; curDay = day; }
+      const prevDay = prevOf[day];
+      const pv = prevDay ? byDay[prevDay][hh[i]] : null;
+      const v = vals[i];
+      if (pv != null && v != null) { hasPrev = true; cum += (Number(v) - Number(pv)); }
+      out.push(hasPrev ? +cum.toFixed(3) : null);
+    });
+    return out;
+  })();
+  const _volCumMa = (() => {
+    const dd = dates.map(d => String(d).slice(0, 10));
+    return _volCum.map((v, i) => {
+      const from = Math.max(0, i - 9);
+      const w = _volCum.slice(from, i + 1)
+        .filter((x, j) => x != null && dd[from + j] === dd[i]);
+      return w.length >= 3 ? +(w.reduce((a, b) => a + b, 0) / w.length).toFixed(3) : null;
+    });
+  })();
+  const _volCumMax = Math.max(1e-9, ..._volCum.map(v => (v == null ? 0 : Math.abs(v))));
+  let _volCumLim = +(_volCumMax * 1.05).toFixed(3);
+  if (!isFinite(_volCumLim) || _volCumLim <= 0) _volCumLim = 1;   // 防 NaN/Inf 让 ECharts 抛错
+  const _volCumPos = _volCum.map(v => (v == null || v <= 0 ? 0 : +v.toFixed(3)));
+  const _volCumNeg = _volCum.map(v => (v == null || v >= 0 ? 0 : +v.toFixed(3)));
   /* 密集成交区（2026-11-02 owner）：多窗口每一格也要显示，与单图**同一口径/同一配色**
      （紫色点线带 + POC 点线），窗口 = 格子里的全部根数（多窗口只取最近 96 根 5 分钟）。
      ⚠️ 格子只有 ~100 根：分箱从 60 降到 48；非 POC 色带**不写字**（标签会挤成一团），
@@ -15639,7 +16239,8 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     // 再压暗/压细就与深底糊在一起（owner：「成交量太小很难看清」）。
     return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.92)" : "rgba(63,185,80,.92)" } };
   });
-  const _mz = buildIntradayVwapZero(dates, ohlc, s.volume, s.amount);
+  const _mz = _isDaily ? { vwap: [], zero: [] }
+    : buildIntradayVwapZero(dates, ohlc, s.volume, s.amount);
   const line = (arr, color, w) => ({
     type: "line", data: arr || [], symbol: "none", connectNulls: true,
     lineStyle: { width: w, color }, itemStyle: { color },
@@ -15648,7 +16249,7 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
      与单图**同一归桶口径**：K 线时间是右端，成交落进 (bar_t - 5min, bar_t]；
      买=红 ▲ 托在该根 low 下方、卖=绿 ▼ 压在该根 high 上方（与单图同色同形）。 */
   const _tm = {};
-  if (_mwShowTrades && Array.isArray(trades) && trades.length && dates.length) {
+  if (!_isDaily && _mwShowTrades && Array.isArray(trades) && trades.length && dates.length) {
     const _bd = dates.map(x => String(x).slice(0, 10));
     const _be = dates.map(x => Number(String(x).slice(11, 13)) * 60 + Number(String(x).slice(14, 16)));
     let bi = 0;                                   // 双指针：trades 与 bar 同为升序
@@ -15751,6 +16352,15 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
           + `开 ${o[0]}　高 ${o[3]}<br>低 ${o[2]}　收 <b>${o[1]}</b>`
           + (chg != null ? ` <span style="color:${_c}">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</span>` : "")
           + (amt ? `<br>成交额 <b>${amt}</b>` : "")
+          + ((_volCmpOn && _volCum[i] != null)
+            ? (() => {
+                // 后端 voldiff 与 amount 同单位（个股=元、指数=手）；amtYi 分支要折成亿
+                const d0 = amtYi ? (_volCum[i] / 1e8) : _volCum[i];
+                return `<br>累计较昨日 <b style="color:${d0 >= 0 ? "#f85149" : "#3fb950"}">`
+                  + `${d0 >= 0 ? "+" : ""}${_volFmt(Math.abs(d0))}`
+                  + `（${d0 >= 0 ? "累计放量" : "累计缩量"}）</b>`;
+              })()
+            : "")
           + ((_mz.vwap[i] != null || _mz.zero[i] != null) ? `<br>`
               + (_mz.vwap[i] != null ? `VWAP <b style="color:#f0b429">${_mz.vwap[i]}</b>` : "")
               + (_mz.vwap[i] != null && _mz.zero[i] != null ? "　" : "")
@@ -15818,6 +16428,8 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         axisLabel: { show: true, fontSize: 8, color: "#8b949e", margin: 2,
                      interval: 1, formatter: (v) => (v === 0 || v === 100) ? "" : String(Math.round(v)) },
         splitLine: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
+      // 量差专用隐藏轴（2026-11-25，index=4）：与成交额窗重叠，对称 ±max
+      { gridIndex: 1, show: false, min: -_volCumLim, max: _volCumLim },
     ],
     series: [
       { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 12, barCategoryGap: "10%",
@@ -15825,9 +16437,10 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         markArea: (gaps.length || _mwBoxes2.length)
           ? { silent: true, data: gaps.concat(_mwBoxes2) } : undefined,
         // 绘制顺序 = 数组顺序 ⇒ 日MA5 放最后（压过 MA10/20、支撑压力、POC）
-        markLine: (_lines.length || _vpLine || _ma5Line)
+        markLine: (_lines.length || _vpLine || _ma5Line || _daySep.length)
           ? { silent: true, symbol: "none",
-              data: _lines.concat(_vpLine ? [_vpLine] : [], _ma5Line ? [_ma5Line] : []) }
+              data: _lines.concat(_vpLine ? [_vpLine] : [], _ma5Line ? [_ma5Line] : [],
+                                  _daySep) }
           : undefined,
         itemStyle: { color: "#ef3b3a", color0: "#168d4f",
                      borderColor: "#ff6b62", borderColor0: "#3fbf72", borderWidth: 1 } },
@@ -15851,12 +16464,27 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       ...(_tradePts.length ? [{ name: "成交", type: "scatter", data: _tradePts, z: 13,
                                symbol: "triangle", symbolSize: 8 }] : []),
       { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer,
-        barMaxWidth: 12 },   // 10→12（2026-11-02：九宫格里柱子太细看不清）
+        barMaxWidth: 12,     // 10→12（2026-11-02：九宫格里柱子太细看不清）
+        markLine: _daySep.length ? { silent: true, symbol: "none", data: _daySep } : undefined },
       { name: `均量${VOL_MA_BASE}`, type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _volMaBaseM,
         symbol: "none", connectNulls: true, z: 3,
         // 格子里只有 ~120 根、又小，2px 会盖住柱子 ⇒ 这里收成 1.4px，同一色系不换色
         lineStyle: { width: 1.4, color: "#0e9aa7", type: "dashed", opacity: .95 },
         itemStyle: { color: "#0e9aa7" } },
+      /* 量差·昨日（与多日分时同款）：红面积=累计放量、绿面积=累计缩量、黄线=10 点均线 */
+      ...(_volCmpOn ? [
+        { name: "累计放量", type: "line", xAxisIndex: 1, yAxisIndex: 4, data: _volCumPos,
+          symbol: "none", smooth: true, connectNulls: false, z: 0,
+          lineStyle: { width: 0.6, color: "rgba(248,81,73,.6)" },
+          areaStyle: { color: "rgba(248,81,73,.35)", origin: 0 } },
+        { name: "累计缩量", type: "line", xAxisIndex: 1, yAxisIndex: 4, data: _volCumNeg,
+          symbol: "none", smooth: true, connectNulls: false, z: 0,
+          lineStyle: { width: 0.6, color: "rgba(63,185,80,.6)" },
+          areaStyle: { color: "rgba(63,185,80,.35)", origin: 0 } },
+        { name: "量差均线", type: "line", xAxisIndex: 1, yAxisIndex: 4, data: _volCumMa,
+          symbol: "none", connectNulls: false, z: 6,
+          lineStyle: { width: 1.2, color: "#f0b90b" } },
+      ] : []),
       // MACD：柱 + DIF/DEA 两条线 + 零轴；翻红首根加白边亮红柱 + 三角 + 竖向虚线（见上）
       { name: "MACD柱", type: "bar", xAxisIndex: 2, yAxisIndex: 2, data: _histSer,
         barMaxWidth: 8, z: 1,
@@ -15875,6 +16503,7 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
                      position: "insideEndTop" },
             lineStyle: { color: "#ff6b62", type: "dashed", width: 1, opacity: .85 },
           }] : []),
+          ..._daySep,
         ] } },
       { name: "DIF", type: "line", xAxisIndex: 2, yAxisIndex: 2, data: _macd.dif || [],
         symbol: "none", connectNulls: true, z: 3,
@@ -15893,6 +16522,7 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
               lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed", width: 1 } },
             { yAxis: 70, label: { show: false },
               lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed", width: 1 } },
+            ..._daySep,
           ] } },
         { name: "RSI12", type: "line", xAxisIndex: 3, yAxisIndex: 3, data: s.rsi.rsi12 || [],
           symbol: "none", connectNulls: true, z: 3,
@@ -15966,6 +16596,15 @@ async function mwTick() {
           html += ` <span class="${bias5Color(_b5)}" style="font-size:10px;opacity:.9"`
             + ` title="${esc(bias5Tip(_b5))}">乖离${_b5 >= 0 ? "+" : ""}${_b5.toFixed(1)}%</span>`;
         }
+        // 日线 MA5「走平上翘」（2026-11-26 owner）：走平上翘=金色▲，仅走平=灰字
+        const _mf = it.ma5flag || {};
+        if (_mf.state === "flat_turn_up") {
+          html += ` <span style="color:#f0b90b;font-size:10px;font-weight:700"`
+            + ` title="5日线走平上翘：MA5 ${_mf.ma5}，今日斜率 +${_mf.slope1}%/日；前4日 MA5 振幅 ${_mf.flat_range}%（≤2%）">5日线走平上翘▲</span>`;
+        } else if (_mf.state === "flat") {
+          html += ` <span class="cell-dim" style="font-size:10px"`
+            + ` title="5日线走平：前4日 MA5 振幅 ${_mf.flat_range}%（≤2%），今日斜率 ${_mf.slope1}%/日">5日线走平</span>`;
+        }
         px.innerHTML = html;
       }
       if (it.unchanged) return;                 // 后端帧没变（瘦帧）：价格已更新，图不动
@@ -15985,10 +16624,26 @@ async function mwTick() {
       }
       try {
         // 把该格当前的缩放窗口喂回去 —— `notMerge:true` 会把上一步的 dataZoom 一起清掉
-        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code),
+        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code,
+                                it.ma5flag),
                         { notMerge: true });
         mwSig[i] = _sig;
-      } catch (e) { /* 单格失败不影响别的格 */ }
+      } catch (e) {
+        // 2026-11-25：不再静默 —— 先把错误摆出来，再**关掉量差指标重画一次**保证有图
+        try {
+          console.error("[多窗口] 渲染失败:", e);
+          try { _diagReport("mw_render_error", 0,
+            String(e && e.message ? e.message : e).slice(0, 160)); } catch (_) { }
+          _paToast("多窗口渲染失败：" + (e && e.message ? e.message : e), "err");
+          window._mwVolCmpFallback = true;
+          inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code,
+                                  it.ma5flag),
+                          { notMerge: true });
+          mwSig[i] = _sig;
+        } catch (e2) {
+          try { _paToast("多窗口渲染失败（回退后仍失败）：" + (e2 && e2.message ? e2.message : e2), "err"); } catch (_) { }
+        }
+      }
     });
   } catch (e) { /* 静默：下一跳重试 */ }
   finally { mwBusy = false; }

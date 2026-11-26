@@ -267,6 +267,9 @@ class _RT:
                        "osc_order_poll_rounds": 0, "osc_order_poll_sleep_sec": 0.0,
                        "osc_backfill_enabled": True, "osc_hold_days": 5,
                        "osc_stop_pct": 0.05, "osc_stop_deep_dev20": -0.07,
+                       # 本文件 fixture open=11.0/prev_close=10.0（gap=+10%），专测分板闸
+                       # 与㊸总闸，与 pack_v2/G8 无关——显式关总开关防 G8 误拦
+                       "osc_pack_v2": "0",
                        "osc_pop_target_pct": 0.03}
 
     def param(self, key, default=None):
@@ -335,7 +338,7 @@ def _first_buy_result(day, spares):
 
 
 class TestFrozenBoardBuyGate(unittest.TestCase):
-    def _first_buy(self, day, affected, regimes, contexts=None, last="range"):
+    def _first_buy(self, day, affected, regimes, contexts=None, last="range", extra_params=None):
         hooks.reset_day(day)
         codes = list(affected) + list(_NORMAL)
         original = _candidate_map(codes)
@@ -343,6 +346,8 @@ class TestFrozenBoardBuyGate(unittest.TestCase):
         now = dt.datetime.fromisoformat(day + "T10:00:00")
         with tempfile.TemporaryDirectory() as td:
             rt = _RT(td, now)
+            if extra_params:
+                rt.params.update(extra_params)
             n = hooks.try_buy(rt, _context(day, regimes, contexts, last), now)
             fills = json.loads(Path(td, "fills_%s.json" % day).read_text(encoding="utf-8"))
             return n, rt, fills, original
@@ -436,13 +441,37 @@ class TestFrozenBoardBuyGate(unittest.TestCase):
                 self.assertIn(label, errors)
 
     def test_1106_all_board_uni_down_zero_buy_and_zero_stock_market_call(self):
+        """旧熔断路径（osc_regime_gate_enabled=1）：大盘 uni_down 零 BUY 且不读行情。"""
         regimes = {s: "uni_down" for s in _ALL_SYMBOLS}
         n, rt, fills, _ = self._first_buy(
-            "2026-11-06", ("300085", "688652"), regimes, last="uni_down")
+            "2026-11-06", ("300085", "688652"), regimes, last="uni_down",
+            extra_params={"osc_regime_gate_enabled": "1"})
         self.assertEqual(n, 0)
         self.assertEqual(rt.gw.placed, [])
         self.assertEqual(rt.sdk_calls, [])
         self.assertEqual(fills["summary"]["skip_reason"], "index_regime_uni_down")
+
+    def test_default_gate_removed_market_uni_down_buys_proceed(self):
+        """候选㊸默认：大盘 uni_down 但总闸已撤、各板 range ⇒ 照常买（只留 regime_note）。"""
+        n, rt, fills, _ = self._first_buy(
+            "2026-11-06", ("300085", "688652"), {}, last="uni_down")
+        placed = [c for c, side, qty, px in rt.gw.placed if side == "BUY"]
+        self.assertEqual(n, 1, "㊸ 撤闸后大盘 uni_down 不再零 BUY")
+        self.assertEqual(len(placed), 1)
+        self.assertFalse(any(a.get("reason") == "index_regime_uni_down" for a in rt.audits))
+        self.assertTrue(any(a.get("event") == "osc_regime_note" for a in rt.audits))
+
+    def test_default_gate_removed_board_uni_down_still_blocks(self):
+        """㊸边界（owner 知情）：分板闸不在撤除范围——全板 uni_down 仍零 BUY，
+        但此时会先读行情前被分板闸拦下（skip_reason=board_regime_uni_down）。"""
+        regimes = {s: "uni_down" for s in _ALL_SYMBOLS}
+        n, rt, fills, _ = self._first_buy(
+            "2026-11-06", ("300085", "688652"), regimes, last="uni_down")
+        self.assertEqual(n, 0, "分板闸独立于㊸：全板 uni_down 仍拦截")
+        self.assertEqual(rt.gw.placed, [])
+        self.assertEqual(fills["summary"]["skip_reason"], "board_regime_uni_down")
+        self.assertTrue(any(a.get("event") == "osc_regime_note" for a in rt.audits),
+                        "总闸撤除的留痕与分板拦截应同时可见")
 
     def _run_backfill(self, day, affected, regimes, round_idx):
         hooks.reset_day(day)

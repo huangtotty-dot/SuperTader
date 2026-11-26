@@ -72,7 +72,7 @@ BOOK_DIR_DEFAULT = os.path.join(_ROOT, "t_io", "state", "weak_strong_book")
 DEFAULTS = {
     "top_n": 4,                     # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
     "single_budget": 100000.0,      # 单票名义上限（元，对齐 OGR 10 万/腿）
-    "daily_budget": 200000.0,       # 每日名义总额度（元，首轮+补单共享）
+    "daily_budget": 400000.0,       # 每日名义总额度（元，首轮+补单共享；2026-11-26 B40 owner 直投）
     "cash_headroom": 0.95,          # 单票占用现金封顶比例
     "min_lot": 100,
     "order_poll_rounds": 3,
@@ -81,8 +81,60 @@ DEFAULTS = {
     "stop_pct": 0.05,               # 卖侧：深超跌 close 止损线（−5%）
     "stop_deep_dev20": -0.07,       # 卖侧：dev20 < 此值才挂止损（SL5只深，owner 拍板）
     "pop_target_pct": 0.03,         # 卖侧：次日早盘冲高卖目标（+3%，exp11 说可 1~10% 调）
+    "gap_cap": 0.08,                # 买侧：开盘跳空上限（G8，2026-11-26 owner 直投；None=关闭）
+    "tcombo": True,                 # 卖侧：温度分层出场（弱势 pop+2%/3日/SL-3%普适，强势 pop+5%）
     "sell_enabled": True,           # 卖侧总闸（只动掘金模拟盘，随 paper_enabled 一起开关）
 }
+
+# ════════════════ Tcombo 温度分层出场（2026-11-26 离线验证后 owner 直投生产） ════════════════
+# 依据：scripts/experiment/h1h2_deep_timing.py（2,553+ 信号资金队列，33 万本金档）——
+#   弱势段「快进快出」+ 强势段「让利奔跑」组合 PnL +5.6%、回撤 −0.24pp、到期亏占比 −3.9pp。
+_TEMP_FP = os.path.join(_ROOT, "t_io", "index_regime", "composite_temp.json")
+_TEMP_CACHE: dict = {"date": None, "value": None}
+
+
+def _latest_sent_ma():
+    """最新综合情绪温度（投机 sent_ma，T-1 收盘口径）—— Tcombo 分层 + 账本温度标签。
+
+    fail-open：文件缺失/损坏 ⇒ None ⇒ 相关持仓走 mid 档（= 现行规则），绝不阻断交易链。
+    进程内按日缓存（composite_temp 为 EOD 产物，盘内不会变）。
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _TEMP_CACHE["date"] == today:
+        return _TEMP_CACHE["value"]
+    val = None
+    try:
+        raw = json.load(open(_TEMP_FP, encoding="utf-8"))
+        if raw:
+            v = raw[sorted(raw.keys())[-1]].get("sent_ma")
+            val = float(v) if v is not None else None
+    except Exception:
+        _swallow("exec.oversold_gap_confirm.executor._latest_sent_ma")
+        val = None
+    _TEMP_CACHE["date"] = today
+    _TEMP_CACHE["value"] = val
+    return val
+
+
+def layered_exit_params(temp):
+    """Tcombo 温度分层 → (pop_target, hold_days, stop_pct, stop_universal)。
+
+      · temp ≤ 40（弱势）：反弹短命快进快出 —— pop+2% / 3 日到期 / −3% **普适**止损
+      · temp > 60（强势）：余温长让利奔跑   —— pop+5% / 5 日 / SL5 只深（现行）
+      · 其余 / None      ：现行规则        —— pop+3% / 5 日 / SL5 只深
+    """
+    if temp is not None:
+        try:
+            t = float(temp)
+        except (TypeError, ValueError):
+            _swallow("exec.oversold_gap_confirm.executor.layered_exit_params")
+        else:
+            if t <= 40:
+                return 0.02, 3, 0.03, True
+            if t > 60:
+                return 0.05, 5, 0.05, False
+    return (DEFAULTS["pop_target_pct"], DEFAULTS["hold_days"],
+            DEFAULTS["stop_pct"], False)
 
 
 def code_of(symbol) -> str:
@@ -118,16 +170,19 @@ def evaluate_picks(prev_close: dict, ma20: dict, bars: dict,
 
 def evaluate_full(prev_close: dict, ma20: dict, bars: dict,
                   board: dict | None = None, allowed_boards=None,
-                  top_n: int = DEFAULTS["top_n"]) -> dict:
+                  top_n: int = DEFAULTS["top_n"],
+                  gap_cap: float | None = None) -> dict:
     """决策核入口（**整字典**）：返回 `{pool_n, signals, picks, rejected_board, n_tradable}`。
 
     与 `evaluate_picks` 的差别只有一处：**保留 `signals`（全排序候选）**。
     买不进替补机制靠它取"下一名候选"——`evaluate_picks` 把 signals 丢了，
     所以顺移此前无米下锅（2026-10-14）。
+    `gap_cap`（G8，2026-11-26）：开盘跳空上限，排序阶段剔除并顺移（decision 内实现）。
     """
     from . import decision as _dec
     return _dec.evaluate(prev_close, ma20, bars, board=board,
-                         allowed_boards=allowed_boards, top_n=top_n)
+                         allowed_boards=allowed_boards, top_n=top_n,
+                         gap_cap=gap_cap)
 
 
 # ════════════════════════ 计划构建（纯函数，可单测） ════════════════════════
@@ -693,6 +748,7 @@ def register_buys_to_book(book_dir: str, date: str, buys_out: list, picks: list,
     partial 仅为 filled_qty；后续终态只能回滚该数量中的未成交余量。
     """
     board_map = {p["code"]: p.get("board", "") for p in (picks or [])}
+    _temp = _latest_sent_ma()     # Tcombo 出场分层标签（fail-open None ⇒ mid 档）
     book = load_book(book_dir)
     for r in (buys_out or []):
         if r.get("status") in _TERMINAL_BAD:
@@ -728,6 +784,7 @@ def register_buys_to_book(book_dir: str, date: str, buys_out: list, picks: list,
             "entry_date": str(date), "entry_price": round(px, 4), "qty": qty,
             "dev20": (round(dev20, 6) if dev20 is not None else None),
             "gap": r.get("gap"), "board": board_map.get(code, ""),
+            "temp": _temp,          # Tcombo：入场时投机温度（T-1 sent_ma，出场分层依据）
             "days_held": 0, "last_check_date": None,
         }
     save_book(book, book_dir)
@@ -739,15 +796,19 @@ def register_buys_to_book(book_dir: str, date: str, buys_out: list, picks: list,
 def build_sell_plan(book_open: dict, prices: dict, today: str,
                     hold_days: int = DEFAULTS["hold_days"],
                     stop_pct: float = DEFAULTS["stop_pct"],
-                    deep_dev20: float = DEFAULTS["stop_deep_dev20"]) -> list:
+                    deep_dev20: float = DEFAULTS["stop_deep_dev20"],
+                    tcombo: bool = False) -> list:
     """由持仓账本 + 现价 → 卖出决策（SL5只深止损 + 到期平仓）。纯函数，可单测。
 
     规则（exp19 定稿，owner 2026-10-10 拍板 SL5只深）：
       · 深超跌(dev20 < deep_dev20) 持仓：任一交易日 close < entry_price×(1−stop_pct) → 止损。
       · 浅/中超跌：不挂止损，只按持有到期。
       · 全部：持有满 hold_days 个交易日 → 到期平仓（死拿5天 horizon，exp6/7）。
+    Tcombo（2026-11-26 owner 直投）：tcombo=True 且持仓带 temp 标签时，
+      弱势段（temp≤40）入场的票改走「3 日到期 + −3% 普适止损」（deep 视为 True），
+      强势/mid 档维持原规则（强势段的 pop+5% 在早盘冲高卖里实现，不在此）。
     返回 [{code, entry_date, entry_price, dev20, days_held, deep, price,
-          stop_hit, expired, reason}]；reason∈{t1_same_day,no_price,hold,
+          stop_hit, expired, reason, exit_leg}]；reason∈{t1_same_day,no_price,hold,
           sl5_deep,horizon_expired}，hold 表示不卖出。
     """
     plan = []
@@ -759,17 +820,23 @@ def build_sell_plan(book_open: dict, prices: dict, today: str,
         days_held = int(rec.get("days_held") or 0)
         deep = dev20 is not None and float(dev20) < float(deep_dev20)
         cur = float(prices.get(code) or 0)
+        hd, sp, deep_eff, leg = int(hold_days), float(stop_pct), deep, "base"
+        if tcombo and rec.get("temp") is not None:
+            _pop, hd, sp, uni = layered_exit_params(rec.get("temp"))
+            if uni:                       # 弱势段：普适止损（deep 视为 True）
+                deep_eff = True
+                leg = "weak_fast"
         row = {"code": code, "entry_date": entry_date, "entry_price": entry_price,
                "dev20": dev20, "days_held": days_held, "deep": deep, "price": cur,
-               "stop_hit": False, "expired": False, "reason": "hold"}
+               "stop_hit": False, "expired": False, "reason": "hold", "exit_leg": leg}
         if entry_date == today:
             row["reason"] = "t1_same_day"
         elif not (cur > 0 and entry_price > 0):
             row["reason"] = "no_price"
-        elif days_held >= int(hold_days):
+        elif days_held >= hd:
             row["expired"] = True
             row["reason"] = "horizon_expired"
-        elif deep and cur < entry_price * (1 - float(stop_pct)):
+        elif deep_eff and cur < entry_price * (1 - sp):
             row["stop_hit"] = True
             row["reason"] = "sl5_deep"
         plan.append(row)
@@ -994,7 +1061,8 @@ def run_sell_exec(gateway, date: str, prices: dict,
     sell_plan = build_sell_plan(open_pos, prices, str(date),
                                 hold_days=int(cfg["hold_days"]),
                                 stop_pct=float(cfg["stop_pct"]),
-                                deep_dev20=float(cfg["stop_deep_dev20"]))
+                                deep_dev20=float(cfg["stop_deep_dev20"]),
+                                tcombo=bool(cfg.get("tcombo", DEFAULTS["tcombo"])))
     log(f"[WS] {date} 卖侧检查 账本={len(open_pos)}只 现价={len(prices)} "
         f"决策={[(s['code'], s['reason']) for s in sell_plan]}")
 
@@ -1009,12 +1077,16 @@ def run_sell_exec(gateway, date: str, prices: dict,
 # ════════════════════════ 卖侧 · 次日早盘冲高卖 ════════════════════════
 
 def build_morning_sell_plan(book_open: dict, morning_highs: dict, today: str,
-                            target_pct: float = DEFAULTS["pop_target_pct"]) -> list:
+                            target_pct: float = DEFAULTS["pop_target_pct"],
+                            tcombo: bool = False) -> list:
     """D+1 早盘冲高卖决策（纯函数，可单测）。
 
     只对「次日」持仓判定：entry_date != today 且 days_held == 0（= 第一个可卖早盘；
     days_held 由 14:50 止损检查每天推进一次，早盘时仍是 0）。早盘最高 >= entry_price×(1+target)
     → 冲高卖。浅/中/深都适用（这是止盈不是止损）。返回决策列表。
+    Tcombo（2026-11-26 owner 直投）：tcombo=True 且持仓带 temp 标签时按
+    `layered_exit_params` 取逐票目标——弱势档（temp≤40）pop+2% 快跑、
+    强势档（temp>60）pop+5% 让利、mid/未知档维持 target_pct。
     """
     plan = []
     for code, rec in sorted((book_open or {}).items()):
@@ -1023,16 +1095,19 @@ def build_morning_sell_plan(book_open: dict, morning_highs: dict, today: str,
         entry_price = float(rec.get("entry_price") or 0)
         days_held = int(rec.get("days_held") or 0)
         hi = float(morning_highs.get(code) or 0)
+        tp = float(target_pct)
+        if tcombo and rec.get("temp") is not None:
+            tp = float(layered_exit_params(rec.get("temp"))[0])
         row = {"code": code, "entry_date": entry_date, "entry_price": entry_price,
                "days_held": days_held, "price": hi, "dev20": rec.get("dev20"),
-               "reason": "hold"}
+               "pop_target": tp, "reason": "hold"}
         if entry_date == today:
             row["reason"] = "t1_same_day"
         elif days_held != 0:
             row["reason"] = "not_next_day"
         elif not (hi > 0 and entry_price > 0):
             row["reason"] = "no_price"
-        elif hi >= entry_price * (1 + float(target_pct)):
+        elif hi >= entry_price * (1 + tp):
             row["reason"] = "pop_sell"
         plan.append(row)
     return plan
@@ -1056,7 +1131,8 @@ def run_morning_sell_exec(gateway, date: str, morning_highs: dict,
     # 早盘卖**不**推进 days_held（推进留给 14:50；此处只读 days_held==0 判定次日）
 
     plan = build_morning_sell_plan(open_pos, morning_highs, str(date),
-                                   target_pct=float(cfg["pop_target_pct"]))
+                                   target_pct=float(cfg["pop_target_pct"]),
+                                   tcombo=bool(cfg.get("tcombo", DEFAULTS["tcombo"])))
     log(f"[WS] {date} 早盘冲高检查 账本={len(open_pos)}只 "
         f"决策={[(s['code'], s['reason']) for s in plan]}")
 
@@ -1193,7 +1269,8 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
     mode = "dry" if dry_run else "live"
 
     _full = evaluate_full(prev_close, ma20, bars, board=board,
-                          allowed_boards=allowed_boards, top_n=top_n)
+                          allowed_boards=allowed_boards, top_n=top_n,
+                          gap_cap=cfg.get("gap_cap"))
     # 判定过程落控制台/策略日志（2026-10-15，纯展示；两条分支共用同一处调用）
     _log_decision(log, _full, names=names, boards=board)
     picks = list(_full["picks"])

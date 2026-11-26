@@ -92,6 +92,11 @@ _TTL_REGISTRY = [
          exempt=("P0-2 起语义为：fresh 直返；stale **同步**走 QuoteBus（共享档 max_age=8s，"
                  "bus 命中本征毫秒级），异常回旧值不抛。TTL 不再承担「省网络」职责"
                  "（stale 拍经 bus 同步取数，无相位病），登记豁免。")),
+    dict(endpoint="load_intraday_multi", ttl_name="_INTRADAY_MULTI_MIN_REFRESH",
+         ttl_re=r"_INTRADAY_MULTI_MIN_REFRESH\s*=\s*(\d+(?:\.\d+)?)",
+         poll_re=r"INTRADAY_POLL_MS\s*=\s*(\d+)",
+         exempt=None),                       # 3s ≤ 0.8×5s：拍内去重；历史 600s +
+                                             # 今日 tail 都在后台单飞，js_api 只读内存
     dict(endpoint="load_index_leaders", ttl_name="_IDX_LEADERS_TTL",
          ttl_re=r"_IDX_LEADERS_TTL\s*=\s*(\d+(?:\.\d+)?)",
          poll_re=r"_IDX_LEADERS_TTL_MS\s*=\s*(\d+)",
@@ -237,6 +242,11 @@ _TENCENT_FREEZE = {
 #   **次数钉**专门对付「同文件内多行同文本」的情形（equity_daily.py 两条各 2 处）——
 #   只按 (rel, 片段) 判存在性会漏掉同文本行的增删，次数不一致即失败。
 _TENCENT_EXEMPT_OUTER = {
+    ("core/intraday_multi.py", "df = TencentProvider().index_minute(code)"): (
+        "registered",
+        "多日分时（2026-11-25 owner）：腾讯 index_minute 拉**当日分时序列**（累计量差分），"
+        "非 QuoteBus 实时快照共享档语义；与 index_regime_intraday 同一豁免口径",
+        1),
     ("analysis/index_regime_intraday.py", "df = TencentProvider().index_minute(code)"): (
         "registered",
         "盘中指数背离/共振分析链独立取数：index_minute 拉当日分时序列做规整，"

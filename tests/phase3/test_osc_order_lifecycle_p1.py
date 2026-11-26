@@ -337,7 +337,10 @@ class _BudgetGateway:
 
 class TestDailyBudgetTwoHundredK(unittest.TestCase):
     def test_default_is_200k_and_first_plus_backfill_active_notional_capped(self):
-        self.assertEqual(executor.DEFAULTS["daily_budget"], 200000.0)
+        # 2026-11-26 B40（owner 直投）：生产默认日预算 20万→40万。
+        # 本用例的**场景数学**（首轮+补单冻结口径）与具体额度无关，
+        # 显式传 200000.0 保持原场景，默认钉子更新为新默认 400000.0。
+        self.assertEqual(executor.DEFAULTS["daily_budget"], 400000.0)
         codes = ["600001", "600002", "600003", "600004"]
         prev_close = {code: 9.0 for code in codes}
         ma20 = {code: 10.0 for code in codes}
@@ -347,6 +350,8 @@ class TestDailyBudgetTwoHundredK(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fills = executor.run_buy_exec(
                 gateway, DATE, prev_close, ma20, bars, book_dir=directory,
+                params={"daily_budget": 200000.0,
+                        "gap_cap": None},   # 本场景 fixture gap=+11.1%，与 G8 无关，显式关闭
                 dry_run=True, sleep_fn=lambda seconds: None, log=lambda *a: None)
             self.assertEqual(fills["params"]["daily_budget"], 200000.0)
             self.assertEqual(fills["summary"]["notional_placed"], 199000.0)
@@ -361,7 +366,7 @@ class TestDailyBudgetTwoHundredK(unittest.TestCase):
                 [{"code": "600005", "gap": 0.04, "price": 10.0}],
                 {"600005": 9.0},
                 {"600005": {"price": 10.0, "vwap": 9.9, "ask_v": 100}},
-                positions={}, params={"daily_budget": executor.DEFAULTS["daily_budget"],
+                positions={}, params={"daily_budget": 200000.0,
                                       "single_budget": 100000.0,
                                       "order_poll_rounds": 1,
                                       "order_poll_sleep_sec": 0.0},

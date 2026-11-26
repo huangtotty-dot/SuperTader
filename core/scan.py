@@ -45,7 +45,9 @@ from core.eod_review import (
     _maybe_run_daily_review, _maybe_run_freshness_patrol,
     _maybe_run_retention_patrol,
 )
-from core.eod_tasks import _maybe_run_sentiment_eod, _maybe_run_tdx_calibrate
+from core.eod_tasks import (
+    _maybe_run_sentiment_eod, _maybe_run_tdx_calibrate, _maybe_run_today_bar_repair,
+)
 from core.position_scan import _maybe_run_position_builder, _maybe_run_position_builder_intraday
 from core.ma_alerts import (
     _maybe_check_trend30_alert, _maybe_run_ma_break_alert, _maybe_run_ma_reclaim_alert,
@@ -94,6 +96,8 @@ def scan_once(engine):
             _maybe_run_daily_review(now)               # P0-7(2026-09-01): 15:10 后自动每日复盘（子进程隔离）
         with _ScanStage("⑥b诊断指标落盘"):
             _maybe_flush_diag_metrics(now)             # 2026-11-23: 15:10 后本进程吞点计数 → metrics.jsonl
+        with _ScanStage("⑥c今日行修复"):
+            _maybe_run_today_bar_repair(now)           # 2026-11-26(㊴): 15:12 后修「末行==今天」快照污染（原 15:40 tdx 钩内保留兜底）
         with _ScanStage("⑦K线预下载"):
             _maybe_run_chart_prefetch(now)             # 2026-10-04: 15:10 后 K线缓存预下载（与 gui 幂等）
         with _ScanStage("⑧新鲜度巡检"):

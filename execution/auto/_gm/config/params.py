@@ -250,6 +250,13 @@ PARAMS = {
     #    8 点稳健性网格全过，doc/solutions/2026-10-16_替补机制B方案回测验证.md）⇒ 默认开启。
     #    开关保留：翻 False 即回到"不撤不补"现状（行为与上线前逐位一致，单测钉住）。
     # ⚠️ 翻此键需重启策略进程（.gszq 壳一次性加载 PARAMS）。
+    # ── 大盘 uni_down 买侧熔断（候选㊸，owner 2026-11-26 拍板**撤除**）─────────────
+    # 证据 doc/solutions/2026-11-26_regime闸门AB对照.md：被闸 138 条信号费后均值
+    # +1.32%/胜率 66.7%，71 天少赚 11.8 万、风险调整后也是无闸优 ⇒ 默认**关闸**。
+    # 弱势日风控由 Tcombo（temp≤40：pop+2%/3日/-3%普适止损）独立兜底。
+    # 回滚 = 置 True（或掘金参数 osc_regime_gate_enabled=1）：恢复「uni_down 零 BUY」。
+    # 注意边界：分板闸（个股所属板块指数 uni_down 拦截）不在本次撤除范围内。
+    "osc_regime_gate_enabled": False,  # 大盘 uni_down 总闸（㊸ 拍板撤除，默认关）
     "osc_backfill_enabled": True,    # 总闸（owner 2026-10-16 拍板上线）
     "osc_backfill_rounds": 2,        # 最多补 N 轮
     "osc_backfill_first_hhmm": 1008,  # 首轮补单时点（10:08）

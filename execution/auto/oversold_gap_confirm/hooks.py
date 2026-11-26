@@ -216,6 +216,14 @@ def load_day_state(rt, date) -> bool:
         return False
 
 
+def _param_flag(rt, key, default=False) -> bool:
+    """布尔参数健壮解析：PARAMS 给 bool、掘金终端参数给字符串，两种都认。"""
+    v = rt.param(key, default)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "yes", "on")
+    return bool(v)
+
+
 def enabled(rt) -> bool:
     return bool(rt.param("osc_enabled", False))
 
@@ -396,11 +404,13 @@ def bars_from_10am_df(df, codes, now):
                 close = float(_r.get("close") or 0)
                 amount = float(_r.get("amount") or 0)
                 volume = float(_r.get("volume") or 0)
+                open_ = float(_r.get("open") or 0)     # G8：开盘跳空腹径（缺 open ⇒ 0 ⇒ decision 退化用 close-gap）
             except Exception:
                 _swallow("exec.oversold_gap_confirm.hooks.bars_from_10am_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
                 continue
             if low > 0 and close > 0:
-                out[c] = {"low": low, "close": close, "amount": amount, "volume": volume}
+                out[c] = {"low": low, "close": close, "amount": amount, "volume": volume,
+                          "open": open_}
     except Exception:
         _swallow("exec.oversold_gap_confirm.hooks.bars_from_10am_df")  # 原静默吞点：计数化（P1-6 三批），行为等价
     return out
@@ -560,26 +570,39 @@ def try_buy(rt, context, now) -> int:
         _swallow("exec.oversold_gap_confirm.hooks.try_buy")  # 原静默吞点：计数化（P1-6 三批），行为等价
     _cand = dict(_STATE["candidates"])
     _skip_reason = None
-    # 大盘单边下跌熔断：即使候选合法也零 BUY；必须在 10:00 个股行情读取之前判定。
-    if getattr(context, "last_index_regime", None) == "uni_down":
-        _skip_reason = "index_regime_uni_down"
-        rt.log("[OSC] [X] 大盘 regime=uni_down -> 今日零 BUY（不读取 10:00 个股行情）")
-        rt.audit({"event": "osc_skip", "reason": _skip_reason,
-                  "regime": "uni_down", "time": str(now)})
-    elif not _cand:
-        _skip_reason = "no_candidates"
-        rt.audit({"event": "osc_skip", "reason": _skip_reason, "time": str(now)})
-    else:
-        # W45⑳：首发候选拆分前逐板过滤；预筛 candidates 本身保持不变。
-        _gate = _board_buy_candidates(context, sorted(_cand), now)
-        _audit_board_buy_filter(rt, context, now, "initial", _gate)
-        _allowed = set(_gate.get("allowed") or [])
-        _cand = {c: v for c, v in _cand.items() if c in _allowed}
+    # 候选㊸（owner 2026-11-26 拍板）：撤大盘 uni_down 总闸。证据 doc/solutions/
+    # 2026-11-26_regime闸门AB对照.md——被闸信号费后均值 +1.32%/胜率 66.7%，
+    # 闸门 71 天少赚 11.8 万、风险调整后也是无闸优；弱势日风控由 Tcombo
+    # （temp≤40：pop+2%/3日/-3%普适止损）独立兜底。
+    # 回滚：掘金参数 osc_regime_gate_enabled=1 恢复「uni_down 零 BUY」旧熔断。
+    # 注意：分板闸（_board_buy_candidates）不在本次范围内，uni_down 日沪市主板
+    # 候选仍可能被 board_regime_uni_down 拦截，复盘对照 skip_reason 可见。
+    _regime = getattr(context, "last_index_regime", None)
+    if _regime == "uni_down":
+        if _param_flag(rt, "osc_regime_gate_enabled", False):
+            _skip_reason = "index_regime_uni_down"
+            rt.log("[OSC] [X] 大盘 regime=uni_down -> 今日零 BUY（不读取 10:00 个股行情）")
+            rt.audit({"event": "osc_skip", "reason": _skip_reason,
+                      "regime": "uni_down", "time": str(now)})
+        else:
+            rt.log("[OSC] [i] 大盘 regime=uni_down：总闸已撤（㊸）-> 买侧照常，风控=Tcombo")
+            rt.audit({"event": "osc_regime_note", "regime": "uni_down",
+                      "gate": "removed_cand43", "time": str(now)})
+    if _skip_reason is None:
         if not _cand:
-            _skip_reason = ("board_regime_unavailable" if _gate.get("unavailable")
-                            else "board_regime_uni_down")
-            rt.log(f"[OSC] [X] 分板买闸后无合法候选 -> 今日零 BUY（{_skip_reason}）")
+            _skip_reason = "no_candidates"
             rt.audit({"event": "osc_skip", "reason": _skip_reason, "time": str(now)})
+        else:
+            # W45⑳：首发候选拆分前逐板过滤；预筛 candidates 本身保持不变。
+            _gate = _board_buy_candidates(context, sorted(_cand), now)
+            _audit_board_buy_filter(rt, context, now, "initial", _gate)
+            _allowed = set(_gate.get("allowed") or [])
+            _cand = {c: v for c, v in _cand.items() if c in _allowed}
+            if not _cand:
+                _skip_reason = ("board_regime_unavailable" if _gate.get("unavailable")
+                                else "board_regime_uni_down")
+                rt.log(f"[OSC] [X] 分板买闸后无合法候选 -> 今日零 BUY（{_skip_reason}）")
+                rt.audit({"event": "osc_skip", "reason": _skip_reason, "time": str(now)})
     if _skip_reason:
         try:
             _cash0 = float(rt.gateway(context).get_cash() or 0)
@@ -614,11 +637,16 @@ def try_buy(rt, context, now) -> int:
         rt.audit({"event": "osc_skip", "reason": "no_bars", "time": str(now)})
         return 0
     _book = rt.book_dir
+    # pack_v2（2026-11-26 owner 拍板直投）：B40 日预算 + G8 跳空上限 + Tcombo 温度分层出场。
+    # 回滚 = 掘金参数 osc_pack_v2 设 "0"（默认值随之退回旧口径），无需改代码。
+    _v2 = str(rt.param("osc_pack_v2", "1")).strip() == "1"
     _params = {
         "top_n": int(rt.param("osc_top_n", 4)),
         "single_budget": float(rt.param("osc_single_budget", 100000.0)),
-        "daily_budget": float(rt.param("osc_daily_budget", 200000.0)),
+        "daily_budget": float(rt.param("osc_daily_budget", 400000.0 if _v2 else 200000.0)),
         "cash_headroom": float(rt.param("osc_cash_headroom", 0.95)),
+        "gap_cap": (0.08 if _v2 else None),
+        "tcombo": _v2,
         "order_poll_rounds": int(rt.param("osc_order_poll_rounds", 3)),
         "order_poll_sleep_sec": float(rt.param("osc_order_poll_sleep_sec", 2.0)),
     }
@@ -820,8 +848,10 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
             return 0
     except Exception:
         _swallow("exec.oversold_gap_confirm.hooks.try_backfill")  # 原静默吞点：计数化（P1-6 三批），行为等价
-    # 与首轮同一熔断口径：uni_down 下保留原挂单，不撤单、不取复检行情、不补新仓。
-    if getattr(context, "last_index_regime", None) == "uni_down":
+    # 与首轮同一口径（候选㊸，2026-11-26）：总闸已撤时补单轮照常；
+    # osc_regime_gate_enabled=1 恢复旧熔断：uni_down 下保留原挂单，不撤单、不取复检行情、不补新仓。
+    if (getattr(context, "last_index_regime", None) == "uni_down"
+            and _param_flag(rt, "osc_regime_gate_enabled", False)):
         rt.log("[OSC] [X] 大盘 regime=uni_down -> 补单轮中止（不撤单、不开新仓）")
         rt.audit({"event": "osc_backfill_skip", "reason": "index_regime_uni_down",
                   "regime": "uni_down", "round": int(round_idx), "time": str(now)})
@@ -905,9 +935,10 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
         rt.audit({"event": "osc_backfill_skip", "reason": "no_quotes",
                   "round": int(round_idx), "time": str(now)})
         return 0
+    _v2 = str(rt.param("osc_pack_v2", "1")).strip() == "1"
     _params = {
         "single_budget": float(rt.param("osc_single_budget", 100000.0)),
-        "daily_budget": float(rt.param("osc_daily_budget", 200000.0)),
+        "daily_budget": float(rt.param("osc_daily_budget", 400000.0 if _v2 else 200000.0)),
         "cash_headroom": float(rt.param("osc_cash_headroom", 0.95)),
         "order_poll_rounds": int(rt.param("osc_order_poll_rounds", 3)),
         "order_poll_sleep_sec": float(rt.param("osc_order_poll_sleep_sec", 2.0)),
@@ -1148,6 +1179,8 @@ def try_sell(rt, context, now, today) -> int:
         "hold_days": int(rt.param("osc_hold_days", 5)),
         "stop_pct": float(rt.param("osc_stop_pct", 0.05)),
         "stop_deep_dev20": float(rt.param("osc_stop_deep_dev20", -0.07)),
+        # Tcombo 温度分层出场（弱势 3日/-3%普适止损，随 osc_pack_v2 总开关）
+        "tcombo": str(rt.param("osc_pack_v2", "1")).strip() == "1",
         "order_poll_rounds": int(rt.param("osc_order_poll_rounds", 3)),
         "order_poll_sleep_sec": float(rt.param("osc_order_poll_sleep_sec", 2.0)),
     }
@@ -1350,6 +1383,8 @@ def try_morning_sell(rt, context, now, today) -> int:
     _book = rt.book_dir
     _params = {
         "pop_target_pct": float(rt.param("osc_pop_target_pct", 0.03)),
+        # Tcombo 温度分层出场（弱势 pop+2%/强势 pop+5%，随 osc_pack_v2 总开关）
+        "tcombo": str(rt.param("osc_pack_v2", "1")).strip() == "1",
         "order_poll_rounds": int(rt.param("osc_order_poll_rounds", 3)),
         "order_poll_sleep_sec": float(rt.param("osc_order_poll_sleep_sec", 2.0)),
     }
