@@ -262,11 +262,6 @@ _TENCENT_EXEMPT_OUTER = {
         "gui 端点批量取数：板块轮动全市场快照按 SNAPSHOT_BATCH 分块拉取，"
         "属批量快照非 QuoteBus 共享档轮询消费（P1-4 裁决登记豁免）",
         1),
-    ("scripts/equity_daily.py", "df = TencentProvider().index_daily(idx)"): (
-        "registered",
-        "离线批处理（收盘后子进程）：指数日线强制刷新直取 + 网络失败回退旧缓存重取，"
-        "同函数内 2 处同文本行；历史日线非实时行情（P1-4 裁决登记豁免）",
-        2),
     ("scripts/equity_daily.py", "df = TencentProvider().daily(code)"): (
         "registered",
         "离线批处理（收盘后子进程）：个股日线强制刷新 / _tencent_close 日线回退，"

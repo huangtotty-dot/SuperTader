@@ -5004,6 +5004,26 @@ class Api:
             _cache.update(_new)
             _save_hs_daily_cache(_cache)
         hs = dict(_cache)                            # 用**冻结**值（含本次补上的好值）
+        # 2026-11-27 owner：「三年还是只显示一年」：GM/腾讯日线在离线时只回 ~400 行 ⇒ 前段缺。
+        # 本地指数日线缓存（801 行≈3.2 年，含真实 amount）可直接补齐**缺失日期**；
+        # 已冻结的好值不覆盖（沿用"算对过的不再被降级计算改写"的规则）。
+        try:
+            _deep = {}
+            _rows_sh = (_load_json(_DAILY_KLINE_DIR / "index_sh000001.json", {}) or {}).get("rows") or []
+            _rows_sz = (_load_json(_DAILY_KLINE_DIR / "index_sz399001.json", {}) or {}).get("rows") or []
+            _sh = {str(r.get("date"))[:10]: float(r.get("amount") or 0) for r in _rows_sh}
+            _sz = {str(r.get("date"))[:10]: float(r.get("amount") or 0) for r in _rows_sz}
+            for d0 in set(_sh) & set(_sz):
+                tot = _sh[d0] + _sz[d0]
+                if tot >= 1e10:                      # 真·成交额量级（volume 冒充会被挡掉）
+                    _deep[d0] = tot
+            _add = {d0: v for d0, v in _deep.items() if d0 not in hs}
+            if _add:
+                hs.update(_add)
+                _cache.update(_add)
+                _save_hs_daily_cache(_cache)
+        except Exception:
+            _swallow("gui._turnover_history_impl.local_deep")
         if not hs:
             return {"available": False, "error": "沪深日线为空", "degraded": ["index_daily"]}
 

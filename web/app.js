@@ -2001,6 +2001,22 @@ function _scheduleTurnoverSizeRetry() {
   _turnoverSizeRetry = setTimeout(() => { _turnoverSizeRetry = null; drawTurnoverHist(); }, 1500);
 }
 
+/* 近 N 日成交额窗口（2026-11-27 owner：「要支持显示近三年」）：250≈1年 / 750≈3年 */
+// 成交额警戒线（2026-11-27 研究结论，见 doc：单日>2.8万亿 H20 −2.11%/胜率27% t−5.9；
+// 用 5 日均额更平滑：E5>2.6万亿 H20 −1.47%/胜率35% t−5.0）⇒ 黄线画在 2.6 万亿。
+const TURNOVER_WARN_YI = 26000;
+let turnoverHistDays = 750;
+try {
+  const v = Number(localStorage.getItem("turnoverHistDays"));
+  if (v === 250 || v === 750) turnoverHistDays = v;
+} catch (e) { /* 忽略 */ }
+
+function setTurnoverHistDays(d) {
+  turnoverHistDays = (d === 250) ? 250 : 750;
+  try { localStorage.setItem("turnoverHistDays", String(turnoverHistDays)); } catch (e) { }
+  drawTurnoverHist();
+}
+
 async function drawTurnoverHist() {
   const box = document.getElementById("turnoverHistChart");
   if (!box) return;
@@ -2023,7 +2039,7 @@ async function drawTurnoverHist() {
     // ⚠️ 后端**北交所腿只够 188 个交易日**（新浪 30min datalen 硬上限 1500 根），
     //    更早的日子 amount 只有沪深两腿、少算约 120 亿/日（~0.6%）⇒ 由后端逐日标
     //    `bse_missing`，图上必须**看得出来**（图例下方那条提示），不许静默。
-    d = await apiCall("load_turnover_history", 250);
+    d = await apiCall("load_turnover_history", turnoverHistDays);
   } catch (e) {
     // 最常见：后端进程还是旧代码（没有 load_turnover_history 这个接口）⇒ 必须重启 gui.py
     _turnoverFail(`接口调用失败（${e && e.message ? e.message : e}）· 若刚改过 gui.py 请重启它`);
@@ -2175,7 +2191,8 @@ function _turnoverOption(d, days, ma5) {
         textStyle: { fontSize: 10, color: "#d29922", fontWeight: "normal" },
       }
       : undefined,
-    grid: { left: 46, right: 34, top: d.stale ? 22 : 8, bottom: 18 },   // right 34 = 给均线末端直接标注留位
+    // right 52：右侧 MA5 轴刻度（万亿）+ 末端标注都需要位置
+    grid: { left: 46, right: 52, top: d.stale ? 22 : 8, bottom: 18 },
     tooltip: {
       trigger: "axis",
       formatter: (ps) => {
@@ -2210,20 +2227,50 @@ function _turnoverOption(d, days, ma5) {
       },
       axisTick: { show: false }, axisLine: { lineStyle: { color: "rgba(139,148,158,.3)" } },
     },
-    yAxis: {
-      type: "value",
-      axisLabel: {
-        fontSize: 9, color: "#8b949e",
-        formatter: (v) => (v >= 10000 ? (v / 10000).toFixed(1) + "万亿" : v + "亿"),
+    /* 2026-11-27 owner：「成交量 5 日均线需要加强陡峭程度」⇒ 均量线改走**右轴自适应刻度**：
+       柱子（单日成交额）仍占 0~4万亿的全域，而 MA5 的波动只占其中一小段，画在同一轴上几乎是
+       一条直线。右轴按 MA5 自身范围收紧（±0.5% 余量），斜率立刻看得出来；两轴各自标明口径，
+       tooltip 仍给真实亿元值，不改变任何数据含义。 */
+    yAxis: [
+      {
+        type: "value",
+        axisLabel: {
+          fontSize: 9, color: "#8b949e",
+          formatter: (v) => (v >= 10000 ? (v / 10000).toFixed(1) + "万亿" : v + "亿"),
+        },
+        splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } },
       },
-      splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } },
-    },
+      (() => {
+        const vals = (ma5 || []).filter(v => v != null && isFinite(v));
+        const lo = vals.length ? Math.min(...vals) : 0;
+        const hi = vals.length ? Math.max(...vals) : 1;
+        const pad = Math.max((hi - lo) * 0.03, hi * 0.003, 1);
+        return {
+          type: "value", position: "right", min: +(lo - pad).toFixed(0),
+          max: +(hi + pad).toFixed(0), name: `${TURNOVER_MA5_N}日均量(右)`,
+          nameTextStyle: { color: TURNOVER_MA5, fontSize: 9 },
+          axisLabel: { fontSize: 9, color: TURNOVER_MA5,
+                       formatter: (v) => (v >= 10000 ? (v / 10000).toFixed(1) + "万亿" : Math.round(v) + "亿") },
+          splitLine: { show: false },
+        };
+      })(),
+    ],
     series: [
       {
         // 2026-10-16 owner：「柱之间要紧密，这样可以显示更多」⇒ `barCategoryGap: "0%"`（默认 20%）。
         // 250 根下类目宽 ≈6px，紧密后每根都画得出来、不留空档。
         // `barMaxWidth` 保留：它只在**类目很宽**（根数少/面板超宽）时生效，防柱子胖成色块。
         type: "bar", data, barMaxWidth: 12, barCategoryGap: "0%",
+        // 黄色警戒线：2.6 万亿（5 日均额口径；研究见提交说明）
+        markLine: {
+          silent: true, symbol: "none", z: 5,
+          data: [{
+            yAxis: TURNOVER_WARN_YI,
+            lineStyle: { color: "#f0b90b", type: "dashed", width: 1.3, opacity: .9 },
+            label: { formatter: "警戒 2.6万亿（5日均额）", color: "#f0b90b",
+                     fontSize: 9, position: "insideEndTop" },
+          }],
+        },
       },
       {
         // 5 日均量线。**共用同一个 y 轴（亿元）**——不是双轴图（anti-pattern 明令禁止双 y 轴；
@@ -2234,7 +2281,8 @@ function _turnoverOption(d, days, ma5) {
         smooth: false,
         symbol: "none",
         connectNulls: false,               // 前 4 根凑不满窗口 ⇒ 线段从第 5 根起，不往前接
-        lineStyle: { width: 2, color: TURNOVER_MA5 },   // 2px 线（规范线宽）
+        yAxisIndex: 1,                     // 右轴（自适应刻度，凸显斜率）
+        lineStyle: { width: 2.2, color: TURNOVER_MA5 },
         itemStyle: { color: TURNOVER_MA5 },
         z: 3,                              // 压住柱顶
         silent: true,                      // 悬停由柱的统一 axis tooltip 承担，线不抢命中
@@ -4593,7 +4641,12 @@ function renderLive(live, isToday) {
     el.innerHTML = `
     <div class="card">
       <div class="card-title">盘中状态
-        <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近1年全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
+        <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近${turnoverHistDays >= 700 ? "3年" : "1年"}全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）
+          <span style="margin-left:6px">
+            <button class="mini-btn ${turnoverHistDays === 250 ? "primary" : ""}" onclick="setTurnoverHistDays(250)">近1年</button>
+            <button class="mini-btn ${turnoverHistDays === 750 ? "primary" : ""}" onclick="setTurnoverHistDays(750)">近3年</button>
+          </span>
+        </span>
       </div>
       <div id="turnoverHistMsg" class="cell-dim" style="font-size:11px"></div>
       <div id="turnoverHistSlot"></div>
@@ -15110,7 +15163,7 @@ window.addEventListener("resize", () => {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  _reportSlow("app_boot_20261127h", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
+  _reportSlow("app_boot_20261127k", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
   // 2026-11-23（P2-5）：echarts（~1MB）空闲预热。已是按需加载（首屏不阻塞），但首次开图
   // 要现场下载+解析 1MB（冷开图可感到顿挫）⇒ 启动后浏览器空闲期先拉下来编一遍，
   // 用户第一次开 K 线即热。requestIdleCallback 缺席时退化 setTimeout；失败静默不碍启动。
