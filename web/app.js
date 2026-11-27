@@ -3867,6 +3867,70 @@ function sentBand(v) {
 /* 把「今日盘中（未定型）」接在日频序列尾部（2026-11-16）。日频 series 是 14:30 尾盘快照
    ⇒ 盘中最后一格永远是昨天。`sentLive` 有今天读数时补一格：`sent`/`sent_ma` 由后端按
    同口径折算（今日分位 + 前 4 日分位做 5 日平滑），这里只负责**显示**；不落盘、不进跨越统计。 */
+/* 情绪周期竖线（2026-11-27 owner 最终口径）：
+   **极高点 → 极低点**（下行段）与 **极低点 → 极高点**（上行段）之间画一条竖线，
+   竖线从起点的温度值画到终点的温度值，**"N天"标在竖线中间**。
+   数据 = 后端 `swings`（zigzag 枢轴，回撤 ≥8 点才转折）。 */
+function _sentSwingMarks(series, swings, valOf) {
+  const idx = {};
+  (series || []).forEach((x, i) => { idx[x.date] = i; });
+  const out = [];
+  (swings || []).forEach(sw => {
+    const i = idx[sw.from], j = idx[sw.to];
+    if (i == null || j == null) return;
+    const y0 = valOf(series[i], sw.y0);
+    const y1 = valOf(series[j], sw.y1);
+    if (y0 == null || y1 == null) return;
+    const up = sw.dir === "up";
+    out.push([
+      { coord: [i, y0] },
+      { coord: [i, y1],
+        lineStyle: { color: up ? "rgba(248,81,73,.70)" : "rgba(63,185,80,.65)",
+                     type: "dashed", width: 1 } },
+    ]);
+  });
+  return out;
+}
+
+/* 情绪周期"天数"标注（2026-11-27 owner：**要标在两条竖线之间**，不要压在竖线上）：
+   每段的 x 取两端枢轴的中点、y 取两端温度的中点，只画文字（散点 symbolSize≈0）。 */
+function _sentSwingLabels(series, swings, valOf) {
+  const idx = {};
+  (series || []).forEach((x, i) => { idx[x.date] = i; });
+  const out = [];
+  (swings || []).forEach(sw => {
+    const i = idx[sw.from], j = idx[sw.to];
+    if (i == null || j == null) return;
+    const y0 = valOf(series[i], sw.y0), y1 = valOf(series[j], sw.y1);
+    if (y0 == null || y1 == null) return;
+    const up = sw.dir === "up";
+    out.push({ value: [(i + j) / 2, (y0 + y1) / 2],
+      label: { show: true, formatter: `${sw.days}天`, fontSize: 9, fontWeight: "bold",
+               color: up ? "#f85149" : "#3fb950" } });
+  });
+  return out;
+}
+
+function _sentCycleMarks(series, cycles) {
+  const idx = {};
+  (series || []).forEach((x, i) => { idx[x.date] = i; });
+  const out = [];
+  (cycles || []).forEach((c, ci) => {
+    const i = idx[c.start];
+    if (i != null) {
+      out.push({ xAxis: i,
+        label: { show: true, formatter: `C${ci + 1}`, position: "insideEndTop",
+                 color: "#f0b90b", fontSize: 9, fontWeight: "bold" },
+        lineStyle: { color: "rgba(240,185,11,.75)", type: "dashed", width: 1 } });
+    }
+    if (c.end && idx[c.end] != null) {
+      out.push({ xAxis: idx[c.end], label: { show: false },
+        lineStyle: { color: "rgba(139,148,158,.55)", type: "dotted", width: 1 } });
+    }
+  });
+  return out;
+}
+
 function _sentSeriesWithLive(base) {
   const lv = sentLive;
   const last = base[base.length - 1] || {};
@@ -4129,6 +4193,12 @@ function renderMarketSentiment(d) {
         // z:1 ⇒ 色块画在柱/线**下面**（柱子默认 z=2），别把涨停柱糊住
         markArea: { silent: true, z: 1, data: SENT_BANDS.map(b =>
           _band(b.lo, b.hi, b.fill, b.color, b.name)) },
+        // 情绪周期竖线：极高↔极低之间，天数标在中点
+        markLine: (d.swings && d.swings.length) ? {
+          silent: true, symbol: "none", z: 4,
+          data: _sentSwingMarks(series, d.swings,
+                                (row, fb) => (row.sent_ma == null ? fb : row.sent_ma)),
+        } : undefined,
         // 弱势→强势 的跨越点：三角形 + "N日"
         markPoint: transPts.length ? {
           symbol: "triangle", symbolSize: 8, symbolOffset: [0, 7], z: 6,
@@ -4138,6 +4208,15 @@ function renderMarketSentiment(d) {
                    formatter: (p) => `${p.value}日` },
           data: transPts,
         } : undefined },
+      /* 情绪周期天数（两条竖线之间）——纯文字散点 */
+      { name: "周期天数", type: "scatter", yAxisIndex: 1, z: 8, silent: true,
+        // x 用**索引**（跨年 MM-DD 会重复）
+        data: (d.swings || []).length
+          ? _sentSwingLabels(series, d.swings,
+                             (row, fb) => (row.sent_ma == null ? fb : row.sent_ma))
+          : [],
+        symbolSize: 0.1,
+        tooltip: { show: false } },
       /* 今日盘中（未定型）：空心点 + "盘中"，别让它看着像已收盘的一格 */
       { name: "今日盘中", type: "scatter", yAxisIndex: 1, z: 7,
         // 同上：用**最后一格的索引**而不是日期字符串（全部区间会撞 2023/2024 的同一天）
@@ -4402,7 +4481,24 @@ function _renderSentComposite(series, d) {
       { name: "综合温度(1:1)", type: "line", data: comp, symbol: "none",
         connectNulls: false, z: 5, lineStyle: { width: 2.6 },
         markArea: { silent: true, z: 1, data: SENT_BANDS.map(b =>
-          _area(b.lo, b.hi, b.fill, b.color, b.name)) } },
+          _area(b.lo, b.hi, b.fill, b.color, b.name)) },
+        markLine: (d && d.swings && d.swings.length) ? {
+          silent: true, symbol: "none", z: 4,
+          data: (() => {
+            const by = {};
+            series.forEach((x, i) => { by[x.date] = comp[i]; });
+            return _sentSwingMarks(series, d.swings, (row, fb) => (by[row.date] ?? fb));
+          })(),
+        } : undefined },
+      { name: "周期天数", type: "scatter", z: 8, silent: true,
+        data: (d && d.swings && d.swings.length)
+          ? (() => {
+              const by = {};
+              series.forEach((x, i) => { by[x.date] = comp[i]; });
+              return _sentSwingLabels(series, d.swings, (row, fb) => (by[row.date] ?? fb));
+            })()
+          : [],
+        symbolSize: 0.1, tooltip: { show: false } },
       { name: "① 涨停/跌停温度", type: "line", data: t1, symbol: "none",
         connectNulls: false, z: 3,
         lineStyle: { width: 1, color: "rgba(139,148,158,.65)", type: "dashed" } },
@@ -14452,6 +14548,7 @@ let intradayDays = 5;
 let _imNorm = true;
 let _imWinMode = false;
 let _imTimer = null, _imBusy = false;
+let _imLoopOn = false, _imHistPending = false;   // 历史未就绪时 0.8s 快速轮询，就绪后 5s
 let _imHist = {};        // code -> [{date, pts}]（不含今天）
 let _imHistSig = {};     // code -> 历史指纹
 let _imData = {};        // 最新 items
@@ -14473,6 +14570,28 @@ function _imEnsurePanes() {
       <div class="im-head" id="imHead_${c}"></div>
       <div id="imChart_${c}" class="im-chart"></div>
     </div>`).join("");
+}
+
+function _imStopLoop() {
+  _imLoopOn = false;
+  if (_imTimer) { clearTimeout(_imTimer); _imTimer = null; }
+}
+
+async function _imLoop() {
+  if (!_imLoopOn) return;
+  try { await drawIntradayMulti(); } catch (e) {
+    const el = document.getElementById("intradayAsOf");
+    if (el) el.textContent = `循环异常: ${e && e.message ? e.message : e}`;
+  }
+  if (!_imLoopOn) return;
+  const ms = _imHistPending ? 800 : INTRADAY_POLL_MS;
+  _imTimer = setTimeout(_imLoop, ms);
+}
+
+function _imStartLoop() {
+  _imStopLoop();
+  _imLoopOn = true;
+  _imLoop();
 }
 
 function _imSetDaysBtn() {
@@ -14533,8 +14652,9 @@ function setIntradayDays(d) {
   if (intradayDays === d) return;
   intradayDays = d;
   _imHist = {}; _imHistSig = {};        // 天数变了历史窗口也变，强制重取
+  _imHistPending = true;                // 立刻进入 0.8s 快速轮询，别等 5s
   _imSetDaysBtn();
-  drawIntradayMulti();
+  _imStartLoop();                       // 重排定时器并立即拉一次
 }
 
 async function openIntradayWin() {
@@ -14547,19 +14667,18 @@ async function openIntradayWin() {
   // ⚠️ 独立窗口（?mode=intraday）不跑 init()，图库是按需注入的 ⇒ 这里必须显式等它。
   // 2026-11-25 真机：打开后**整片空白**，头行有数字、图没有 —— echarts 未加载 + 异常被吞。
   _ensureEcharts().catch(() => { }).then(() => drawIntradayMulti());
-  if (_imTimer) clearInterval(_imTimer);
-  _imTimer = setInterval(drawIntradayMulti, INTRADAY_POLL_MS);
+  _imStartLoop();
 }
 
 function closeIntradayWin() {
   if (_imWinMode) {                    // 原生窗口里 × = 关窗口
-    if (_imTimer) { clearInterval(_imTimer); _imTimer = null; }
+    _imStopLoop();
     try { window.pywebview.api.close_intraday_window(); } catch (e) { /* 忽略 */ }
     return;
   }
   const win = document.getElementById("intradayWin");
   if (win) win.style.display = "none";
-  if (_imTimer) { clearInterval(_imTimer); _imTimer = null; }
+  _imStopLoop();
 }
 
 /* 原生窗口（index.html?mode=intraday）：铺满 + 起轮询；主界面照常可用 */
@@ -14575,8 +14694,7 @@ function intradayEnterWindowMode() {
   win.style.minWidth = "0"; win.style.minHeight = "0";
   _imSetDaysBtn();
   _ensureEcharts().catch(() => { }).then(() => drawIntradayMulti());
-  if (_imTimer) clearInterval(_imTimer);
-  _imTimer = setInterval(drawIntradayMulti, INTRADAY_POLL_MS);
+  _imStartLoop();
 }
 
 /* 开成独立原生窗口（可拖到另一个显示器）；不可用 ⇒ 退回页面内浮层 */
@@ -14599,9 +14717,18 @@ async function drawIntradayMulti() {
   _imBusy = true;
   try {
     _imEnsurePanes();
-    const sigMap = {};
-    _imCodes.forEach(c => { if (_imHistSig[c]) sigMap[c] = _imHistSig[c]; });
-    const r = await apiCall("load_intraday_multi", intradayDays, sigMap, _imCodes, _imLabels);
+    const _asEl0 = document.getElementById("intradayAsOf");
+    if (_asEl0) _asEl0.textContent = "取数中…";
+    const sigMap = {}, depthMap = {};
+    _imCodes.forEach(c => {
+      if (_imHistSig[c]) sigMap[c] = _imHistSig[c];
+      depthMap[c] = ((_imHist[c] || []).length);
+    });
+    // 15s 超时兜底：桥/后端异常时不能把 _imBusy 永久卡死（否则整个窗口再也不刷新）
+    const r = await Promise.race([
+      apiCall("load_intraday_multi", intradayDays, sigMap, _imCodes, _imLabels, depthMap),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("load_intraday_multi 超时 15s")), 15000)),
+    ]);
     if (!r || !r.items) return;
     _imCodes.forEach(c => {
       const it = r.items[c] || {};
@@ -14609,19 +14736,33 @@ async function drawIntradayMulti() {
     });
     _imData = r.items;
     const first = r.items[_imCodes[0]] || {};
+    try {
+      const _d = document.getElementById("intradayAsOf");
+      if (_d) _d.textContent = `d=${intradayDays} hist=${_imCodes.map(c => ((r.items[c] || {}).hist || []).length).join("/")} warm=${r.warming ? 1 : 0}`;
+    } catch (_) { }
     const asEl = document.getElementById("intradayAsOf");
     if (asEl) {
       const avail = first.avail_days || 0;
       const short = intradayDays > avail
         ? `（可用 ${avail}/${intradayDays} 天：历史来自 tushare / GM / 新浪 / 本地沉淀库，取最全者）`
         : "";
-      asEl.textContent = (first.as_of ? `更新 ${first.as_of}` :
-        (r.warming ? "历史准备中…" : "—")) + short;
+      asEl.textContent = `更新 ${first.as_of || "—"} · d=${intradayDays}`
+        + ` hist=${_imCodes.map(c => ((r.items[c] || {}).hist || []).length).join("/")}`
+        + ` warm=${r.warming ? 1 : 0}` + short;
     }
     _imCodes.forEach(c => { _renderImPane(c, _imLabels[c] || c); });
+    // 历史未就绪（warming 或 pane 还没有历史）⇒ 0.8s 快速轮询
+    try {
+      _diagReport("im_draw", 0, `d=${intradayDays} hist=${_imCodes.map(c => ((_imData[c] || {}).hist || _imHist[c] || []).length).join(",")} warm=${!!r.warming}`);
+    } catch (_) { }
+    _imHistPending = !!r.warming || _imCodes.some(c => {
+      const h = ((_imData[c] || {}).hist) || _imHist[c] || [];
+      return !h.length;
+    });
     _bindImZoomSync();
   } catch (e) {
-    /* 静默：保持上一帧 */
+    const el = document.getElementById("intradayAsOf");
+    if (el) el.textContent = `取数失败: ${e && e.message ? e.message : e}`;
   } finally {
     _imBusy = false;
   }
@@ -14629,8 +14770,9 @@ async function drawIntradayMulti() {
 
 /* 组装一张 pane 的数据：把「历史 days 天 + 今日 live」连成一条 x 轴 */
 function _imBuildSeries(code) {
-  // 不含今天；丢掉"残日"（新浪截断的半个交易日常见，点数很少）
-  const hist = (_imHist[code] || []).filter(d => (d.pts || []).length >= 100).slice();
+  // 不含今天。后端已剔除残日（<100 条原始分钟）；**长区间会按 2/3 分钟合桶**（~81 点/天），
+  // 这里绝不能再按 100 点过滤，否则 100 天视图所有历史日都会被滤掉（2026-11-27 实报）。
+  const hist = (_imHist[code] || []).filter(d => (d.pts || []).length >= 20).slice();
   const it = _imData[code] || {};
   const all = hist.map(d => ({ date: d.date, pts: d.pts, live: false }));
   if (it.today && it.today.length && it.today_date) {
@@ -14774,7 +14916,8 @@ function _renderImPane(code, name) {
     return out;
   };
   const _dmArr = i0 => _dmCarry(i0);
-  const _dm5 = _dmArr(0), _dm13 = _dmArr(1), _dm21 = _dmArr(2), _dm34 = _dmArr(3);
+  const _dm5 = _dmArr(0), _dm13 = _dmArr(1), _dm21 = _dmArr(2), _dm34 = _dmArr(3),
+    _dm55 = _dmArr(4);
   const posData = volBase.map(v => (v == null || v <= 0 ? 0 : +v.toFixed(_vPrec)));
   const negData = volBase.map(v => (v == null || v >= 0 ? 0 : +v.toFixed(_vPrec)));
   // 价格纵轴 = **具体点数**（owner：指数就该给点数）；只留 4% 余量把纵轴拉满（越发陡）
@@ -14819,7 +14962,8 @@ function _renderImPane(code, name) {
               return `<br><span style="color:${_cMa5}">日MA5 ${f(v[0])}</span>${stTxt}　`
                 + `<span style="color:#bc8cff">日MA13 ${f(v[1])}</span>　`
                 + `<span style="color:#2dd4bf">日MA21 ${f(v[2])}</span>　`
-                + `<span style="color:#f0883e">日MA34 ${f(v[3])}</span>`;
+                + `<span style="color:#f0883e">日MA34 ${f(v[3])}</span>　`
+                + `<span style="color:#a371f7">日MA55 ${f(v[4])}</span>`;
             })()
           + (dv == null ? ' <span style="color:#8b949e">（无昨日同分钟基准）</span>'
             : `<br>累计较昨日 <b style="color:${dv >= 0 ? "#f85149" : "#2ea043"}">`
@@ -14892,6 +15036,10 @@ function _renderImPane(code, name) {
       { name: "日MA34", type: "line", sampling: "lttb", data: _dm34, xAxisIndex: 0, yAxisIndex: 0,
         symbol: "none", connectNulls: false, z: 3,
         lineStyle: { width: 1.1, color: "#f0883e" } },
+      /* 2026-11-27 owner：再追加 55 日线（紫，与多窗口日MA55 同色） */
+      { name: "日MA55", type: "line", sampling: "lttb", data: _dm55, xAxisIndex: 0, yAxisIndex: 0,
+        symbol: "none", connectNulls: false, z: 3,
+        lineStyle: { width: 1.1, color: "#a371f7" } },
       /* 价格平滑线（黄）：30 点均线，用于看"趋势"而不是被 1 分钟噪声带节奏 */
       { name: "平滑(30分)", type: "line", data: S.pma, xAxisIndex: 0, yAxisIndex: 0,
         symbol: "none", showSymbol: false, sampling: "lttb", z: 6,
@@ -14962,7 +15110,7 @@ window.addEventListener("resize", () => {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  _reportSlow("app_boot_20261126f", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
+  _reportSlow("app_boot_20261127h", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
   // 2026-11-23（P2-5）：echarts（~1MB）空闲预热。已是按需加载（首屏不阻塞），但首次开图
   // 要现场下载+解析 1MB（冷开图可感到顿挫）⇒ 启动后浏览器空闲期先拉下来编一遍，
   // 用户第一次开 K 线即热。requestIdleCallback 缺席时退化 setTimeout；失败静默不碍启动。

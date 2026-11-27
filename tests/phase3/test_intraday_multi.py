@@ -76,14 +76,16 @@ class TestGetCached:
         hist_days = {"2026-11-24": [[931, 3556123, 12000], [932, 3557000, 8500]],
                      "2026-11-25": [[931, 3558000, 9000]]}
         monkeypatch.setattr(IM, "_hist", {
-            "sh000001": {"ts": IM._time.time(), "days": hist_days, "sig": "SIG1"},
-            "sh000688": {"ts": IM._time.time(), "days": hist_days, "sig": "SIG1"},
-            "sz399006": {"ts": IM._time.time(), "days": hist_days, "sig": "SIG1"},
+            "sh000001": {"ts": IM._time.time(), "days": hist_days, "sig": "SIG1", "want": 6},
+            "sh000688": {"ts": IM._time.time(), "days": hist_days, "sig": "SIG1", "want": 6},
+            "sz399006": {"ts": IM._time.time(), "days": hist_days, "sig": "SIG1", "want": 6},
         })
         monkeypatch.setattr(IM, "_today", {
             c: {"ts": IM._time.time(), "date": "2026-11-26", "pts": [[931, 3500000, 990000]]}
             for c in ("sh000001", "sh000688", "sz399006")})
-        r = IM.get_cached(5, {"sh000001": "SIG1", "sh000688": "SIG1", "sz399006": "SIG1"})
+        _depths = {"sh000001": 5, "sh000688": 5, "sz399006": 5}   # 前端已持有同样深度
+        r = IM.get_cached(5, {"sh000001": "SIG1", "sh000688": "SIG1", "sz399006": "SIG1"},
+                          None, None, _depths)
         it = r["items"]["sh000001"]
         assert it["hist"] is None, "指纹一致 ⇒ 不再下发历史"
         assert it["today"][0] == [931, 3500000, 990000]
@@ -98,7 +100,7 @@ class TestGetCached:
         self._env(monkeypatch)
         days = {f"2026-11-{d:02d}": [[931, 3000000, 1000]] for d in range(10, 25)}
         monkeypatch.setattr(IM, "_hist", {
-            c: {"ts": IM._time.time(), "days": dict(days), "sig": "S"} for c in
+            c: {"ts": IM._time.time(), "days": dict(days), "sig": "S", "want": 101} for c in
             ("sh000001", "sh000688", "sz399006")})
         monkeypatch.setattr(IM, "_today", {})
         r = IM.get_cached(3, None)

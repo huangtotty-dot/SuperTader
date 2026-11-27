@@ -5365,6 +5365,10 @@ class Api:
 
         transitions = self._sent_transitions([r.get("sent_ma") for r in rows],
                                              [r["date"] for r in rows])
+        cycles = self._sent_cycles([r.get("sent_ma") for r in rows],
+                                   [r["date"] for r in rows])
+        swings = self._sent_swings([r.get("sent_ma") for r in rows],
+                                   [r["date"] for r in rows])
         _sent_by_date = {r["date"]: r.get("sent_ma") for r in rows}
         for t in transitions:
             t["sent"] = _sent_by_date.get(t["to"])   # 跨越当日的（平滑后）温度值，前端打点用
@@ -5417,6 +5421,8 @@ class Api:
                        "days": days, "series": series, "last": last, "stats": stats,
                        "weights": {"touch": 0.5, "zb": 0.3, "dt": 0.2},
                        "transitions": transitions,
+                       "cycles": cycles,          # 情绪周期（强弱段）
+                       "swings": swings,          # 峰谷摆段（极高↔极低，竖线+天数）
                        # 每日涨跌家数（2026-11-25）：缓存元信息给前端做「重建中→30s 后重取」
                        "breadth": {"built_at": (_bd_meta or {}).get("built_at") or "",
                                    "n_days": int((_bd_meta or {}).get("n_days") or 0),
@@ -5588,6 +5594,74 @@ class Api:
                 if z != out["zone"]:
                     break
                 out["zone_days"] += 1
+        return out
+
+    @staticmethod
+    def _sent_swings(vals, dates, thr=8.0):
+        """情绪温度的**峰谷摆段**（2026-11-27 owner：「竖线要从极高点到极低点、再极低点到极高点，
+        天数标在竖线中间」）。
+
+        用简单 zigzag 找枢轴（回撤 ≥ thr 点才算转折，滤掉噪声）：
+          · 极低点 → 极高点 = 上升段；极高点 → 极低点 = 下降段；
+          · 每段返回 {from, to, days, y0, y1, dir}（y0=起点温度、y1=终点温度，
+            days=两个枢轴之间的**交易日数**）。前端在 from 的 x 上画一条 y0↔y1 的竖线，
+            并把 "N天" 标在竖线中点。
+        """
+        pts = []
+        for i, v in enumerate(vals or []):
+            if v is None:
+                continue
+            pts.append((i, float(v)))
+        if len(pts) < 3:
+            return []
+        piv = []          # [(idx, value, 'H'|'L')]
+        direction = 0     # 1=上行, -1=下行
+        ext_i, ext_v = pts[0]
+        for i, v in pts[1:]:
+            if direction >= 0:
+                if v >= ext_v:
+                    ext_i, ext_v = i, v
+                elif ext_v - v >= thr:
+                    piv.append((ext_i, ext_v, "H"))
+                    direction, ext_i, ext_v = -1, i, v
+            if direction <= 0:
+                if v <= ext_v:
+                    ext_i, ext_v = i, v
+                elif v - ext_v >= thr:
+                    piv.append((ext_i, ext_v, "L"))
+                    direction, ext_i, ext_v = 1, i, v
+        piv.append((ext_i, ext_v, "H" if direction >= 0 else "L"))
+        out = []
+        for a, b in zip(piv, piv[1:]):
+            out.append({
+                "from": str(dates[a[0]]), "to": str(dates[b[0]]),
+                "days": int(b[0] - a[0]),
+                "y0": round(a[1], 1), "y1": round(b[1], 1),
+                "dir": "up" if b[1] > a[1] else "down",
+            })
+        return out
+
+    @staticmethod
+    def _sent_cycles(vals, dates):
+        """情绪周期（2026-11-27 owner：「用竖线把周期标出来」）。
+
+        口径：**进入强势区(≥60) 为起点，首次跌出强势区(<60) 为终点**；
+        尚未跌出的最后一个周期 `end=None`（前端只画起点竖线）。返回
+        [{start, end|None, days}]（days = 所在交易日数，同序列下标差）。
+        None（滚动窗不足）跳过、不打断状态。
+        """
+        out, cur, cur_i = [], None, None
+        for j, v in enumerate(vals or []):
+            if v is None:
+                continue
+            in_strong = v >= 60
+            if cur is None and in_strong:
+                cur, cur_i = str(dates[j]), j
+            elif cur is not None and not in_strong:
+                out.append({"start": cur, "end": str(dates[j]), "days": j - cur_i})
+                cur, cur_i = None, None
+        if cur is not None:
+            out.append({"start": cur, "end": None, "days": len(vals) - 1 - cur_i})
         return out
 
     @staticmethod
@@ -8197,14 +8271,14 @@ class Api:
     # 历史 600s 后台单飞；js_api 线程只读内存。
     _INTRADAY_MULTI_MIN_REFRESH = 3.0
 
-    def load_intraday_multi(self, days=5, hist_sig=None, codes=None, labels=None):
+    def load_intraday_multi(self, days=5, hist_sig=None, codes=None, labels=None, depths=None):
         """多日分时 + 今日实时尾 → {items, days, warming}（口径见 core.intraday_multi）。
 
         codes 省略 = 三大指数；K 线窗里点「多日分时」会传该股（如 ["sh600584"]）+ labels。
         """
         try:
             from core import intraday_multi as _im
-            return _clean(_im.get_cached(days, hist_sig, codes, labels))
+            return _clean(_im.get_cached(days, hist_sig, codes, labels, depths))
         except Exception:
             _swallow("gui.load_intraday_multi")
             return _clean({"items": {}, "days": days, "warming": True})

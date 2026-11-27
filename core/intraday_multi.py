@@ -129,6 +129,66 @@ def _store_load(code, max_days=_MAX_DAYS + 2):
 
 
 # ---------------- 各历史源 ----------------
+_IDX_RE = re.compile(r"^(sh000|sh880|sh950|sz399|bj899)\d{3}$", re.I)
+
+
+def _is_index(code: str) -> bool:
+    return bool(_IDX_RE.match(str(code or "").split("_")[0].strip()))
+
+
+_TDX_ROOTS = [os.environ.get("TDX_HOME") or "", "C:/new_tdx", "D:/new_tdx",
+              "C:/zd_zsone", "D:/zd_zsone"]
+
+
+def _tdx_path(code):
+    """通达信 vipdoc/{sh,sz,bj}/minline/{code}.lc1 路径（找不到 → None）。"""
+    c = str(code).split("_")[0]
+    for root in _TDX_ROOTS:
+        if not root:
+            continue
+        fp = os.path.join(root, "vipdoc", c[:2].lower(), "minline", f"{c}.lc1")
+        if os.path.exists(fp):
+            return fp
+    return None
+
+
+def _from_tdx(code, days):
+    """通达信本地 1 分钟数据（.lc1，32 字节/条）→ {date: pts}。
+
+    记录格式：uint16 date=(year-2004)*2048+month*100+day · uint16 time=分钟数 ·
+    float32 开/高/低/收/成交额(元) · int32 量 · int32 保留。
+    本地数据是否最新取决于用户是否每天下载盘后数据；合并时 GM/tushare 会覆盖同日数据。
+    """
+    fp = _tdx_path(code)
+    if not fp:
+        return {}
+    try:
+        import struct
+        raw = open(fp, "rb").read()
+        n = len(raw) // 32
+        tail = min(n, max(600, int(days) * 242 * 2))
+        out = {}
+        for off in range((n - tail) * 32, n * 32, 32):
+            d, t, o, h, l, c, amt, vol, _rsv = struct.unpack('<HHfffffii', raw[off:off + 32])
+            if d <= 0 or t <= 0 or c <= 0:
+                continue
+            y = d // 2048 + 2004
+            rem = d - (d // 2048) * 2048
+            mo, dd = rem // 100, rem % 100
+            if not (1 <= mo <= 12 and 1 <= dd <= 31):
+                continue
+            day = f"{y:04d}-{mo:02d}-{dd:02d}"
+            hh, mm = t // 60, t % 60
+            hhmm = hh * 100 + mm
+            if not ((930 <= hhmm <= 1130) or (1300 <= hhmm <= 1500)):
+                continue
+            bucket = out.setdefault(day, {})
+            bucket[hhmm] = [hhmm, int(round(float(c) * 1000)), int(round(float(amt) / 1e4))]
+        return {d: [v[k] for k in sorted(v)] for d, v in out.items() if len(v) >= 100}
+    except Exception:
+        return {}
+
+
 def _from_gm(code, days):
     try:
         from core.market_data.facade import get_provider
@@ -169,71 +229,166 @@ def _ts_pro():
     return _ts["pro"]
 
 
-def _from_tushare(code, days):
-    """tushare `stk_mins`（指数也支持，实测 000001.SH 1min 有 close+amount）→ {date: pts}。
+def _ts_code(code):
+    return code[2:] + (".SH" if str(code).startswith("sh") else ".SZ")
 
-    owner 2026-11-25：「20 天可以从 tushare 下载」。单次上限 8000 行，20 天≈4800 行够用；
-    与腾讯/新浪成交额口径一致（实测同一分钟 94.58 亿 对 94.58 亿）。**盘中可能停在前一交易日**
-    ⇒ 今天一律以腾讯分时为准，这里只补历史。
+
+def _ts_fetch_range(code, start, end):
+    """tushare 指定区间 1min → {date: pts}；失败 → {}。"""
+    pro = _ts_pro()
+    if pro is None:
+        return {}
+    try:
+        df = pro.stk_mins(ts_code=_ts_code(code), freq="1min",
+                          start_date=start.strftime("%Y-%m-%d 09:00:00"),
+                          end_date=end.strftime("%Y-%m-%d 15:30:00"))
+        if df is None or not len(df):
+            return {}
+        _t = df["trade_time"].astype(str)
+        _hm = _t.str[11:16]
+        out = {}
+        for d, sub in df.groupby(_t.str[:10]):
+            pts = _norm_pts(zip(_hm.loc[sub.index].tolist(),
+                                sub["close"].tolist(), sub["amount"].tolist()))
+            if pts:
+                out[str(d)] = pts
+        return out
+    except Exception:
+        return {}
+
+
+def _last_completed_trading_day():
+    """上一已完成交易日（读指数日线缓存，零网络）。"""
+    try:
+        rows = (_daily_rows("sh000001"))
+        ds = [str(r.get("date"))[:10] for r in rows if r.get("date")]
+        today = _time.strftime("%Y-%m-%d")
+        prior = [d for d in ds if d < today]
+        return prior[-1] if prior else ""
+    except Exception:
+        return ""
+
+
+def _from_tushare(code, days):
+    """tushare `stk_mins` → {date: pts}（长区间**并行**分段拉取，2026-11-27 提速）。
+
+    tushare 单次最多 8000 行（≈33 个交易日）；100 天要 4~5 段。原来串行逐段推，
+    三指数要 6~10s（owner：「100 天加载过慢」）。现在按**固定日历窗口**并发拉取再合并，
+    墙钟≈最慢一段（~1-2s）。
     """
     pro = _ts_pro()
     if pro is None:
         return {}
     try:
         from datetime import timedelta
+        from concurrent.futures import ThreadPoolExecutor
         ts_code = code[2:] + (".SH" if str(code).startswith("sh") else ".SZ")
-        # 2026-11-26 owner：「多日分时拓展最多支持 100 天」。
-        # tushare 单次上限 8000 行（≈34 个交易日）⇒ 按窗口分段拉取，逐段往前推。
-        out = {}
-        end = datetime.now()
-        want_days = max(3, int(days) + 2)
-        for _chunk in range(6):
-            start = end - timedelta(days=48)          # 48 自然日 ≈ 33 个交易日，接近 8000 行上限
-            df = pro.stk_mins(ts_code=ts_code, freq="1min",
-                              start_date=start.strftime("%Y-%m-%d 09:00:00"),
-                              end_date=end.strftime("%Y-%m-%d 15:30:00"))
-            if df is None or not len(df):
-                break
-            _t = df["trade_time"].astype(str)
-            _day = _t.str[:10]
-            _hm = _t.str[11:16]
-            for d, sub in df.groupby(_day):
-                pts = _norm_pts(zip(_hm.loc[sub.index].tolist(), sub["close"].tolist(),
-                                    sub["amount"].tolist()))
-                if pts and str(d) not in out:
-                    out[str(d)] = pts
-            if len(out) >= want_days:
-                break
+        want = max(3, int(days) + 2)
+        n_win = min(6, max(1, (want + 35) // 36 + 1))     # 每窗 ≈29 个交易日（少发请求）
+        wins, end = [], datetime.now()
+        for _ in range(n_win):
+            st = end - timedelta(days=42)
+            wins.append((st, end))
+            end = st - timedelta(days=1)
+
+        def _one(w):
+            st, en = w
             try:
-                _earliest = min(out) if out else str(start)[:10]
+                df = pro.stk_mins(ts_code=ts_code, freq="1min",
+                                  start_date=st.strftime("%Y-%m-%d 09:00:00"),
+                                  end_date=en.strftime("%Y-%m-%d 15:30:00"))
+                if df is None or not len(df):
+                    return {}
+                _t = df["trade_time"].astype(str)
+                _hm = _t.str[11:16]
+                out = {}
+                for d, sub in df.groupby(_t.str[:10]):
+                    pts = _norm_pts(zip(_hm.loc[sub.index].tolist(),
+                                        sub["close"].tolist(), sub["amount"].tolist()))
+                    if pts:
+                        out[str(d)] = pts
+                return out
             except Exception:
-                break
-            _dt_earliest = datetime.strptime(_earliest, "%Y-%m-%d")
-            if _dt_earliest <= (end - timedelta(days=160)):   # 防死循环：最多回溯 ~5 个月
-                break
-            end = _dt_earliest - timedelta(days=1)
-        return out
+                return {}
+
+        merged = {}
+        with ThreadPoolExecutor(max_workers=min(3, n_win)) as ex:
+            for part in ex.map(_one, wins):
+                for d, pt in (part or {}).items():
+                    merged.setdefault(d, pt)
+        return merged
     except Exception:
         _ts["ts"] = _time.time()
         return {}
 
 
-_IDX_RE = re.compile(r"^(sh000|sh880|sh950|sz399|bj899)\d{3}$", re.I)
+_HIST_DISK_DIR = os.path.join(_ROOT, "t_io", "cache", "intraday_hist")
 
 
-def _is_index(code: str) -> bool:
-    return bool(_IDX_RE.match(str(code or "").split("_")[0].strip()))
+def _hist_disk_load(code, days):
+    """分钟历史盘缓存：{date: pts}（**可跨日**——已完成交易日的分钟数据不可变）。
+
+    只有"深度不够"才判废；隔天不判废，由 `_fetch_hist` 只补缺失的最近几天（1 个 tushare 请求）。
+    """
+    try:
+        fp = os.path.join(_HIST_DISK_DIR, f"{code}.json")
+        with open(fp, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        if int(d.get("days_built") or 0) < int(days):
+            return {}
+        return d.get("data") or {}
+    except Exception:
+        return {}
+
+
+def _hist_disk_save(code, days, data):
+    try:
+        os.makedirs(_HIST_DISK_DIR, exist_ok=True)
+        fp = os.path.join(_HIST_DISK_DIR, f"{code}.json")
+        tmp = fp + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"built_date": _time.strftime("%Y-%m-%d"),
+                       "days_built": int(days), "data": data}, f)
+        os.replace(tmp, fp)
+    except Exception:
+        pass
 
 
 def _fetch_hist(code, days):
-    """合并：沉淀库 + GM + 新浪 → ({date: pts}, src_days)（不含今天）。"""
+    """合并：沉淀库 + 通达信 + GM(短) + tushare + 新浪(短) → ({date: pts}, src_days)。"""
     merged = {}
     src_days = {}
+    # 盘缓存优先（同一交易日、深度够）⇒ 秒回；否则从它作为基底继续补
+    _disk = _hist_disk_load(code, days)
+    if _disk:
+        src_days["disk"] = len(_disk)
+        _last_done = _last_completed_trading_day()
+        _newest = max(_disk)
+        if _last_done and _newest >= _last_done:
+            return _disk, {"disk": len(_disk)}      # 秒回：深度够且已覆盖到上一交易日
+        # 只补 (newest, 今天) 的缺口 —— 通常只有 1~2 个交易日，1 个 tushare 请求
+        try:
+            from datetime import timedelta
+            _st = datetime.strptime(_newest, "%Y-%m-%d") + timedelta(days=1)
+            _gap = _ts_fetch_range(code, _st, datetime.now())
+            if _gap:
+                _disk.update(_gap)
+                src_days["tushare_gap"] = len(_gap)
+                _hist_disk_save(code, len(_disk), _disk)
+        except Exception:
+            pass
+        return _disk, src_days
     store = _store_load(code)
     if store:
         merged.update(store)
         src_days["store"] = len(store)
-    gm = _from_gm(code, days) if _is_index(code) else {}
+    tdx = _from_tdx(code, days)
+    if tdx:
+        src_days["tdx"] = len(tdx)
+        merged.update(tdx)          # 本地通达信：快、但可能陈旧 ⇒ 后面权威源覆盖
+    # 2026-11-27 提速：深历史上限 60 天以上时跳过 GM（限流窗可达 4.5s）——tushare 更深；
+    # 新浪只有 5 天，只服务短区间。
+    gm = _from_gm(code, days) if (_is_index(code) and int(days) <= 60) else {}
     if gm:
         src_days["gm"] = len(gm)
         merged.update(gm)           # GM 权威，覆盖沉淀库
@@ -241,10 +396,13 @@ def _fetch_hist(code, days):
     if tsd:
         src_days["tushare"] = len(tsd)
         merged.update(tsd)          # tushare：最深历史（单次 8000 行≈34 天，长区间分段拉取）
-    sina = _from_sina(code)
+    sina = _from_sina(code) if int(days) <= 10 else {}
     if sina:
         src_days["sina"] = len(sina)
         merged.update(sina)         # 新浪覆盖（同为分钟成交额口径）
+    if src_days.get("disk") and len(merged) >= int(days):
+        return merged, src_days
+    _hist_disk_save(code, len(merged), merged)
     return merged, src_days
 
 
@@ -266,11 +424,11 @@ def _daily_rows(code):
 
 
 def _daily_mas(code, days=_MAX_DAYS + 5):
-    """日线 MA5/13/21/34（2026-11-25 owner：多日分时里画日均线，不同颜色；
-    2026-11-26 追加 34 日线）。
+    """日线 MA5/13/21/34/55（2026-11-25 owner：多日分时里画日均线，不同颜色；
+    2026-11-26 追加 34 日线；2026-11-27 追加 55 日线）。
 
     用本地日线缓存的收盘价算；结果按 (code) 缓存 10 分钟。
-    返回 {date: [ma5, ma13, ma21, ma34]}（只回最近 days+2 个交易日）。
+    返回 {date: [ma5, ma13, ma21, ma34, ma55]}（只回最近 days+2 个交易日）。
     """
     now = _time.time()
     hit = _dma_cache.get(code)
@@ -291,7 +449,7 @@ def _daily_mas(code, days=_MAX_DAYS + 5):
     n = len(closes)
     for i in range(n):
         v = []
-        for w in (5, 13, 21, 34):
+        for w in (5, 13, 21, 34, 55):
             if i + 1 >= w:
                 seg = closes[i + 1 - w: i + 1]
                 v.append(round(sum(seg) / w, 3))
@@ -377,15 +535,33 @@ def _kick_hist(code, days):
 
     def _bg():
         try:
+            today_s = _time.strftime("%Y-%m-%d")
+
+            def _clean(m):
+                return {d: p for d, p in (m or {}).items() if d < today_s and len(p) >= 100}
+
+            # 阶段 1（2026-11-27 提速）：先发布**本地**（沉淀库 + 通达信 lc1，毫秒级），
+            # 让 100 天视图立刻有一版；阶段 2 网络全量到达再覆盖（sig 变化 ⇒ 前端自动刷新）。
+            _quick = dict(_store_load(code))
+            _quick.update(_from_tdx(code, days))
+            _quick = _clean(_quick)
+            if _quick:
+                _qsig = f"{max(_quick)}|{len(_quick)}|{min(int(days), len(_quick))}"
+                with _lock:
+                    _hist[code] = {"ts": _time.time(), "days": _quick, "sig": _qsig,
+                                   "src": {"local": len(_quick)},
+                                   "want": min(int(days), len(_quick))}
+
             got, srcs = _fetch_hist(code, days)
             if got:
-                today_s = _time.strftime("%Y-%m-%d")
-                got = {d: p for d, p in got.items() if d < today_s and len(p) >= 100}
+                got = _clean(got)
                 if got:
                     sig = f"{max(got)}|{len(got)}|{days}"
                     with _lock:
+                        # `want` 记录拉取深度：缓存命中还要求 want ≥ 本次请求，
+                        # 否则"先开 5 天→再点 100 天"会继续用 33 天的浅缓存。
                         _hist[code] = {"ts": _time.time(), "days": got, "sig": sig,
-                                       "src": srcs}
+                                       "src": srcs, "want": int(days)}
         except Exception:
             pass
         finally:
@@ -412,7 +588,41 @@ def _kick_today(code):
     _threading.Thread(target=_bg, daemon=True, name=f"im-today-{code}").start()
 
 
-def get_cached(days=5, hist_sig=None, codes=None, labels=None):
+def _ds_pts(pts, f):
+    """按**交易分钟序号**等宽合桶（f=1 原样返回）。用于长区间（100 天）压缩 payload。
+
+    用 hhmm 推分钟序号（09:30=0 … 11:30=120，13:00=121 … 15:00=241），
+    桶边界对每一天都一致 ⇒ 前端"今日 vs 昨日同一时刻"的量能对比仍然逐桶对得上。
+    """
+    if f <= 1 or not pts:
+        return pts
+
+    def _ord(hh):
+        h, m = hh // 100, hh % 100
+        base = (h - 9) * 60 + m - 30
+        if h >= 13:
+            base -= 90                  # 午休 11:30~13:00 不计入
+        return base
+
+    out, cur, last = [], None, None
+    for p in pts:
+        try:
+            o = _ord(int(p[0])) // f
+        except Exception:
+            continue
+        if o != cur:
+            if last is not None:
+                out.append(last)
+            cur = o
+            last = [p[0], p[1], p[2]]
+        else:
+            last = [p[0], p[1], last[2] + p[2]]     # 价取桶内最后一分钟，额求和
+    if last is not None:
+        out.append(last)
+    return out
+
+
+def get_cached(days=5, hist_sig=None, codes=None, labels=None, depths=None):
     """js_api 用：只读内存 + 后台刷新（零网络）。
 
     codes 省略 ⇒ 三大指数；个股/ETF 传 ["sh600584"] 这类带市场前缀的码。
@@ -424,6 +634,11 @@ def get_cached(days=5, hist_sig=None, codes=None, labels=None):
         days = 5
     per_sig = hist_sig if isinstance(hist_sig, dict) else {}
     labels = labels if isinstance(labels, dict) else {}
+    depths = depths if isinstance(depths, dict) else {}
+    # 长区间压缩：>40 天 → 每 2 分钟一桶；>70 天 → 每 3 分钟一桶。
+    # （100 天 1 分钟 = 三指数 ~72k 点、~1.5MB，过 pywebview 串行桥会超时/卡死 ⇒
+    #   owner 2026-11-27 报"指数 100 天没看到"的根因就是它。）
+    _dsf = 3 if days > 70 else (2 if days > 40 else 1)
     if codes:
         _want = []
         for c in codes:
@@ -439,7 +654,8 @@ def get_cached(days=5, hist_sig=None, codes=None, labels=None):
         with _lock:
             h = _hist.get(code)
             t = _today.get(code)
-        h_ok = bool(h) and (now - float(h.get("ts") or 0.0)) < _HIST_TTL
+        h_ok = (bool(h) and (now - float(h.get("ts") or 0.0)) < _HIST_TTL
+                and int(h.get("want") or 0) >= days)
         if not h_ok:
             warming = True
             _kick_hist(code, days + 1)
@@ -449,7 +665,11 @@ def get_cached(days=5, hist_sig=None, codes=None, labels=None):
         hist_days = (h or {}).get("days") or {}
         dates = sorted(hist_days)[-days:]
         sig = (h or {}).get("sig") or ""
-        send_hist = bool(dates) and str(per_sig.get(code) or "") != sig
+        # 前端报"当前本地深度"：不足 ⇒ 必须重发（2026-11-27 实报：100 天只有 1 个点，
+        # 就是 sig 看起来一致而前端其实已清空 _imHist）
+        _front_depth = int(depths.get(code) or 0)
+        send_hist = bool(dates) and (str(per_sig.get(code) or "") != sig
+                                     or _front_depth < len(dates))
         t_pts = (t or {}).get("pts") or []
         today_date = (t or {}).get("date") or ""
         prev_date = dates[-1] if dates else ""
@@ -472,11 +692,12 @@ def get_cached(days=5, hist_sig=None, codes=None, labels=None):
             "name": name,
             "ma5flag": _ma5_flag_calc(code, _last_px),
             "hist_sig": sig,
-            "hist": ([{"date": d, "pts": hist_days[d]} for d in dates]
+            "hist": ([{"date": d, "pts": _ds_pts(hist_days[d], _dsf)} for d in dates]
                      if send_hist else None),
+            "gran": _dsf,                    # >1 = 每 gran 分钟一桶（长区间压缩）
             "prev_date": prev_date,
             "today_date": today_date,
-            "today": t_pts,
+            "today": _ds_pts(t_pts, _dsf),
             "as_of": as_of,
             "dmas": dmas,
             "avail_days": len(dates) + (1 if t_pts else 0),
