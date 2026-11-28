@@ -7,8 +7,7 @@
     `close > prev_close` 记上涨、`<` 记下跌、`=` 记平盘；
   · 同一天先按**股票数**聚合，再按覆盖家数 `n` 做样本闸（<2000 只的日期丢弃，
     早期缓存不全/退市造成的空壳日不算）；
-  · **永远排除今天**：盘中的日线缓存含未收盘的 forming bar（见 memory
-    `daily_partial_bar_poison`），把它算进来会把"上午的涨跌家数"冻成今天的收盘值。
+  · 默认排除今天的 forming bar；只有显式 EOD 调用才可包含 as_of，且始终截断未来；
 
 SWR / 成本
   · 全量扫 5500+ 只（每只 800 行）单线程约 5~10s ⇒ 放**后台单飞**线程（3 线程 + 每只让
@@ -46,8 +45,12 @@ def is_stock(code: str) -> bool:
     return c[:2] in ("60", "00", "30", "68") or c[0] in "48" or c[:3] == "920"
 
 
-def count_rows(rows, skip_date: str | None = None):
-    """单只股票的日线 → {date: (up, dn, flat)}（首行没有前收盘，不计）。纯计算，便于离线单测。"""
+def count_rows(rows, skip_date: str | None = None, end_date: str | None = None):
+    """单只股票的日线 → {date: (up, dn, flat)}（首行没有前收盘，不计）。
+
+    ``end_date`` 是历史 as-of 硬边界；``skip_date`` 用于排除未收盘的当日行。
+    两者都只做本地过滤，不触网。
+    """
     out = {}
     prev = None
     for r in rows or []:
@@ -57,7 +60,8 @@ def count_rows(rows, skip_date: str | None = None):
         except (TypeError, ValueError):
             prev = None
             continue
-        if prev and prev > 0 and c > 0 and len(d) == 10 and d != skip_date:
+        if (prev and prev > 0 and c > 0 and len(d) == 10 and d != skip_date
+                and (end_date is None or d <= end_date)):
             if c > prev:
                 out[d] = (1, 0, 0)
             elif c < prev:
@@ -68,7 +72,7 @@ def count_rows(rows, skip_date: str | None = None):
     return out
 
 
-def scan_file(fp: str, skip_date: str):
+def scan_file(fp: str, skip_date: str, end_date: str | None = None):
     """单只 → {date: (up, dn, flat)}；文件坏/无行 → {}。"""
     try:
         with open(fp, "r", encoding="utf-8") as f:
@@ -76,12 +80,19 @@ def scan_file(fp: str, skip_date: str):
         rows = d.get("rows") if isinstance(d, dict) else d
     except Exception:
         return {}
-    return count_rows(rows, skip_date)
+    return count_rows(rows, skip_date, end_date)
 
 
-def build(daily_dir: str = _DAILY_DIR, workers: int = _WORKERS):
-    """全池扫描 → {date: [up, dn, flat, n]}（已过样本闸、已排除今天）。"""
-    today = datetime.now().strftime("%Y-%m-%d")
+def build(daily_dir: str = _DAILY_DIR, workers: int = _WORKERS,
+          as_of: str | None = None, include_as_of: bool = False):
+    """全池扫描 → {date: [up, dn, flat, n]}（已过样本闸）。
+
+    默认 ``as_of=今天`` 且排除当日，保持盘前/盘中 forming-bar 防护。
+    只有调用方已完成今日行修复时，才可显式 ``include_as_of=True`` 构建 EOD；
+    历史构建无论是否包含 as_of，都会丢弃其后的所有行。
+    """
+    as_of = str(as_of or datetime.now().strftime("%Y-%m-%d"))[:10]
+    skip_date = None if include_as_of else as_of
     try:
         files = [os.path.join(daily_dir, n) for n in os.listdir(daily_dir)
                  if n.endswith(".json") and is_stock(n[:-5])]
@@ -90,7 +101,7 @@ def build(daily_dir: str = _DAILY_DIR, workers: int = _WORKERS):
     agg: dict = {}
 
     def _one(fp):
-        m = scan_file(fp, today)
+        m = scan_file(fp, skip_date, as_of)
         _time.sleep(0.005)            # 每只让一次 GIL（与 pb-struct 同一纪律）
         return m
 
@@ -134,14 +145,25 @@ def _today() -> str:
     return datetime.now().strftime("%Y%m%d")
 
 
-def _kick_build() -> None:
+def _kick_build(expected_date: str | None = None, include_as_of: bool = False,
+                eod_verified: bool = False) -> None:
+    """后台单飞重建。
+
+    历史日可由普通缓存刷新包含；**当日**只有 ``refresh_eod()`` 在今日行修复成功后
+    才能传 ``eod_verified=True``。普通 SWR 即使发现当日缺口，也不能借时钟绕过 forming 闸。
+    """
+    as_of = str(expected_date or datetime.now().strftime("%Y-%m-%d"))[:10]
+    today_iso = datetime.now().strftime("%Y-%m-%d")
+    include = bool(include_as_of and (as_of < today_iso or
+                                      (eod_verified and as_of == today_iso)))
+
     def _bg():
         try:
-            series = build()
+            series = build(as_of=as_of, include_as_of=include)
             if series:
                 d = {"schema": _SCHEMA, "date": _today(),
                      "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                     "series": series}
+                     "as_of": as_of, "includes_as_of": include, "series": series}
                 _write_disk(d)
                 with _lock:
                     _state.update({"data": d, "ts": _time.time()})
@@ -153,6 +175,19 @@ def _kick_build() -> None:
     _threading.Thread(target=_bg, daemon=True, name="breadth-daily").start()
 
 
+def refresh_eod(as_of: str) -> bool:
+    """今日行修复成功后的唯一当日 EOD 构建入口；返回是否已启动后台单飞。"""
+    day = str(as_of or "")[:10]
+    if len(day) != 10:
+        return False
+    with _lock:
+        if _state.get("running"):
+            return False
+        _state["running"] = True
+    _kick_build(day, include_as_of=True, eod_verified=True)
+    return True
+
+
 def _in_session() -> bool:
     """交易时段（09:15~15:05 工作日）。"""
     now = datetime.now()
@@ -161,14 +196,28 @@ def _in_session() -> bool:
     return "09:15" <= now.strftime("%H:%M") <= "15:05"
 
 
-def get_cached(ttl_sec: float = 86400.0) -> dict:
+def _series_covers(d: dict, expected_date: str | None) -> bool:
+    """目标交易日必须存在、覆盖达样本闸，且序列末端不能落后于它。"""
+    if not expected_date:
+        return True
+    s = (d or {}).get("series") or {}
+    row = s.get(expected_date)
+    try:
+        covered = bool(row) and int(row[3]) >= _MIN_COVER
+    except (IndexError, TypeError, ValueError):
+        covered = False
+    series_end = max(s) if s else ""
+    return covered and series_end >= expected_date
+
+
+def get_cached(ttl_sec: float = 86400.0, expected_date: str | None = None) -> dict:
     """js_api 用：只读缓存 + 必要时踢后台重建。
 
-    ⚠️ 重建（全池扫 5500 只，约 25s CPU）**只在盘后/盘前踢**：盘中拿到旧档照常用
-    （日频指标滞后一天无感），避免开盘高峰和 UI 抢 GIL。收盘后第一次请求会重建。
-
-    返回 {series, built_at, date, pending, stale, n_days}。
+    新鲜度同时要求缓存是自然日新档、``expected_date`` 存在且覆盖达标、序列末端不
+    落后。``expected_date`` 应来自权威情绪行的最后一个**已完成**交易日；默认构建仍
+    排除今天，盘中旧档照返且不为日频指标抢 UI 的 GIL。
     """
+    expected_date = str(expected_date)[:10] if expected_date else None
     now = _time.time()
     with _lock:
         d = _state.get("data")
@@ -178,23 +227,36 @@ def get_cached(ttl_sec: float = 86400.0) -> dict:
                 _state.update({"data": d, "ts": now})
     if d is not None and int(d.get("schema") or 0) != _SCHEMA:
         d = None
-    stale = (d is None) or str(d.get("date") or "") != _today()
+    stale = ((d is None) or str(d.get("date") or "") != _today()
+             or not _series_covers(d, expected_date))
     if stale:
         with _lock:
             if not _state.get("running") and (not _in_session() or d is None):
                 _state["running"] = True
-                _kick_build()
+                if expected_date:
+                    _kick_build(expected_date, include_as_of=True)
+                else:
+                    _kick_build()
     if d is None:
         return {"series": {}, "built_at": "", "date": None, "pending": True,
-                "stale": True, "n_days": 0}
+                "stale": True, "data_status": "insufficient_data",
+                "expected_date": expected_date, "series_end": None, "n_days": 0}
     s = d.get("series") or {}
     return {"series": s, "built_at": d.get("built_at") or "",
-            "date": d.get("date"), "pending": False, "stale": stale, "n_days": len(s)}
+            "date": d.get("date"), "pending": False, "stale": stale,
+            "data_status": "stale" if stale else "ready",
+            "expected_date": expected_date, "series_end": max(s) if s else None,
+            "n_days": len(s)}
 
 
 def merge_into(rows, ttl_sec: float = 86400.0) -> dict:
-    """把 up/dn/flat/n 合并进情绪面板的行（按 date 对齐；缺的日期给 None）。"""
-    data = get_cached(ttl_sec)
+    """合并涨跌家数；以最后一个早于今天的有效情绪行作为完成日锚点。"""
+    today_iso = datetime.now().strftime("%Y-%m-%d")
+    completed = sorted({str(r.get("date") or "")[:10] for r in rows or []
+                        if len(str(r.get("date") or "")) >= 10
+                        and str(r.get("date") or "")[:10] < today_iso})
+    expected_date = completed[-1] if completed else None
+    data = get_cached(ttl_sec, expected_date=expected_date)
     s = data.get("series") or {}
     for r in rows or []:
         v = s.get(str(r.get("date") or ""))

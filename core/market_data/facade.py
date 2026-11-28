@@ -540,30 +540,59 @@ class MarketDataFacade:
                 self._note_gm_down("snapshot", ",".join(str(c) for c in codes[:3]), e)
         return self._tx.snapshot(codes)
 
-    def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
+    @staticmethod
+    def _index_date_valid(df: pd.DataFrame, target: str) -> bool:
+        """指定日必须真实存在，且不是 OHLC 全同、量额皆零的占位行。"""
+        import math
+        if df is None or df.empty or not target or "date" not in df.columns:
+            return False
+        rows = df[df["date"].astype(str).str[:10] == str(target)[:10]]
+        if rows.empty:
+            return False
+        try:
+            row = rows.iloc[-1]
+            close = float(row.get("close"))
+            if not math.isfinite(close) or close <= 0:
+                return False
+            vals = [float(row.get(k)) for k in ("open", "high", "low", "close")]
+            vol = float(row.get("volume") or 0)
+            amount = float(row.get("amount") or 0)
+            if not all(math.isfinite(v) for v in vals + [vol, amount]):
+                return False
+            return not (len(set(vals)) == 1 and vol <= 0 and amount <= 0)
+        except (TypeError, ValueError):
+            return False
+
+    def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None,
+                    require_date: bool = False) -> pd.DataFrame:
+        """指数日线；``require_date=True`` 时目标日缺失/占位会触发备用源。
+
+        严格模式只供 EOD 净值等必须指认目标日的调用。普通历史/昨收查询允许自然停在
+        上一交易日，保持既有盘中与回测接口语义。"""
         if self._gm_ok():
             try:
                 df = self._gm_call("index_daily", self._gm.index_daily, index, days, end_date)
                 if df is not None and not df.empty:
-                    # 阻断6: gm 指数结果写缓存（end_date 缺省时）
-                    if end_date is None:
-                        # 2026-08-31: 补当日 forming bar（gm 盘中不含当日指数），否则 regime 用昨日收盘
-                        df = self._maybe_append_index_forming(df, index)
-                        from .tencent_provider import save_index_daily_cache
-                        save_index_daily_cache(index, df)
-                    self._gm_ok_reset()
-                    return self._mark(df, "gm")
+                    if require_date and not self._index_date_valid(df, end_date):
+                        log.warning("GM 指数日线缺目标日或目标日为占位行(%s,%s) → 尝试腾讯/东财", index, end_date)
+                        self._gm_ok_reset()   # 连接本身健康，只是内容不满足目标日
+                    else:
+                        if end_date is None:
+                            df = self._maybe_append_index_forming(df, index)
+                            from .tencent_provider import save_index_daily_cache
+                            save_index_daily_cache(index, df)
+                        self._gm_ok_reset()
+                        return self._mark(df, "gm")
             except Exception as e:
                 self._note_gm_down("index_daily", index, e)
         df = self._tx.index_daily(index, days, end_date)
-        if df is None or df.empty:
-            # 2026-11-18：腾讯 fqkline（ifzq / web.ifzq 两主机）被 WAF 统一回 501，而 GM 终端
-            # 会间歇性 1001 掉线 ⇒ 两个源同时不可得（实报「成交量图：指数日线不可得(sh000001)」、
-            # K 线当日 forming 根也失效）。东财 push2his 指数日线仍可用且**带真实成交额**。
+        # 非空旧缓存不等于目标日可用；严格模式下占位行同样必须切换备用源。
+        if (require_date and not self._index_date_valid(df, end_date)) or df is None or df.empty:
             try:
                 from .em_index import index_daily_em
                 _em = index_daily_em(index, days, end_date)
-                if _em is not None and not _em.empty:
+                if _em is not None and not _em.empty \
+                        and (not require_date or self._index_date_valid(_em, end_date)):
                     if end_date is None:
                         try:
                             from .tencent_provider import save_index_daily_cache
@@ -573,7 +602,7 @@ class MarketDataFacade:
                     return self._mark(_em, "eastmoney")
             except Exception:
                 pass
-        return self._mark(df, df.attrs.get("source", "tencent"))
+        return self._mark(df, df.attrs.get("source", "tencent")) if df is not None else pd.DataFrame()
 
     def _pre_close_of(self, symbol: str, today: str):
         """指数昨收（GM current 不提供 → 从日线取；按日缓存，盘内恒定只取一次）。

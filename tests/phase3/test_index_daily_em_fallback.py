@@ -67,6 +67,77 @@ class TestFacadeFallback(unittest.TestCase):
         self.assertEqual(df.attrs.get("source"), "eastmoney")
         self.assertEqual(len(df), 1)
 
+    @staticmethod
+    def _row(date="2026-11-18", close=3587.83, volume=423934832, amount=650231688071.30):
+        return {"date": date, "open": close - 1, "high": close + 2, "low": close - 3,
+                "close": close, "volume": volume, "amount": amount}
+
+    def test_stale_nonempty_tencent_falls_to_em_in_strict_mode(self):
+        prov = MarketDataFacade()
+        prov._gm = mock.Mock()  # 避免参数求值时访问 None.index_daily
+        stale = pd.DataFrame([self._row(date="2026-11-17")])
+        fresh = pd.DataFrame([self._row()])
+        with mock.patch.object(prov, "_gm_ok", return_value=False), \
+                mock.patch.object(prov._tx, "index_daily", return_value=stale), \
+                mock.patch.object(em_index, "index_daily_em", return_value=fresh) as em:
+            df = prov.index_daily("sh000300", days=10, end_date="2026-11-18", require_date=True)
+        em.assert_called_once()
+        self.assertEqual(df.attrs.get("source"), "eastmoney")
+        self.assertEqual(df["date"].iloc[-1], "2026-11-18")
+
+    def test_zero_volume_placeholder_falls_to_em(self):
+        prov = MarketDataFacade()
+        placeholder = pd.DataFrame([self._row(close=2189.82, volume=0, amount=0)])
+        placeholder[["open", "high", "low"]] = 2189.82
+        fresh = pd.DataFrame([self._row()])
+        with mock.patch.object(prov, "_gm_ok", return_value=False), \
+                mock.patch.object(prov._tx, "index_daily", return_value=placeholder), \
+                mock.patch.object(em_index, "index_daily_em", return_value=fresh):
+            df = prov.index_daily("sz399006", days=10, end_date="2026-11-18", require_date=True)
+        self.assertEqual(df.attrs.get("source"), "eastmoney")
+
+    def test_gm_missing_target_cannot_short_circuit_backup(self):
+        prov = MarketDataFacade()
+        prov._gm = mock.Mock()  # 避免参数求值时访问 None.index_daily
+        stale = pd.DataFrame([self._row(date="2026-11-17")])
+        fresh = pd.DataFrame([self._row()])
+        with mock.patch.object(prov, "_gm_ok", return_value=True), \
+                mock.patch.object(prov, "_gm_call", return_value=stale), \
+                mock.patch.object(prov, "_gm_ok_reset"), \
+                mock.patch.object(prov._tx, "index_daily",
+                                  return_value=pd.DataFrame(columns=em_index._COLS)), \
+                mock.patch.object(em_index, "index_daily_em", return_value=fresh) as em:
+            df = prov.index_daily("sh000300", days=10, end_date="2026-11-18", require_date=True)
+        em.assert_called_once()
+        self.assertEqual(df.attrs.get("source"), "eastmoney")
+
+    def test_non_strict_historical_query_keeps_gm_previous_day(self):
+        """昨收/历史接口允许自然停在上一交易日，不被严格目标日语义误伤。"""
+        prov = MarketDataFacade()
+        prov._gm = mock.Mock()
+        previous = pd.DataFrame([self._row(date="2026-11-17")])
+        with mock.patch.object(prov, "_gm_ok", return_value=True), \
+                mock.patch.object(prov, "_gm_call", return_value=previous), \
+                mock.patch.object(prov, "_gm_ok_reset"), \
+                mock.patch.object(em_index, "index_daily_em") as em:
+            df = prov.index_daily("sh000300", days=10, end_date="2026-11-18")
+        em.assert_not_called()
+        self.assertEqual(df.attrs.get("source"), "gm")
+
+
+class TestIndexReturnIntegrity(unittest.TestCase):
+    def test_zero_volume_placeholder_never_produces_alpha_benchmark(self):
+        from scripts.equity_daily import index_ret
+        placeholder = pd.DataFrame([
+            {"date": "2026-11-26", "open": 2100, "high": 2120, "low": 2090,
+             "close": 2110, "volume": 1e8, "amount": 2e11},
+            {"date": "2026-11-27", "open": 2189.82, "high": 2189.82,
+             "low": 2189.82, "close": 2189.82, "volume": 0, "amount": 0},
+        ])
+        ret, note = index_ret(placeholder, "2026-11-27")
+        self.assertIsNone(ret)
+        self.assertIn("benchmark_unverified", note)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

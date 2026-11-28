@@ -302,6 +302,15 @@
         三区同口径 0~40 弱势 / 40~60 平稳 / 60~100 强势
       </div>
       <div id="sentCompositeChart" class="echart" style="height:190px"></div>
+      <!-- 2026-11-28 owner：板块 × 情绪周期（顺/逆）表 -->
+      <div class="cell-dim" style="font-size:11px;margin:12px 0 4px;line-height:1.8">
+        <b>🎭 板块 × 情绪周期</b>：板块等权日收益的**超额部分**（减去全池等权）对综合温度**变化**的
+        相关。超额相关 ≥ +0.20 = <b style="color:#f85149">顺情绪</b>（温度回暖时跑赢、退潮时跑输）；
+        ≤ −0.20 = <b style="color:#3fb950">逆情绪</b>（防御/红利型）；其余中性。
+        「温度+10点」= 温度每上行 10 点、该板块的超额收益（%）。描述性统计，非买卖信号。
+      </div>
+      <div id="sectorCycleMeta" class="cell-dim" style="font-size:11px;margin-bottom:4px"></div>
+      <div id="sectorCycleBody" style="max-height:320px;overflow:auto"></div>
     </div>
     <div class="section" id="market-beacon">
       <!-- ⚠️ **必须是独立 section、不能长在 `#liveBody` 里**（2026-10-13 实测教训）：
@@ -933,6 +942,6 @@
      `_ensureEcharts()` 在首次真正画图时动态注入（单飞 + 排队补画，见 app.js ECharts 辅助段）。 -->
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261127k"></script>
+<script src="app.js?v=20261128a"></script>
 </body>
 </html>

@@ -97,6 +97,11 @@ _TTL_REGISTRY = [
          poll_re=r"INTRADAY_POLL_MS\s*=\s*(\d+)",
          exempt=None),                       # 3s ≤ 0.8×5s：拍内去重；历史 600s +
                                              # 今日 tail 都在后台单飞，js_api 只读内存
+    dict(endpoint="load_sector_cycle", ttl_name="_SECTOR_CYCLE_TTL",
+         ttl_re=r"_SECTOR_CYCLE_TTL\s*=\s*(\d+(?:\.\d+)?)",
+         poll_re=r"SECTOR_CYCLE_TTL_MS\s*=\s*(\d+)",
+         exempt=None),                       # 86400s > 300s：日频表，后台单飞实算（~30s）
+                                             # 只在跨日时重算；前端 5 分钟轮询只读缓存
     dict(endpoint="load_index_leaders", ttl_name="_IDX_LEADERS_TTL",
          ttl_re=r"_IDX_LEADERS_TTL\s*=\s*(\d+(?:\.\d+)?)",
          poll_re=r"_IDX_LEADERS_TTL_MS\s*=\s*(\d+)",

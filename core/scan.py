@@ -92,12 +92,12 @@ def scan_once(engine):
 
         with _ScanStage("⑤盘后建仓扫描"):
             _maybe_run_position_builder(now)           # 15:05-15:15 建仓信号扫描（每日一次）
+        with _ScanStage("⑥c今日行修复"):
+            _maybe_run_today_bar_repair(now)           # W48：先修复并等待成功，再允许复盘/预下载读取同一批缓存
         with _ScanStage("⑥每日复盘"):
-            _maybe_run_daily_review(now)               # P0-7(2026-09-01): 15:10 后自动每日复盘（子进程隔离）
+            _maybe_run_daily_review(now)               # 修复 running/failed 时等待，不与修复竞态
         with _ScanStage("⑥b诊断指标落盘"):
             _maybe_flush_diag_metrics(now)             # 2026-11-23: 15:10 后本进程吞点计数 → metrics.jsonl
-        with _ScanStage("⑥c今日行修复"):
-            _maybe_run_today_bar_repair(now)           # 2026-11-26(㊴): 15:12 后修「末行==今天」快照污染（原 15:40 tdx 钩内保留兜底）
         with _ScanStage("⑦K线预下载"):
             _maybe_run_chart_prefetch(now)             # 2026-10-04: 15:10 后 K线缓存预下载（与 gui 幂等）
         with _ScanStage("⑧新鲜度巡检"):

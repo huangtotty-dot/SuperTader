@@ -239,16 +239,28 @@ def _partial_path(shard_name: str) -> Path:
     return INCR / f"{shard_name}.newrows.parquet"
 
 
-def _load_done(shard_name: str) -> set[str]:
+_FETCH_SUCCESS = {"ok", "ok_new", "drift_refetched", "no_data_expected"}
+
+
+def _progress_latest(shard_name: str) -> dict[str, dict]:
+    """每只股票只认最近一次断点记录；失败/空返回会撤销旧的完成状态。"""
     p = _progress_path(shard_name)
-    done = set()
+    latest = {}
     if p.exists():
         for line in p.read_text(encoding="utf-8").splitlines():
             try:
-                done.add(json.loads(line)["symbol"])
+                rec = json.loads(line)
+                sym = str(rec["symbol"])
             except Exception:
                 continue
-    return done
+            latest[sym] = rec
+    return latest
+
+
+def _load_done(shard_name: str) -> set[str]:
+    """只有成功或明确合法无新增才完成；``fail``/``nodata`` 必须续跑或显式处置。"""
+    return {s for s, rec in _progress_latest(shard_name).items()
+            if rec.get("status") in _FETCH_SUCCESS}
 
 
 def _append_progress(shard_name: str, rec: dict) -> None:
@@ -284,13 +296,21 @@ def baseline_cutoff() -> pd.Timestamp:
     return pd.Timestamp(c) if c else detect_cutoff()
 
 
-def cmd_fetch(args) -> None:
+def cmd_fetch(args) -> dict:
     gm = _gm_api()
     cutoff = baseline_cutoff()
     cutoff64 = np.datetime64(cutoff)
     adjust_mode = gm.ADJUST_PREV
     uni = pd.read_parquet(PANEL / "universe.parquet")
     uni_syms = [str(s) for s in uni["symbol"]]
+    # 只有基准日前已经退市、后续本就不可能有新行的标的，空返回才可合法完成。
+    # 其余 nodata 一律视为“无法证明”，不得和 ok(n_new=0) 混为一谈。
+    expected_nodata = set()
+    if "delisted_date" in uni.columns:
+        for r in uni.itertuples():
+            dl = getattr(r, "delisted_date", None)
+            if pd.notna(dl) and pd.Timestamp(dl).tz_localize(None).normalize() <= cutoff:
+                expected_nodata.add(str(r.symbol))
     sym2shard = _symbol_shard_map()
     known = set(sym2shard)
     new_syms = [s for s in uni_syms if s not in known]
@@ -311,7 +331,7 @@ def cmd_fetch(args) -> None:
 
     t_start = time.time()
     deadline = t_start + args.max_seconds
-    stats = dict(ok=0, nodata=0, fail=0, drift=0, new_rows=0)
+    stats = dict(ok=0, nodata=0, nodata_expected=0, fail=0, drift=0, new_rows=0)
 
     for shard_name in sorted(todo):
         if time.time() > deadline:
@@ -348,8 +368,17 @@ def cmd_fetch(args) -> None:
             df, err = _fetch_one(gm, sym, count, adjust_mode, args.sleep)
             rec = dict(symbol=sym, ts=time.strftime("%F %T"))
             if df is None:
-                rec.update(status="fail" if err else "nodata", err=err)
-                stats["fail" if err else "nodata"] += 1
+                if err:
+                    rec.update(status="fail", err=err)
+                    stats["fail"] += 1
+                elif sym in expected_nodata:
+                    rec.update(status="no_data_expected",
+                               reason="delisted_on_or_before_cutoff", n_new=0)
+                    stats["nodata_expected"] += 1
+                else:
+                    rec.update(status="nodata", err=None,
+                               reason="empty_response_unverified")
+                    stats["nodata"] += 1
             else:
                 df["eob_naive"] = df["eob"].dt.tz_localize(None)
                 if is_new_shard:
@@ -444,10 +473,11 @@ def cmd_fetch(args) -> None:
                               max_rel_diff_non_drift=max_seen,
                               drift_threshold=DRIFT_RTOL,
                               drift_symbols=drift_list)
-    _save_report(rep)
-    _log(f"[fetch] 本轮结束 stats={stats} 漂移股={len(drift_list)}")
-    remaining = []
+    # 汇总结构化完成状态：只有已合并 marker 或最新成功记录才算完成。
+    remaining, failed_symbols, nodata_symbols = [], [], []
+    total = 0
     for sh, syms in todo.items():
+        total += len(syms)
         marker = INCR / f"{sh}.done.json"
         if marker.exists():
             try:
@@ -455,9 +485,34 @@ def cmd_fetch(args) -> None:
                     continue
             except Exception:
                 pass
-        remaining.extend(set(syms) - _load_done(sh))
-    _log(f"[fetch] 剩余未拉 {len(remaining)} 只"
-         + ("；重跑本命令续跑" if remaining else "；全部完成"))
+        latest = _progress_latest(sh)
+        for sym in syms:
+            status = (latest.get(sym) or {}).get("status")
+            if status in _FETCH_SUCCESS:
+                continue
+            remaining.append(sym)
+            if status == "fail":
+                failed_symbols.append(sym)
+            elif status == "nodata":
+                nodata_symbols.append(sym)
+    remaining = sorted(set(remaining))
+    completion = {
+        "complete": not remaining,
+        "cutoff": str(cutoff.date()),
+        "total_symbols": total,
+        "completed_symbols": total - len(remaining),
+        "remaining": remaining,
+        "failed_symbols": sorted(set(failed_symbols)),
+        "unverified_nodata_symbols": sorted(set(nodata_symbols)),
+        "legal_no_data_count": stats["nodata_expected"],
+    }
+    f["completion"] = completion
+    _save_report(rep)
+    _log(f"[fetch] 本轮结束 stats={stats} 漂移股={len(drift_list)}")
+    _log(f"[fetch] 完成 {completion['completed_symbols']}/{total}；剩余 {len(remaining)}；"
+         f"失败 {len(completion['failed_symbols'])}；未证实空返回 "
+         f"{len(completion['unverified_nodata_symbols'])}")
+    return completion
 
 
 def _merge_shard(shard_name: str, old_df: pd.DataFrame | None,
@@ -511,7 +566,8 @@ def cmd_factors(_args) -> None:
     import ic_layer
     import daily_selection_screen as f3
 
-    cutoff = detect_cutoff_for_factors()
+    baseline_date = getattr(_args, "baseline_date", None)
+    cutoff = pd.Timestamp(baseline_date) if baseline_date else detect_cutoff_for_factors()
     tag = cutoff.strftime("%Y-%m-%d")
     t0 = time.time()
     panel = f3._prep_panel(ic_layer.load_panel(str(PANEL)))
@@ -586,8 +642,10 @@ def cmd_derived(_args) -> None:
 # ---------------------------------------------------------------------------
 def cmd_verify(args) -> None:
     rep = _load_report()
-    cutoff = pd.Timestamp(rep.get("backup", {}).get("cutoff",
-                                                    detect_cutoff().strftime("%Y-%m-%d")))
+    baseline_date = getattr(args, "baseline_date", None)
+    cutoff = (pd.Timestamp(baseline_date) if baseline_date else
+              pd.Timestamp(rep.get("backup", {}).get(
+                  "cutoff", detect_cutoff().strftime("%Y-%m-%d"))))
     tag = cutoff.strftime("%Y-%m-%d")
     bdir = RESULTS / f"baseline_{tag}"
     out = dict(cutoff=tag, ts=time.strftime("%F %T"))
@@ -689,24 +747,89 @@ def cmd_verify(args) -> None:
 
 
 # ---------------------------------------------------------------------------
+# IC 派生状态（面板与监控状态必须原子地表达依赖，失败即禁止调权）
+# ---------------------------------------------------------------------------
+def _block_ic_status(state: str, reason: str, as_of=None) -> None:
+    fp = FM / "results" / "ic_monitor" / "monitor_status.json"
+    try:
+        status = json.loads(fp.read_text(encoding="utf-8")) if fp.exists() else {}
+    except Exception:
+        status = {}
+    status["generated_at"] = time.strftime("%F %T")
+    status["data_status"] = state
+    if as_of is not None:
+        status["as_of"] = str(as_of)
+    for factor in (status.get("factors") or {}).values():
+        factor["suggested_weight_mult"] = None
+    overall = status.setdefault("overall", {})
+    overall.update({"any_alarm": False, "alarm_factors": [], "warn_factors": [],
+                    "production_weight_change_allowed": False,
+                    "action": f"{reason}；禁止据此调整生产权重"})
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    tmp = fp.with_suffix(".tmp")
+    tmp.write_text(json.dumps(status, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, fp)
+
+
+def cmd_ic_refresh(args) -> None:
+    """S1 verify 成功后重算 IC；非零/超时/末端不齐均 fail-closed。"""
+    rep = _load_report()
+    panel_end = pd.Timestamp((rep.get("factors") or {}).get("max_date")
+                             or detect_cutoff()).normalize()
+    _block_ic_status("ic_refresh_running", "IC 正在按新面板重算", panel_end.date())
+    cmd = [sys.executable, str(FM / "ic_monitor.py"), "--date", str(panel_end.date()),
+           "--no-plot"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", cwd=str(ROOT),
+                           timeout=args.ic_timeout)
+        err = (r.stderr or "")[-800:]
+        if r.returncode != 0:
+            raise RuntimeError(f"ic_monitor returncode={r.returncode}: {err}")
+        status_fp = FM / "results" / "ic_monitor" / "monitor_status.json"
+        status = json.loads(status_fp.read_text(encoding="utf-8"))
+        if (status.get("data_status") != "ready"
+                or status.get("panel_end") != str(panel_end.date())
+                or not (status.get("overall") or {}).get("production_weight_change_allowed")):
+            raise RuntimeError(f"IC 状态未通过新鲜度验收: {status.get('data_status')}, "
+                               f"panel_end={status.get('panel_end')}")
+    except Exception as e:
+        _block_ic_status("ic_refresh_failed", f"IC 刷新失败：{str(e)[:300]}", panel_end.date())
+        rep["ic_monitor"] = {"ok": False, "panel_end": str(panel_end.date()),
+                             "error": str(e)[:800], "ts": time.strftime("%F %T")}
+        _save_report(rep)
+        raise SystemExit(f"[all] IC 刷新失败，后续状态已闭锁：{e}")
+    rep["ic_monitor"] = {"ok": True, "panel_end": str(panel_end.date()),
+                         "status": "ready", "ts": time.strftime("%F %T")}
+    _save_report(rep)
+    _log(f"[all] IC 派生状态已刷新并对齐面板 {panel_end.date()}")
+
+
+# ---------------------------------------------------------------------------
 # all
 # ---------------------------------------------------------------------------
 def cmd_all(args) -> None:
     cmd_probe(args)
     cmd_backup(args)
     cmd_universe(args)
+    _block_ic_status("s1_update_running", "S1 面板更新中，旧 IC 状态已失效")
     # fetch 可能需要多轮（单轮受 --max-seconds 限制）
     for rnd in range(1, args.fetch_rounds + 1):
-        cmd_fetch(args)
-        left = list(INCR.glob("shard_*.progress.jsonl"))
-        if not left:
+        completion = cmd_fetch(args)
+        if completion["complete"]:
             break
-        _log(f"[all] fetch 第 {rnd} 轮结束，仍有断点，继续下一轮")
+        _log(f"[all] fetch 第 {rnd} 轮结束，仍剩 {len(completion['remaining'])} 只，继续下一轮")
     else:
-        raise SystemExit("[all] fetch 超过最大轮数仍未完成，请重跑 all 续跑")
+        rep = _load_report()
+        completion = (rep.get("fetch") or {}).get("completion") or {}
+        raise SystemExit("[all] fetch 未完成，禁止进入 factors/derived/verify："
+                         f"remaining={len(completion.get('remaining') or [])}, "
+                         f"failed={completion.get('failed_symbols')}, "
+                         f"nodata={completion.get('unverified_nodata_symbols')}")
     cmd_factors(args)
     cmd_derived(args)
     cmd_verify(args)
+    cmd_ic_refresh(args)
 
 
 def main() -> None:
@@ -720,6 +843,9 @@ def main() -> None:
                     help="fetch 单轮自停秒数（配合 Bash 300s 上限断点续跑）")
     ap.add_argument("--fetch-rounds", type=int, default=30, help="all 模式 fetch 最大轮数")
     ap.add_argument("--sim-timeout", type=float, default=280, help="verify 中 s1_sim 超时秒")
+    ap.add_argument("--ic-timeout", type=float, default=600, help="面板更新后的 IC 重算超时秒")
+    ap.add_argument("--baseline-date", default=None,
+                    help="断档恢复专用：factors/verify 共用同一原始基线日期（如 2026-09-17）")
     args = ap.parse_args()
     dict(probe=cmd_probe, backup=cmd_backup, universe=cmd_universe,
          fetch=cmd_fetch, factors=cmd_factors, derived=cmd_derived,

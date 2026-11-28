@@ -189,38 +189,50 @@ def load_daily_display(code, now=None):
         return None
 
 
-def write_daily_history(code, df) -> bool:
+def write_daily_history(code, df, now=None, eod_verified=False, source=None) -> bool:
     """把日线 df **并入**共享缓存（merge 语义，保留长历史、不截短）。
 
-    复用 `tencent_provider.merge_daily_cache`（sanctioned 的合并写端）——**禁止**用
-    `save_daily_cache`（整体覆盖会把 800 行历史截短，见 memory「指数日线缓存会被静默截短」）。
+    当日行默认始终是 forming；只有调用方携带受控 EOD 证明时才清标记并写入
+    ``eod_verified/eod_source``。钟表时间（包括 15:10 以后）本身不构成收盘证明。
+    后续普通 ``merge_daily_cache`` 若清掉这些元数据，缓存会自然回到未验证态。
     """
     if df is None or getattr(df, "empty", True):
         return False
-    # 2026-10-26（owner 报「上海洗霸已站上 5/10 日线却显示破位、整行是黄的」）：
-    # 这里原来**不带 forming_date** 就把 df 并进缓存，而 `daily_many` 在盘中会把
-    # **当日快照根**一起返回 ⇒ merge 既把快照值写成收盘、又顺手把 forming 标记清空
-    # （`forming = {forming_date} if forming_date else set()`）⇒ 那根半成品被当成真收盘永久留档。
-    # 实测（2026-10-26 09:3x 写入）：603200 存成 close=46.44（当天实为涨停），
-    # MA5=47.57 ⇒ 技术标签报「破5日线」、猎手整行按未站上染黄。全池同批 **61 只**中招。
-    # 判据：**末行就是今天** ⇒ 它只能来自快照（历史日不会变），必须标 forming；
-    # 后续真数据确认时会覆盖并清标记（merge 的 `old_forming ∩ incoming` 分支）。
-    #
-    # 2026-11-13（11-12 事故）：**收盘后（≥15:10，与 `_CLOSE_SETTLED_HHMM` 同一口径）
-    # 拿到的当日根就是真收盘，别再标 forming**。原来一律标 ⇒ 15:10 那轮预下载写下的
-    # 是"已确认"的收盘却永久挂着 forming，次日被当成半成品反复重下/丢弃，
-    # 也让 `daily_repair`（只修 last<今天）无从清理。
     _forming = None
+    _last = ""
     try:
         _last = str(df["date"].iloc[-1])[:10]
-        _n = datetime.now()
-        if _last == _n.strftime("%Y-%m-%d") and _n.strftime("%H:%M") < "15:10":
+        _n = _as_dt(now) or datetime.now()
+        if _last == _n.strftime("%Y-%m-%d") and not eod_verified:
             _forming = _last
     except Exception:
         _forming = None
     try:
         from core.market_data.tencent_provider import merge_daily_cache
         merge_daily_cache(str(code).split("_")[0], df, forming_date=_forming)
+        if eod_verified:
+            # 受控入口必须确认目标行确实落盘，不能把一次空写/错日写冒报为成功。
+            if not _last or _last != _n.strftime("%Y-%m-%d"):
+                return False
+            fp = daily_fp(code)
+            cached = _read_json(fp, None)
+            if not isinstance(cached, dict) or not (cached.get("rows") or []):
+                return False
+            if str(cached["rows"][-1].get("date") or "")[:10] != _last:
+                return False
+            verified_raw = cached.get("eod_verified") or []
+            if isinstance(verified_raw, dict):
+                verified = {str(k)[:10] for k, v in verified_raw.items() if v}
+            else:
+                verified = {str(x)[:10] for x in verified_raw}
+            verified.add(_last)
+            cached["eod_verified"] = sorted(verified)
+            sources = dict(cached.get("eod_source") or {})
+            sources[_last] = str(source or "controlled_eod_gate")
+            cached["eod_source"] = sources
+            cached["eod_verified_at"] = _n.strftime("%Y-%m-%d %H:%M:%S")
+            from core.utils import write_json_atomic
+            write_json_atomic(str(fp), cached)
         return True
     except Exception:
         return False
@@ -693,42 +705,43 @@ def _dedup_valid(codes) -> list:
 # 盘后预下载编排
 # ---------------------------------------------------------------------------
 def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=200,
-                   sleep_s=0.3, retries=2, retry_pause=3.0) -> dict:
+                   sleep_s=0.3, retries=2, retry_pause=3.0,
+                   eod_verified=False, eod_source=None) -> dict:
     """批量下载日线并 merge 入缓存。返回 {requested, got, skipped, failed}。不抛。
 
-    **自己分批**调用 `daily_many`（而非一次喂全池）——`daily_many` 一遇 GM 异常就 `break`
-    丢掉剩余；分批后单批失败不影响其余（实测全池一次调用遇 RemoteDisconnected 只拿到 900/5373）。
-    某批失败/缺码的，隔 `retry_pause` 秒**整体重试 `retries` 轮**（GM 断连多为瞬时）。
+    ``eod_verified`` 只由今日行修复成功后的受控入口传入。普通预下载即使在盘后执行，
+    当日行仍保持 forming，且没有证明的同日缓存不得跳过收盘重取。
     """
     from core.market_data import get_provider
     codes = _dedup_valid(codes)
     stat = {"requested": len(codes), "got": 0, "skipped": 0, "failed": 0}
     if not codes:
         return stat
+    _now = now or datetime.now()
+    today = _now.strftime("%Y-%m-%d")
 
     def _is_current(c):
         if not skip_current:
             return False
         cd = _read_json(_DAILY_CACHE_DIR / f"{c}.json", {}) or {}
         rows = cd.get("rows") or []
-        _now = now or datetime.now()
-        today = _now.strftime("%Y-%m-%d")
-        # 2026-11-13（11-12 事故）：**末行挂着 forming = 盘中快照，不是收盘**，不能算"当期"。
-        # 否则：盘中（GUI 启动预下载 / 开过图的票）写下的快照根日期就是"当天"，
-        # `is_prefetch_current` 只看日期 gap ⇒ 收盘后这一轮**整批跳过**（实测 11-12 10:48
-        # 写过 2050 只），次日那根假"收盘"就一路带着用（603955 存 37.18、真值 33.35），
-        # 直到第二天 15:40 的 `daily_repair` 才有机会修。
-        # 判据：过去某天的 forming ⇒ 一定重下；**当天**的 forming ⇒ 收盘后（≥15:10）也重下
-        # （那正是本轮预下载的时点，重下才拿得到真收盘）；盘中则视为当期，不必白重下。
         _last = str(rows[-1].get("date"))[:10] if rows else ""
         _form = {str(x)[:10] for x in (cd.get("forming") or [])}
         if _last and _last in _form:
             if _last < today or _now.strftime("%H:%M") >= "15:10":
                 return False
+        if _last == today and _now.strftime("%H:%M") >= "15:10":
+            verified_raw = cd.get("eod_verified") or []
+            if isinstance(verified_raw, dict):
+                verified = {str(k)[:10] for k, v in verified_raw.items() if v}
+            else:
+                verified = {str(x)[:10] for x in verified_raw}
+            if today not in verified:
+                return False
         if is_prefetch_current(rows, now):
             return True
-        # 今日已写过（merge_daily_cache 会把 date 头写成今天）⇒ 视为当期。
-        # 假期里「末行=上个交易日、gap>5」会让 5 天窗失效，导致每次跑都重下全池，这条兜住。
+        # 假期里末行是上个交易日，今日已写过可避免每次启动都重下全池；
+        # 但盘后末行就是今天且未验证时，上面的硬闸优先，绝不被此兜底绕过。
         return str(cd.get("date") or "") == today
 
     todo = [c for c in codes if not _is_current(c)]
@@ -748,12 +761,13 @@ def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=200,
             except Exception:
                 got = {}
             for c, df in got.items():
-                if write_daily_history(c, df):
+                if write_daily_history(c, df, now=_now, eod_verified=eod_verified,
+                                       source=eod_source):
                     stat["got"] += 1
                 else:
                     still.append(c)
             still.extend([c for c in chunk if c not in got])
-            time.sleep(sleep_s)      # 轻节流，降低 GM 断连概率
+            time.sleep(sleep_s)
         remaining = still
         stat["failed"] = len(remaining)
         if remaining and attempt < retries:
@@ -853,16 +867,12 @@ def mark_run_today(kind, now=None) -> None:
 
 
 def run_prefetch(small=True, full=True, minutes=True, days_full=800,
-                 payload_builder=None, force=False, now=None) -> dict:
+                 payload_builder=None, force=False, now=None,
+                 eod_verified=False, eod_source=None) -> dict:
     """盘后预下载编排：小池日线 → 全池日线 → 小池分钟 → 小池 payload。
 
     幂等：跨进程锁（防 main.py 子进程与 gui 守护线程同时跑）+ 当日状态标记。
-
-    ⚠️ 2026-10-30：`days_full` 200 → **800**。200 天只有 ~200 行，MA150/MA360、箱体、背离
-    全都算不出（实测 5149 只缓存行数比通达信少 470+ 行；301079 只有 213 行）。每天真正要
-    重下的只有"不新鲜"的那几百只，深度从 200 拉到 800 是**一次性**代价。
-    payload_builder: 小池 payload 构建回调（由 gui 注入，避免 core→gui 反向依赖）。
-    全程不抛，返回各项统计。
+    EOD 证明参数仅由今日行修复成功钩子传入；GUI 普通调度不得借盘后时间伪造证明。
     """
     now = now or datetime.now()
     if not force and now.weekday() >= 5:
@@ -873,10 +883,14 @@ def run_prefetch(small=True, full=True, minutes=True, days_full=800,
     try:
         small_codes = small_pool_codes()
         if small and small_codes and (force or not was_run_today("small")):
-            out["daily_small"] = prefetch_daily(small_codes, days=800, now=now)
+            out["daily_small"] = prefetch_daily(
+                small_codes, days=800, now=now,
+                eod_verified=eod_verified, eod_source=eod_source)
             mark_run_today("small", now)
         if full and (force or not was_run_today("full")):
-            out["daily_full"] = prefetch_daily(full_pool_codes(), days=days_full, now=now)
+            out["daily_full"] = prefetch_daily(
+                full_pool_codes(), days=days_full, now=now,
+                eod_verified=eod_verified, eod_source=eod_source)
             mark_run_today("full", now)
         if minutes and small_codes and (force or not was_run_today("minute")):
             out["minute_small"] = prefetch_minute(small_codes, freqs=("30min", "60min", "5min"))

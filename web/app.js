@@ -3819,6 +3819,7 @@ async function loadMarketSentiment() {
     if (d && d.available && (d.series || []).length) {
       sentData = d;
       renderMarketSentiment(d);
+      loadSectorCycle();          // 板块 × 情绪周期表（日频缓存，5 分钟轮询）
       nextMs = 300000;
       // 涨跌家数缓存正在盘后重建（约 25s）⇒ 30s 后重取，别等满 5 分钟才显示新一天
       if (d.breadth && d.breadth.pending) nextMs = 30000;
@@ -4564,6 +4565,65 @@ function _renderSentComposite(series, d) {
     },
   });
   sentCompositeInst.resize();
+}
+
+/* ── 板块 × 情绪周期（顺/逆）表（2026-11-28 owner）──────────────────────────
+   后端 `load_sector_cycle`（日频缓存，后台单飞实算 ~30s）：
+   超额相关 = corr(板块超额日收益, 综合温度日变化)。描述性统计，不是买卖信号。 */
+const SECTOR_CYCLE_TTL_MS = 300000;
+let _sectorCycle = { data: null, ts: 0, inflight: false };
+
+function renderSectorCycle(d) {
+  const el = document.getElementById("sectorCycleBody");
+  if (!el) return;
+  const meta = document.getElementById("sectorCycleMeta");
+  const rows = (d && d.rows) || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">板块情绪周期表准备中…（首次约 30 秒，算完自动出现）</div>';
+    return;
+  }
+  if (meta) {
+    meta.textContent = `计算 ${d.computed_at || ""} · 区间 ${d.start || ""} ~ ${d.end || ""}`
+      + ` · ${rows.length} 个板块 · 近 ${d.days || 120} 个交易日`;
+  }
+  const badge = c => c === "顺"
+    ? '<span style="color:#f85149;font-weight:700">顺</span>'
+    : c === "逆" ? '<span style="color:#3fb950;font-weight:700">逆</span>'
+      : '<span class="cell-dim">中</span>';
+  const cls = v => v > 0.0005 ? "up" : v < -0.0005 ? "down" : "cell-dim";
+  el.innerHTML = `<table class="h-table" style="width:100%"><thead><tr>
+      <th>板块</th><th style="text-align:center">类别</th>
+      <th class="num">超额相关</th>
+      <th class="num" title="综合温度每 +10 点，该板块的超额收益（%，已剔除全池等权 beta）">温度+10点</th>
+      <th class="num">t</th><th class="num">原始相关</th><th class="num">样本</th>
+    </tr></thead><tbody>` + rows.map(r => `<tr>
+      <td>${esc(r.board)}</td><td style="text-align:center">${badge(r.cls)}</td>
+      <td class="num ${cls(r.ex_corr)}">${r.ex_corr >= 0 ? "+" : ""}${Number(r.ex_corr).toFixed(2)}</td>
+      <td class="num ${cls(r.beta10)}">${r.beta10 >= 0 ? "+" : ""}${Number(r.beta10).toFixed(2)}%</td>
+      <td class="num ${cls(r.t)}">${r.t >= 0 ? "+" : ""}${Number(r.t).toFixed(1)}</td>
+      <td class="num cell-dim">${r.corr >= 0 ? "+" : ""}${Number(r.corr).toFixed(2)}</td>
+      <td class="num cell-dim">${r.n}</td>
+    </tr>`).join("") + "</tbody></table>";
+}
+
+async function loadSectorCycle(force) {
+  const el = document.getElementById("sectorCycleBody");
+  if (!el || _sectorCycle.inflight) return;
+  const now = Date.now();
+  if (!force && _sectorCycle.data && now - _sectorCycle.ts < SECTOR_CYCLE_TTL_MS) {
+    renderSectorCycle(_sectorCycle.data);
+    return;
+  }
+  _sectorCycle.inflight = true;
+  try {
+    const d = await apiCall("load_sector_cycle", 120);
+    _sectorCycle.data = d || null;
+    _sectorCycle.ts = Date.now();
+    renderSectorCycle(d || {});
+    if (d && d.warming) setTimeout(() => loadSectorCycle(true), 8000);
+    else setTimeout(() => loadSectorCycle(true), SECTOR_CYCLE_TTL_MS);
+  } catch (e) { /* 静默：下一轮再试 */ }
+  finally { _sectorCycle.inflight = false; }
 }
 
 /* ---- 盘中实时 ---- */
@@ -15163,7 +15223,7 @@ window.addEventListener("resize", () => {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  _reportSlow("app_boot_20261127k", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
+  _reportSlow("app_boot_20261128a", 0);   // 启动标记换日戳=P2-3/5/6 上线证据
   // 2026-11-23（P2-5）：echarts（~1MB）空闲预热。已是按需加载（首屏不阻塞），但首次开图
   // 要现场下载+解析 1MB（冷开图可感到顿挫）⇒ 启动后浏览器空闲期先拉下来编一遍，
   // 用户第一次开 K 线即热。requestIdleCallback 缺席时退化 setTimeout；失败静默不碍启动。

@@ -129,12 +129,60 @@ class TestTcomboExitLayering(unittest.TestCase):
 
 
 class TestB40Default(unittest.TestCase):
-    """③ 预算默认值钉子（B40）。"""
+    """③ 预算默认值与 GM 显式参数双重钉子（B40）。"""
 
     def test_defaults(self):
         self.assertEqual(executor.DEFAULTS["daily_budget"], 400000.0)
         self.assertEqual(executor.DEFAULTS["gap_cap"], 0.08)
         self.assertEqual(executor.DEFAULTS["tcombo"], True)
+
+    def test_gm_explicit_budget_cannot_override_b40_back_to_200k(self):
+        import runpy
+        params = runpy.run_path(str(ROOT / "execution" / "auto" / "_gm" /
+                                    "config" / "params.py"))["PARAMS"]
+        self.assertEqual(params["osc_daily_budget"], 400000.0)
+
+
+class TestG8DecisionTrail(unittest.TestCase):
+    """G8-OBS：计算过的 open_gap/rejected_gap/gap_capped 必须真实落盘。"""
+
+    def test_decision_json_has_open_gap_and_capped_details(self):
+        import json
+        import tempfile
+        from oversold_gap_confirm import backfill
+
+        prev_close = {"A": 10.0, "B": 10.0, "C": 10.0, "D": 10.0}
+        ma20 = {c: 12.0 for c in prev_close}
+        bars = {
+            "A": _bars(11.95, low=11.9, open_=11.9),
+            "B": _bars(10.5, low=10.4, open_=10.4),
+            "C": _bars(10.3, low=10.2, open_=10.2),
+            "D": _bars(10.2, low=10.1, open_=10.1),
+        }
+        full = decision.evaluate(prev_close, ma20, bars, top_n=2, gap_cap=0.08)
+        spares = backfill.build_spares(full["signals"], ["B", "C"], [], bars=bars)
+        with tempfile.TemporaryDirectory() as td:
+            fp = executor._write_decision(
+                "2026-11-27", "live", "2026-11-27 10:00:00", full,
+                full["picks"], spares, book_dir=td,
+                names={"A": "超帽股", "B": "入选股", "D": "候补股"},
+                log=lambda *_: None)
+            payload = json.loads(Path(fp).read_text(encoding="utf-8"))
+        self.assertEqual(payload["rejected_gap"], 1)
+        self.assertEqual(len(payload["gap_capped"]), 1)
+        capped = payload["gap_capped"][0]
+        self.assertEqual({k: capped[k] for k in ("code", "name", "board", "reason")}, {
+            "code": "A", "name": "超帽股", "board": "", "reason": "gap_capped"})
+        self.assertAlmostEqual(capped["gap"], 0.195)
+        self.assertAlmostEqual(capped["open_gap"], 0.19)
+        self.assertAlmostEqual(payload["picks"][0]["open_gap"], 0.04)
+        self.assertAlmostEqual(payload["spares"][0]["open_gap"], 0.01)
+        by_code = {r["code"]: r for r in payload["stocks"]}
+        self.assertEqual(by_code["A"]["status"], "rejected")
+        self.assertEqual(by_code["A"]["reason"], "gap_capped")
+        self.assertAlmostEqual(by_code["A"]["open_gap"], 0.19)
+        self.assertAlmostEqual(by_code["B"]["open_gap"], 0.04)
+        self.assertAlmostEqual(by_code["D"]["open_gap"], 0.01)
 
 
 if __name__ == "__main__":

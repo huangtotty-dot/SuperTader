@@ -92,6 +92,79 @@ class TestDailyReviewGate(unittest.TestCase):
             er._maybe_run_daily_review(FRIDAY)
         popen.assert_not_called()
 
+    def test_repair_running_blocks_daily_review(self):
+        self._reset()
+        with mock.patch.object(er, "_today_repair_succeeded", return_value=False), \
+                mock.patch("subprocess.Popen") as popen:
+            er._maybe_run_daily_review(FRIDAY)
+        popen.assert_not_called()
+        self.assertTrue(er._daily_review_state["waiting_repair"])
+        self.assertEqual(er._daily_review_state["date"], "")
+
+    def test_repair_success_releases_daily_review_once(self):
+        self._reset()
+        proc = mock.Mock(pid=12345)
+        with tempfile.TemporaryDirectory() as td, \
+                mock.patch.object(er, "_ROOT", td), \
+                mock.patch.object(er, "_today_repair_succeeded", return_value=True), \
+                mock.patch.object(er._threading, "Thread"), \
+                mock.patch("subprocess.Popen", return_value=proc) as popen:
+            er._maybe_run_daily_review(FRIDAY)
+        popen.assert_called_once()
+        self.assertEqual(er._daily_review_state["date"], "2026-11-13")
+        self.assertFalse(er._daily_review_state["waiting_repair"])
+
+
+class TestTodayRepairState(unittest.TestCase):
+    def setUp(self):
+        import core.eod_tasks as et
+        self.et = et
+        self.saved = dict(et._today_bar_repair_state)
+        et._today_bar_repair_state.clear()
+        et._today_bar_repair_state.update({"date": "", "status": "idle", "next_try": 0.0})
+
+    def tearDown(self):
+        self.et._today_bar_repair_state.clear()
+        self.et._today_bar_repair_state.update(self.saved)
+
+    def test_failed_report_is_not_success_and_can_retry(self):
+        et = self.et
+        with mock.patch.object(et, "_run_today_bar_repair",
+                               return_value={"total": 2, "fetch_err": 1}), \
+                mock.patch.object(et._threading, "Thread") as thread:
+            et._maybe_run_today_bar_repair(FRIDAY)
+            self.assertEqual(et._today_bar_repair_state["status"], "running")
+            thread.call_args.kwargs["target"]()
+        self.assertEqual(et._today_bar_repair_state["status"], "failed")
+        self.assertGreater(et._today_bar_repair_state["next_try"], 0)
+        self.assertFalse(et._today_bar_repair_ok({"fetch_err": 1}))
+
+    def test_clean_completion_releases_consumers(self):
+        et = self.et
+        report = {"date": "2026-11-13", "total": 0, "fetch_err": 0}
+        with mock.patch.object(et, "_run_today_bar_repair", return_value=report), \
+                mock.patch.object(et, "_refresh_breadth_after_repair",
+                                  return_value={"status": "queued"}) as breadth, \
+                mock.patch.object(et._threading, "Thread") as thread:
+            et._maybe_run_today_bar_repair(FRIDAY)
+            thread.call_args.kwargs["target"]()
+        self.assertEqual(et._today_bar_repair_state["status"], "succeeded")
+        self.assertEqual(et._today_bar_repair_state["report"], report)
+        breadth.assert_called_once_with("2026-11-13")
+        self.assertEqual(et._today_bar_repair_state["breadth_eod"]["status"], "queued")
+
+    def test_breadth_failure_does_not_revoke_repair_success(self):
+        et = self.et
+        with mock.patch.object(et, "_run_today_bar_repair",
+                               return_value={"date": "2026-11-13"}), \
+                mock.patch.object(et, "_refresh_breadth_after_repair",
+                                  return_value={"status": "failed", "error": "offline"}), \
+                mock.patch.object(et._threading, "Thread") as thread:
+            et._maybe_run_today_bar_repair(FRIDAY)
+            thread.call_args.kwargs["target"]()
+        self.assertEqual(et._today_bar_repair_state["status"], "succeeded")
+        self.assertEqual(et._today_bar_repair_state["breadth_eod"]["status"], "failed")
+
 
 class TestChartPrefetchGate(unittest.TestCase):
     def tearDown(self):

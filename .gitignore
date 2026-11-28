@@ -1,8 +1,10 @@
-# ── t_io：整体忽略（运行时数据 + 回测结果 + 验证脚本），全部不入库 ──
-# 2026-10-10: 原先 `t_io/**` + `!t_io/**/*.py` 保留源码脚本，但仍有 722 个文件被
-# 跟踪（490+ 数据文件持续污染 git status）。改为整体忽略，并已 `git rm -r --cached t_io`
-# 清空索引（磁盘文件保留）。本地脚本仍在，clone 后需另行获取。
-t_io/
+# ── t_io：运行数据整体忽略；仅放行每日复盘源码，其余脚本/产物仍不入库 ──
+t_io/*
+!t_io/validation/
+t_io/validation/*
+!t_io/validation/daily_review/
+t_io/validation/daily_review/*
+!t_io/validation/daily_review/daily_review.py
 
 __pycache__/
 *.pyc

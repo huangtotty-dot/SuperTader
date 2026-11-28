@@ -246,8 +246,27 @@ def find_today_rows(date=None, cache_dir=None, mtime_today_only=True):
     return out
 
 
+def _apply_eod_proof(payload, target, source):
+    """在已比对/补丁成功的缓存上登记目标日证明；dry-run 不调用本函数。"""
+    raw = payload.get("eod_verified") or []
+    if isinstance(raw, dict):
+        verified = {str(k)[:10] for k, v in raw.items() if v}
+    else:
+        verified = {str(x)[:10] for x in raw}
+    verified.add(target)
+    payload["eod_verified"] = sorted(verified)
+    sources = dict(payload.get("eod_source") or {})
+    sources[target] = source
+    payload["eod_source"] = sources
+    payload["eod_verified_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # 证明登记时间就是本次盘后核验时间；避免旧早盘 saved_at 再把已核验行判成快照。
+    payload["saved_at"] = payload["eod_verified_at"] + " eod_verified"
+    payload["forming"] = [x for x in (payload.get("forming") or [])
+                          if str(x)[:10] != target]
+
+
 def _fix_today_row_one(item, target, dry_run, log_fp):
-    """校验一只：quote 快照比对 → 不一致就整行补丁。返回 (code, status, detail, new_close)。"""
+    """校验一只：quote 快照比对 → 不一致就整行补丁；成功后显式登记 EOD 证明。"""
     code, fp, old_close, old_vol = item
     try:
         from core.market_data.tencent_provider import quote_daily_bar
@@ -263,9 +282,21 @@ def _fix_today_row_one(item, target, dry_run, log_fp):
     close_ok = old_close > 0 and abs(new_close - old_close) / old_close <= 0.001
     vol_ok = old_vol > 0 and abs(new_vol - old_vol) / old_vol <= 0.01
     if close_ok and vol_ok:
+        if dry_run:
+            return code, "ok", "", new_close
+        try:
+            d = json.loads(fp.read_text(encoding="utf-8"))
+            rows = d.get("rows") or []
+            if not rows or str(rows[-1].get("date") or "")[:10] != target:
+                return code, "race_skip", "", new_close
+            _apply_eod_proof(d, target, "tencent_quote_consistent")
+            from core.utils import write_json_atomic
+            write_json_atomic(str(fp), d)
+        except Exception as e:
+            return code, "patch_err", f"proof:{type(e).__name__}: {str(e)[:60]}", new_close
+        _log(log_fp, code, target, old_close, new_close, "today_verified")
         return code, "ok", "", new_close
     if new_vol <= 0:
-        # 快照量 0：停牌/数据异常，不拿它盖缓存
         return code, "provider_zero_vol", f"cache_close={old_close}", None
     if dry_run:
         return code, "would_patch", f"close {old_close}->{new_close} vol {old_vol:.0f}->{new_vol:.0f}", new_close
@@ -280,8 +311,7 @@ def _fix_today_row_one(item, target, dry_run, log_fp):
                     "src": "tencent_quote",
                     "repaired_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         d["rows"] = rows
-        # 今日行已被真数据确认 ⇒ 清掉今日 forming 标记（若有）
-        d["forming"] = [x for x in (d.get("forming") or []) if str(x)[:10] != target]
+        _apply_eod_proof(d, target, "tencent_quote_patch")
         d["saved_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + " today_bar_repair"
         from core.utils import write_json_atomic
         write_json_atomic(str(fp), d)

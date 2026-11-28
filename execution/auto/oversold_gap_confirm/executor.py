@@ -535,9 +535,22 @@ def recover_order_intents(gateway, date, book_dir, log=print):
 
 
 def sync_order_intent_from_record(book_dir, date, rec):
-    """异步 fill/terminal 同步既有意图；找不到证明时抛错，不事后伪造预留。"""
+    """同步既有意图；唯一 order_id 可找回身份，纯旧版 fills 无账可同步。"""
     from . import order_intents as _oi
-    return _oi.upsert_fill_record(book_dir, date, rec)
+    rows = _oi.load(book_dir, date, strict=True)
+    if not rows:
+        # 旧版只保存 fills 的离线回放没有意图可同步；不能事后伪造 SDK 前预留证明。
+        # 新生产的真无 ID/结果未知委托仍由 recover_order_intents() 闭锁。
+        return None
+    out = dict(rec)
+    if not out.get("intent_id"):
+        oid = str(out.get("order_id") or "")
+        matches = [r for r in rows if oid and str(r.get("order_id") or "") == oid]
+        if len(matches) == 1:
+            out["intent_id"] = matches[0].get("intent_id")
+        elif len(matches) > 1:
+            raise KeyError("order_intent_order_id_ambiguous:%s" % oid)
+    return _oi.upsert_fill_record(book_dir, date, out)
 
 
 def _execute_buy_plan_with_budget(gateway, buy_plan, prev_close, budget_fills,
@@ -1389,13 +1402,25 @@ def _write_decision(date, mode, started, full, picks, spares, *,
         for p in (picks or []):
             _c = str(p.get('code'))
             rows.append({'code': _c, 'name': _nm.get(_c, ''), 'board': p.get('board', ''),
-                         'gap': _san(p.get('gap')), 'status': 'picked',
-                         'rank': _rank.get(_c), 'reason': 'ok'})
+                         'gap': _san(p.get('gap')), 'open_gap': _san(p.get('open_gap')),
+                         'status': 'picked', 'rank': _rank.get(_c), 'reason': 'ok'})
         for s in (spares or []):
             _c = str(s.get('code'))
             rows.append({'code': _c, 'name': _nm.get(_c, ''), 'board': s.get('board', ''),
-                         'gap': _san(s.get('gap')), 'status': 'spare',
-                         'rank': None, 'reason': 'ok', 'price': _san(s.get('price'))})
+                         'gap': _san(s.get('gap')), 'open_gap': _san(s.get('open_gap')),
+                         'status': 'spare', 'rank': None, 'reason': 'ok',
+                         'price': _san(s.get('price'))})
+        gap_capped = []
+        for f in ((full or {}).get('signals') or []):
+            if f.get('reason') != 'gap_capped':
+                continue
+            _c = str(f.get('code'))
+            detail = {'code': _c, 'name': _nm.get(_c, ''),
+                      'board': f.get('board') or _bd.get(_c, ''),
+                      'gap': _san(f.get('gap')), 'open_gap': _san(f.get('open_gap')),
+                      'reason': 'gap_capped'}
+            gap_capped.append(detail)
+            rows.append(dict(detail, status='rejected', rank=None))
         for f in (d.get('failures') or []):
             _c = str(f.get('code'))
             rows.append({'code': _c, 'name': _nm.get(_c, ''),
@@ -1422,11 +1447,14 @@ def _write_decision(date, mode, started, full, picks, spares, *,
                        "n_failures": d.get('n_failures')},
             # ⚠️ 各关是**独立通过数**，不是"上一关的幸存者"（见 decision.evaluate 注释）
             "reason_counts": d.get('reasons') or {},
+            "rejected_gap": int((full or {}).get('rejected_gap') or 0),
+            "gap_capped": gap_capped,
             "picks": [{"code": r['code'], "name": r['name'], "board": r['board'],
-                       "gap": r['gap'], "rank": r['rank'], "status": "picked",
-                       "reason": "ok"}
+                       "gap": r['gap'], "open_gap": r['open_gap'], "rank": r['rank'],
+                       "status": "picked", "reason": "ok"}
                       for r in rows if r['status'] == 'picked'],
-            "spares": [{"code": r['code'], "gap": r['gap'], "board": r['board']}
+            "spares": [{"code": r['code'], "gap": r['gap'], "open_gap": r['open_gap'],
+                        "board": r['board']}
                        for r in rows if r['status'] == 'spare'],
             "stocks": rows,
         }
@@ -1631,6 +1659,7 @@ def merge_backfill_fills(book_dir: str, date: str, round_no: int, round_res: dic
                    "placed": [{"code": r["code"], "qty": r["qty_placed"], "status": r["status"]}
                               for r in recs],
                    "skipped": (round_res or {}).get("skipped") or [],
+                   "budget_bound_breaches": (round_res or {}).get("budget_bound_breaches") or [],
                    "note": (round_res or {}).get("note") or ""})
     rounds.sort(key=lambda r: int(r.get("round") or 0))
     fills["backfill_rounds"] = rounds

@@ -30,17 +30,26 @@ _sentiment_eod_state = {"date": "", "attempts": 0, "next_try": 0.0}
 # 2026-10-30：通达信日线校准的「当日已跑」标记（进程内；跨进程标记在 core.tdx_calibrate）
 _tdx_cal_state = {"date": ""}
 # 2026-11-26（候选㊴）：「今日行校验修复」的当日已跑标记（独立于 tdx 校准，主钩门 15:12）
-_today_bar_repair_state = {"date": ""}
+_today_bar_repair_state = {"date": "", "status": "idle", "next_try": 0.0}
 
 
-def _run_today_bar_repair(now: datetime) -> None:
-    """实际执行「今日行校验修复」一次（15:12 主钩与 15:40 tdx 兜底共用）。"""
+def _run_today_bar_repair(now: datetime) -> dict:
+    """实际执行一次今日行修复并返回报告；调用方不得把“已启动”冒充“已成功”。"""
     from core import daily_repair as _dr
     _log_fp = os.path.join(_ROOT, "t_io", "logs",
                            f"repair_today_bar_{now.strftime('%Y%m%d')}.jsonl")
     _st = _dr.fix_today_rows(workers=6, log_fp=_log_fp)
     if _st.get("patched") or _st.get("fetch_err"):
         log.info("今日行校验修复：%s", _st)
+    return _st
+
+
+def _today_bar_repair_ok(report: dict) -> bool:
+    """只有完整跑完且无未解决错误才成功；停牌零量由修复器单独分类，不算错误。"""
+    if not isinstance(report, dict):
+        return False
+    bad = ("fetch_err", "provider_no_bar", "provider_bad_bar", "patch_err", "race_skip")
+    return not any(int(report.get(k) or 0) > 0 for k in bad)
 
 
 def _launch_sentiment_subprocess(date_str: str, mode: str = "eod", tag: str = "sentiment_backfill"):
@@ -174,12 +183,10 @@ def _maybe_run_tdx_calibrate(now: datetime) -> None:
             # 保护 H4 假说结算、复盘脚本等一切盘后读 daily_kline 的模块。
             # 2026-11-26：本修复已提前到 15:12 独立钩（_maybe_run_today_bar_repair，
             # 复盘脚本 15:00 出头就跑，15:40 太晚——当日实测 98.6% 今日行仍是快照）。
-            # 此处仅在「15:12 钩今天没跑过」（如主循环 15:12 后才启动）时兜底；幂等。
+            # 未成功才兜底；失败也走统一状态机与重试节流，不直接绕闸执行。
             try:
-                _today = now.strftime("%Y-%m-%d")
-                if _today_bar_repair_state.get("date") != _today:
-                    _today_bar_repair_state["date"] = _today
-                    _run_today_bar_repair(now)
+                if _today_bar_repair_state.get("status") != "succeeded":
+                    _maybe_run_today_bar_repair(now)
             except Exception as e:
                 log.warning("今日行校验修复失败：%s", e)
 
@@ -188,33 +195,50 @@ def _maybe_run_tdx_calibrate(now: datetime) -> None:
         pass
 
 
-def _maybe_run_today_bar_repair(now: datetime) -> None:
-    """15:12 后交易日每日一次：修复 daily_kline 缓存里「末行==今天」的盘中快照污染。
+def _refresh_breadth_after_repair(date_str: str) -> dict:
+    """今日行修复成功后的 breadth EOD 钩子；自身失败不改变修复成功状态。"""
+    try:
+        from core import breadth_daily as _bd
+        launched = _bd.refresh_eod(date_str)
+        return {"status": "queued" if launched else "already_running", "date": date_str}
+    except Exception as e:
+        return {"status": "failed", "date": date_str, "error": str(e)[:200]}
 
-    为什么提前到 15:12（候选㊴，2026-11-26）：复盘脚本/假说结算 15:00 出头就读
-    daily_kline，而本修复原先挂在 15:40 的通达信校准钩里——11-26 实测复盘时点
-    2860 只里 2822 只（98.6%）的今日行还是盘中 forming 快照。15:12 时腾讯 quote
-    已是真收盘，修复后 15:15 的复盘/15:30 的 EOD 落库读到的就是干净数据。
-    15:40 的 tdx 钩里保留兜底（仅当本钩今天没跑过才补跑，幂等）。
-    """
+
+def _maybe_run_today_bar_repair(now: datetime) -> None:
+    """15:12 后修复今日行；running/succeeded/failed 三态供复盘与预下载等待。"""
     try:
         _st = _today_bar_repair_state
         today = now.strftime("%Y-%m-%d")
-        if _st.get("date") == today:
-            return
         if now.weekday() >= 5 or now.strftime("%H:%M") < "15:12":
             return
-        _st["date"] = today
+        if _st.get("date") == today and _st.get("status") in ("running", "succeeded"):
+            return
+        if _st.get("date") == today and _now().timestamp() < float(_st.get("next_try") or 0):
+            return
+        _st.update({"date": today, "status": "running", "next_try": 0.0})
 
         def _work():
             try:
-                _run_today_bar_repair(now)
+                report = _run_today_bar_repair(now)
+                if _today_bar_repair_ok(report):
+                    breadth = _refresh_breadth_after_repair(today)
+                    _st.update({"status": "succeeded", "report": report, "next_try": 0.0,
+                                "breadth_eod": breadth})
+                    log.info("今日行修复完成，复盘/预下载输入闸已放行：%s；breadth=%s",
+                             report, breadth)
+                else:
+                    _st.update({"status": "failed", "report": report,
+                                "next_try": _now().timestamp() + 600})
+                    log.warning("今日行修复存在未解决错误，600s 后重试：%s", report)
             except Exception as e:
-                log.warning("今日行校验修复失败：%s", e)
+                _st.update({"status": "failed", "next_try": _now().timestamp() + 600})
+                log.warning("今日行校验修复失败（600s 后重试）：%s", e)
 
         _threading.Thread(target=_work, daemon=True, name="today-bar-repair").start()
-    except Exception:
-        pass
+    except Exception as e:
+        _today_bar_repair_state.update({"status": "failed", "next_try": _now().timestamp() + 600})
+        log.warning("今日行修复调度失败（600s 后重试）：%s", e)
 
 
 def _maybe_run_sentiment_eod(now: datetime) -> None:

@@ -6,12 +6,16 @@
 - 净值法：equity = Σ(持仓 qty × EOD 收盘价) + 账户现金；禁止持仓市值法冒充净值法。
 - 主数据源 = t_io/bridge/heartbeat_YYYY-MM-DD.jsonl 当日最后一行
   （cash: float；positions: {gm_symbol: {qty, cost}}，gm_symbol 形如 "SHSE.588170"→取点号后 6 位码）。
-- EOD 重估价：优先 t_io/cache/daily_kline/{code}.json 当日 close（须过完整性校验：saved_at 覆盖
-  15:00 且 high≥当日 fill 观测价，否则判残缺强制腾讯重取，仍失败标 stale_bar_warn）；缓存缺失/陈旧
-  回退腾讯日线；仍无则在 source 标注缺失票并剔除（不硬算）。
+- EOD 重估价：缓存须通过 saved_at、OHLC、forming、成交观测最高价校验；运行日的缓存当日行
+  另须带受控 ``eod_verified`` 证明。缓存不可用时回退腾讯日线/quote；仅剩残缺缓存值时保留
+  ``stale_bar_warn`` 诊断，但不得进入正式净值。
+- 任一持仓缺合法 EOD 价：``data_status=partial_position_valuation``，正式
+  ``market_value/equity/account_ret/alpha`` 全为 null；缺票列入 ``missing_prices``，已定价部分只写入
+  ``partial_market_value`` 供诊断，禁止把现金+部分市值冒充完整净值。
 - account_ret = (equity - flow_adjust) / prev_equity - 1；alpha = account_ret - benchmark_ret。
 - 主基准沪深300 sh000300，辅基准科创50 sh000688；费后统一（t0_realized 取费后 est_pnl）。
-- heartbeat 缺失 / positions 为空 / cash 缺失时 equity/account_ret/alpha 置 null 并在 source 标注，不许硬算。
+- heartbeat 缺失 / positions 字段缺失 / cash 缺失时正式收益置 null；``positions={}`` 是合法空仓，
+  市值=0、equity=cash，不与数据源故障混淆。
 - prev_equity 链只接续仿真口径文件（source 含「仿真账户口径」标记）；旧实盘口径文件不可接续。
 - 探针遗留仓兼容（一次性）：slippage_probe/state.json 的 base 持仓（300166×8400 + 603629×1000）
   仅在 [base 建仓日, 2026-09-29 清退日] 窗口内补入市值（heartbeat 只含 AUTO_POOL 引擎跟踪票），source 标注。
@@ -77,42 +81,29 @@ def _load_json(fp):
 
 
 def force_refresh_index(index: str, date: str = None):
-    """强制刷新指数日线缓存（根治「用到才拉」停在旧日期的问题）：
-    先备份并删除缓存文件再调 index_daily，绕过 weekday/09:15 的 need_refresh 门控，
-    保证每次都发起网络拉取；网络失败则恢复旧缓存兜底。返回 (df, note)。
+    """按目标日重取指数：统一走 GM→腾讯→东财门面，缺目标日不得冒称刷新成功。
 
-    候选㊳（2026-11-24）：fqkline 断供（501）时，date 给定且缓存仍缺当日行 →
-    用 qt.gtimg.cn 快照补丁当日行（quote_daily_bar），α 序列不再因单点断供开天窗。"""
+    W48：旧实现删除缓存后直连腾讯，非空旧缓存会绕过东财备用源。现在带 ``end_date``
+    发起历史口径请求（不写共享长缓存），目标日仍缺失才尝试 quote 补丁；quote 也明确
+    标为待独立核验，不再输出无依据的「强制刷新生效」。"""
+    from core.market_data.facade import MarketDataFacade
     idx = str(index).lower()
-    cache_fp = os.path.join(_KLINE_DIR, f"index_{idx}.json")
-    bak = None
-    if os.path.exists(cache_fp):
-        try:
-            with open(cache_fp, encoding="utf-8") as f:
-                bak = f.read()
-            os.remove(cache_fp)
-        except Exception:
-            bak = None
-    df = TencentProvider().index_daily(idx)
-    if df.empty and bak is not None:
-        try:
-            with open(cache_fp, "w", encoding="utf-8") as f:
-                f.write(bak)
-        except Exception:
-            pass
-        df = TencentProvider().index_daily(idx)
-        if df.empty or (date and str(df.iloc[-1]["date"]) < date):
-            qdf, qnote = _quote_patch_index(idx, date)
-            if qdf is not None:
-                return qdf, f"{idx}:网络拉取失败,回退旧缓存;{qnote}"
-        return df, f"{idx}:网络拉取失败,回退旧缓存"
-    if date and not df.empty and str(df.iloc[-1]["date"]) < date:
-        # 拉取"成功"但末行仍旧（fqkline 501 返回空数据也会被当成成功缓存）→ quote 补丁
+    try:
+        df = MarketDataFacade().index_daily(idx, days=800, end_date=date, require_date=True)
+    except Exception as exc:
+        df = None
+        source = "error:%s" % type(exc).__name__
+    else:
+        source = (df.attrs.get("source") if df is not None else None) or "empty"
+    has_target = bool(date and df is not None and not df.empty
+                      and (df["date"].astype(str).str[:10] == date).any())
+    if date and not has_target:
         qdf, qnote = _quote_patch_index(idx, date)
         if qdf is not None:
-            return qdf, qnote
-    last = str(df.iloc[-1]["date"]) if not df.empty else "无数据"
-    return df, f"{idx}:强制刷新生效,缓存末行={last}"
+            return qdf, qnote + ";目标日待独立源核验"
+        return df, f"{idx}:benchmark_unavailable,目标日={date},source={source}"
+    last = str(df.iloc[-1]["date"]) if df is not None and not df.empty else "无数据"
+    return df, f"{idx}:source={source},目标日={date or '未指定'},末行={last}"
 
 
 def _quote_patch_index(idx: str, date: str):
@@ -176,9 +167,12 @@ def _quote_patch_stock(code: str, date: str):
 
 
 def index_ret(df, date: str):
-    """指数日收益 = close(date)/close(前一交易日) - 1。无当日K线返回 None。"""
+    """指数日收益；目标日缺失或零量平线占位时 fail-closed，不算伪 α/β。"""
     if df is None or df.empty:
-        return None, "指数缓存为空"
+        return None, "benchmark_unavailable:指数缓存为空"
+    from core.market_data.facade import MarketDataFacade
+    if not MarketDataFacade._index_date_valid(df, date):
+        return None, f"benchmark_unverified:指数无{date}有效K线或为零量占位行"
     rows = [(str(r.date), float(r.close)) for r in df.itertuples()]
     rows.sort(key=lambda x: x[0])
     for i, (d, c) in enumerate(rows):
@@ -209,16 +203,16 @@ def _kline_close(code: str, date: str):
 
 
 def _cache_today_bar(code: str, date: str):
-    """缓存当日 bar 行与落盘时间。返回 (row, saved_at)；无缓存/无当日行返回 (None, None)。"""
+    """缓存当日 bar、落盘时间及元数据；无缓存/无当日行返回 (None, None, None)。"""
     fp = os.path.join(_KLINE_DIR, f"{code}.json")
     if not os.path.exists(fp):
-        return None, None
+        return None, None, None
     try:
         d = _load_json(fp)
     except Exception:
-        return None, None
+        return None, None, None
     row = next((r for r in d.get("rows") or [] if str(r.get("date")) == date), None)
-    return row, d.get("saved_at")
+    return row, d.get("saved_at"), d
 
 
 def _observed_day_high(code: str, date: str):
@@ -242,20 +236,44 @@ def _observed_day_high(code: str, date: str):
     return obs
 
 
-def _bar_complete(code: str, date: str, row, saved_at) -> bool:
-    """缓存当日 bar 完整性校验（2026-10-19 复盘：600127 缓存 09:43 早盘残缺快照冒充 EOD，
-    high=14.26 < 当日 10:00 实际成交 14.35，close=13.96 vs 14:50 真实 13.16 ⇒ 净值高估 ~5.6k）。
-    判残缺（False）：① saved_at 早于当日 15:00（快照 close 是时点价，非收盘价）；
-    ② bar.high 低于当日 fill 观测价（物理不可能）。均无法证伪时放行（保住历史回填行为）。"""
+def _bar_complete(code: str, date: str, row, saved_at, cached=None) -> bool:
+    """缓存当日 bar 完整性校验；非法 OHLC、forming、当日无证明一律拒绝。
+
+    历史回填保留旧的“无法证伪则放行”口径，但仍须通过 OHLC/volume 合法性及成交观测检查。
+    只有目标日就是运行日时，才额外要求受控 ``eod_verified`` 证明。
+    """
+    import math
+    if not row:
+        return False
     ts = str(saved_at or "")
     if ts and ts < f"{date} 15:00":
         return False
-    obs = _observed_day_high(code, date)
+    meta = cached or {}
+    if date in {str(x)[:10] for x in (meta.get("forming") or [])}:
+        return False
+    if date == datetime.now().strftime("%Y-%m-%d"):
+        verified_raw = meta.get("eod_verified") or []
+        if isinstance(verified_raw, dict):
+            verified = {str(k)[:10] for k, v in verified_raw.items() if v}
+        else:
+            verified = {str(x)[:10] for x in verified_raw}
+        if date not in verified:
+            return False
     try:
-        high = float((row or {}).get("high"))
+        o = float(row.get("open"))
+        h = float(row.get("high"))
+        low = float(row.get("low"))
+        close = float(row.get("close"))
+        vol = float(row.get("volume") or 0)
+        vals = (o, h, low, close, vol)
+        if not all(math.isfinite(v) for v in vals) or min(o, h, low, close) <= 0 or vol < 0:
+            return False
+        if h < max(o, close, low) or low > min(o, close, h):
+            return False
     except (TypeError, ValueError):
-        return obs is None
-    return not (obs is not None and high < obs - 1e-9)
+        return False
+    obs = _observed_day_high(code, date)
+    return not (obs is not None and h < obs - 1e-9)
 
 
 def _force_refresh_daily(code: str):
@@ -311,8 +329,8 @@ def _eod_close(code: str, date: str):
     cache-carry(used_date), None}。残缺 bar 换源失败时带 stale_bar_warn 告警沿用并在 source 可见。"""
     close, used = _kline_close(code, date)
     if close is not None and used == date:
-        row, saved_at = _cache_today_bar(code, date)
-        if _bar_complete(code, date, row, saved_at):
+        row, saved_at, cached = _cache_today_bar(code, date)
+        if _bar_complete(code, date, row, saved_at, cached):
             return close, "cache"
         # 残缺 bar 冒充 EOD（2026-10-19 600127 事故）→ 强制腾讯重取；仍不行带告警沿用
         obs = _observed_day_high(code, date)
@@ -382,7 +400,7 @@ def probe_addon(date: str, hb_codes: set):
         if not qty or code in hb_codes:
             continue
         close, via = _eod_close(code, date)
-        if close is None:
+        if close is None or str(via or "").startswith("stale_bar_warn"):
             missing.append(code)
             continue
         mv += qty * close
@@ -576,11 +594,10 @@ def _reject_unfreeze_cash(date: str, hb: dict):
 
 
 def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
-    """单日计算。prev_override=(value, date) 时跳过文件链（回填模式内部链接用）。"""
+    """单日计算；任一持仓缺合法 EOD 价时，正式净值/收益/α 全部 fail-closed。"""
     notes = [_SIM_TAG + "(heartbeat尾行+K线重估)"]
     if extra_note:
         notes.append(extra_note)
-    # 1) 基准强制刷新（先于一切计算）；候选㊳: 传 date 供 fqkline 断供时 quote 补丁当日行
     df_main, note1 = force_refresh_index(_BENCH_MAIN, date)
     df_aux, note2 = force_refresh_index(_BENCH_AUX, date)
     notes += [note1, note2]
@@ -588,32 +605,23 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
     benchmark_aux_ret, ba_note = index_ret(df_aux, date)
     notes.append(f"主基准sh000300:{b_note};辅基准sh000688:{ba_note}")
 
-    # 2) 仿真账户持仓市值 + 现金：heartbeat 当日末行 positions/cash + K线 EOD 重估
     hb = heartbeat_tail(date)
-    cash, market_value = None, None
+    cash, market_value, partial_market_value = None, None, None
+    missing_prices = []
     if hb is None:
         notes.append(f"无heartbeat_{date}.jsonl(仿真口径主数据源缺失)→equity/account_ret/alpha置null,不硬算")
     else:
         _raw_pos = hb.get("positions", None)
-        # 2026-11-20 修复：区分「positions 字段缺失」（数据源故障→置null）与
-        # 「positions={}」（全仓现金的合法空仓态→市值=0，equity=cash 正常计算）。
-        # 旧实现用 `or {}` 把两种情况混在一起，全平仓日（如 2026-11-20 两票到期+pop 清空）
-        # 会被误判为数据缺失，α/β 当日开天窗。
         pos_field_missing = _raw_pos is None
         positions = _raw_pos or {}
         raw_cash = hb.get("cash")
         cash = float(raw_cash) if isinstance(raw_cash, (int, float)) else None
-        # 收盘后拒单/撤单解冻回补（细节见 _reject_unfreeze_cash docstring）：
-        # heartbeat 现金快照早于解冻（如 15:00 status=12 拒单 vs 14:58 快照）→
-        # 未成交买单的冻结资金回补现金口径；早于快照的拒单不回补（幂等）。
         if cash is not None:
             _unfreeze, _unfreeze_parts = _reject_unfreeze_cash(date, hb)
             if _unfreeze > 0:
                 cash += _unfreeze
                 notes.append(f"收盘后拒单解冻回补{len(_unfreeze_parts)}笔合计{_unfreeze:.2f}"
                              f"({','.join(_unfreeze_parts)})→cash已含解冻")
-        # 成交回报覆盖层（细节见 _apply_fill_overlay docstring）：fill pos_after 是 GM 真值，
-        # 修正台账残影（卖出不扣减）与台账丢票（新买入不入账）。
         _overlay, _ev_name = _apply_fill_overlay(date, positions)
         if _overlay:
             notes.append(f"fill回报覆盖heartbeat台账({_ev_name}):{','.join(_overlay)}")
@@ -623,7 +631,7 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
             market_value = 0.0
             notes.append("positions={}→合法空仓态(全仓现金)，市值=0，equity=cash")
         else:
-            mv, n, missing, via_n = 0.0, 0, [], {}
+            mv, n, via_n = 0.0, 0, {}
             hb_codes = set()
             for gm_sym, p in positions.items():
                 code = str(gm_sym).split(".")[-1].split("_")[0]
@@ -632,42 +640,49 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
                 if not qty:
                     continue
                 close, via = _eod_close(code, date)
-                if close is None:
-                    missing.append(code)
+                if close is None or str(via or "").startswith("stale_bar_warn"):
+                    missing_prices.append(code)
+                    if close is not None:
+                        notes.append(f"{code}仅有残缺缓存诊断值({via})→不得进入正式净值")
                     continue
                 mv += qty * close
                 n += 1
                 via_n[via] = via_n.get(via, 0) + 1
-            # 探针遗留仓兼容补丁（仅 ≤ 清退日窗口）
             p_mv, p_parts, p_missing = probe_addon(date, hb_codes)
             if p_parts:
                 mv += p_mv
                 notes.append(f"探针遗留仓补入{len(p_parts)}笔:{','.join(p_parts)}")
-            missing += p_missing
-            # 09-09 心跳丢票一次性补丁（588170×70000，与 probe_addon 正交）
+            missing_prices += p_missing
             a_mv, a_part, a_missing, a_via = patch_0909_addon(date, positions)
-            if a_part:
+            if a_part and str(a_via or "").startswith("stale_bar_warn"):
+                missing_prices.append("588170")
+                notes.append("09-09心跳丢票补丁仅拿到残缺缓存值→不进入正式净值")
+            elif a_part:
                 mv += a_mv
                 n += 1
                 via_n[a_via] = via_n.get(a_via, 0) + 1
                 notes.append(a_part)
-            missing += a_missing
+            missing_prices += a_missing
+            missing_prices = sorted(set(missing_prices))
             via_s = ",".join(f"{k}×{v}" for k, v in sorted(via_n.items()))
-            market_value = mv
-            note = f"市值=heartbeat尾行{n}只×EOD收盘({via_s})"
-            if missing:
-                note += f",无收盘价剔除{len(missing)}只:{','.join(missing[:5])}"
-            notes.append(note)
+            if missing_prices:
+                partial_market_value = mv
+                market_value = None
+                notes.append(
+                    f"持仓缺合法EOD价{len(missing_prices)}只:{','.join(missing_prices[:8])}；"
+                    f"正式market_value/equity/account_ret/alpha置null，"
+                    f"partial_market_value={mv:.2f}仅供诊断")
+            else:
+                market_value = mv
+                notes.append(f"市值=heartbeat尾行{n}只×EOD收盘({via_s})")
             notes.append(f"cash={cash:.2f}(heartbeat末行)" if cash is not None
                          else "cash缺失(heartbeat末行无cash字段)→equity/account_ret/alpha置null,不硬算")
 
-    # 3) 净值法：cash/市值缺失 → equity/account_ret/alpha 全 null（禁止市值法冒充）
     if cash is not None and market_value is not None:
         equity = market_value + float(cash)
     else:
         equity = None
 
-    # 4) prev_equity / account_ret / alpha
     if prev_override is not None:
         prev_equity, prev_date = prev_override
         if prev_equity is not None:
@@ -684,15 +699,19 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
     if account_ret is not None and benchmark_ret is not None:
         alpha = account_ret - benchmark_ret
 
-    # 5) T0 已实现盈亏（费后）
     t0, t0_cnt = t0_realized(date)
     notes.append(f"t0_realized={'无记录' if t0_cnt == 0 else f'{t0:.2f}({t0_cnt}条审计)'}")
-
+    data_status = ("partial_position_valuation" if missing_prices
+                   else ("complete" if equity is not None else "unavailable"))
     return {
         "date": date,
+        "data_status": data_status,
         "equity": equity,
         "cash": cash,
         "market_value": round(market_value, 2) if market_value is not None else None,
+        "partial_market_value": (round(partial_market_value, 2)
+                                 if partial_market_value is not None else None),
+        "missing_prices": missing_prices,
         "prev_equity": prev_equity,
         "account_ret": account_ret,
         "benchmark_ret": benchmark_ret,

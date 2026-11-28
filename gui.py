@@ -5455,6 +5455,189 @@ class Api:
     # 这里补一条**独立**盘中读数：同花顺涨停池 limit=1 计数（与日频同源、零缓存写入），
     # 只在交易时段发起、~60s 内存缓存；前端标「今日盘中（实时，未定型）」。
     # **不写进日频 series** —— 60 日分位 / 5 日均值不能被一根未定型的盘中数污染。
+    # ── 板块 × 情绪周期（顺/逆）表（2026-11-28 owner）────────────────────────
+    # 研究口径：综合温度 = 0.5×涨停/跌停温度 + 0.5×涨跌家数温度（上涨占比5日均值）。
+    # 板块收益 = 成分股等权日收益；市场基准 = 全池等权日收益。
+    # 关键指标 = **超额收益对温度变化的相关**（把市场 beta 扣掉后，才看得出"跟不跟情绪周期"）：
+    #   · 超额相关 ≥ +0.20 ⇒ 顺情绪（情绪回暖时跑赢、退潮时跑输）
+    #   · 超额相关 ≤ −0.20 ⇒ 逆情绪（防御/红利型）
+    #   · 其余 ⇒ 中性
+    # 另有 beta10 = 温度每 +10 点，板块超额收益（%）与 t 值。
+    _SECTOR_CYCLE_TTL = 86400.0
+    _SECTOR_CYCLE_FP = BASE / "t_io" / "cache" / "sector_cycle.json"
+    _SECTOR_CYCLE_MEM: dict = {"ts": 0.0, "key": None, "val": None}
+    _SECTOR_CYCLE_RUN: dict = {"running": False}
+    _SECTOR_CYCLE_LOCK = threading.Lock()
+
+    def load_sector_cycle(self, days=120):
+        """板块 × 情绪周期（顺/逆）表 → {available, rows, date, computed_at, days}。
+
+        SWR：只读内存/磁盘缓存 + 后台单飞重算（全池日线一遍 ~10~20s），js_api 零重活。
+        """
+        try:
+            days = max(60, min(int(days or 120), 250))
+        except Exception:
+            days = 120
+        today = datetime.now().strftime("%Y-%m-%d")
+        key = (today, days)
+        now = _time_mod.time()
+        with self._SECTOR_CYCLE_LOCK:
+            mem = self._SECTOR_CYCLE_MEM
+            val = mem.get("val") if (mem.get("key") == key
+                                     and (now - float(mem.get("ts") or 0.0)) < self._SECTOR_CYCLE_TTL) else None
+            running = bool(self._SECTOR_CYCLE_RUN.get("running"))
+        if val is None:
+            try:
+                d = json.loads(self._SECTOR_CYCLE_FP.read_text(encoding="utf-8"))
+                if isinstance(d, dict) and d.get("date") == today and int(d.get("days") or 0) == days:
+                    val = d
+                    with self._SECTOR_CYCLE_LOCK:
+                        self._SECTOR_CYCLE_MEM = {"ts": now, "key": key, "val": d}
+            except Exception:
+                val = None
+        stale = val is None or str(val.get("date") or "") != today
+        if stale and not running:
+            with self._SECTOR_CYCLE_LOCK:
+                self._SECTOR_CYCLE_RUN["running"] = True
+
+            def _bg():
+                try:
+                    out = self._compute_sector_cycle(days)
+                    if out.get("available"):
+                        self._SECTOR_CYCLE_FP.parent.mkdir(parents=True, exist_ok=True)
+                        tmp = self._SECTOR_CYCLE_FP.with_suffix(".tmp")
+                        tmp.write_text(json.dumps(_clean(out), ensure_ascii=False), encoding="utf-8")
+                        tmp.replace(self._SECTOR_CYCLE_FP)
+                        with self._SECTOR_CYCLE_LOCK:
+                            self._SECTOR_CYCLE_MEM = {"ts": _time_mod.time(), "key": key,
+                                                      "val": _clean(out)}
+                except Exception:
+                    _swallow("gui._compute_sector_cycle")
+                finally:
+                    with self._SECTOR_CYCLE_LOCK:
+                        self._SECTOR_CYCLE_RUN["running"] = False
+            _th.Thread(target=_bg, daemon=True, name="sector-cycle").start()
+        if val is None:
+            return _clean({"available": False, "warming": True, "days": days, "rows": []})
+        return _clean(val)
+
+    def _compute_sector_cycle(self, days=120):
+        """实算：板块等权收益 × 综合温度变化 → 顺/逆表（后台线程用，约 10~20s）。"""
+        import math
+        try:
+            from core import chart_cache as _cc
+        except Exception:
+            return {"available": False, "error": "chart_cache 不可用"}
+        rows = (self.load_market_sentiment(max(int(days) + 60, 250)) or {}).get("series") or []
+        if len(rows) < 60:
+            return {"available": False, "error": "情绪序列不足"}
+        dates = [r["date"] for r in rows]
+        sent = [r.get("sent_ma") for r in rows]
+        ratio = []
+        for r in rows:
+            u, n = r.get("up"), r.get("dn")
+            ratio.append((u / (u + n) * 100) if (u is not None and n is not None and (u + n) > 0) else None)
+
+        def _ma5(x):
+            out = []
+            for i in range(len(x)):
+                w = [v for v in x[max(0, i - 4):i + 1] if v is not None]
+                out.append(sum(w) / len(w) if len(w) >= 3 else None)
+            return out
+
+        bre = _ma5(ratio)
+        comp = [(0.5 * sent[i] + 0.5 * bre[i])
+                if (sent[i] is not None and bre[i] is not None) else None
+                for i in range(len(rows))]
+        bmap = _concept_board()
+        boards = {}
+        for c, b in bmap.items():
+            b = str(b or "").strip()
+            if b:
+                boards.setdefault(b, []).append(c)
+        base = BASE / "t_io" / "cache" / "daily_kline"
+        reten = {}
+        for codes in boards.values():
+            for c in codes:
+                if c in reten:
+                    continue
+                try:
+                    ds, cl = _cc.daily_close_series(base / f"{c}.json")
+                except Exception:
+                    continue
+                if len(cl) < 30:
+                    continue
+                m = {}
+                for i in range(1, len(cl)):
+                    if cl[i - 1] > 0:
+                        m[ds[i]] = cl[i] / cl[i - 1] - 1
+                reten[c] = m
+        mkt = {}
+        for m in reten.values():
+            for d0, v in m.items():
+                mkt.setdefault(d0, []).append(v)
+        mkt = {d0: sum(v) / len(v) for d0, v in mkt.items() if len(v) >= 100}
+        start = max(0, len(dates) - int(days))
+        dT = [None] * (len(dates) - 1)
+        for i in range(1, len(dates)):
+            if comp[i] is not None and comp[i - 1] is not None:
+                dT[i - 1] = comp[i] - comp[i - 1]
+
+        def _stats(xs, ys):
+            n = len(xs)
+            if n < 40:
+                return None
+            mx = sum(xs) / n
+            my = sum(ys) / n
+            cov = sum((xs[i] - mx) * (ys[i] - my) for i in range(n))
+            vx = sum((x - mx) ** 2 for x in xs)
+            vy = sum((y - my) ** 2 for y in ys)
+            if vx <= 0 or vy <= 0:
+                return None
+            corr = cov / math.sqrt(vx * vy)
+            beta = cov / vx
+            t = corr * math.sqrt((n - 2) / max(1e-12, 1 - corr * corr))
+            return n, corr, beta, t
+
+        out_rows = []
+        for b, codes in boards.items():
+            rs = {}
+            for c in codes:
+                m = reten.get(c)
+                if not m:
+                    continue
+                for d0, v in m.items():
+                    rs.setdefault(d0, []).append(v)
+            xs, ya, ye = [], [], []
+            for i in range(start, len(dates)):
+                d0 = dates[i]
+                dti = dT[i - 1] if i - 1 < len(dT) else None
+                if dti is None or d0 not in rs or d0 not in mkt or len(rs[d0]) < 3:
+                    continue
+                r0 = sum(rs[d0]) / len(rs[d0])
+                xs.append(dti)
+                ya.append(r0)
+                ye.append(r0 - mkt[d0])
+            s_abs = _stats(xs, ya)
+            s_ex = _stats(xs, ye)
+            if not s_abs or not s_ex:
+                continue
+            n, corr, beta_ex, t_ex = s_ex
+            cls = "顺" if corr >= 0.20 else ("逆" if corr <= -0.20 else "中")
+            out_rows.append({
+                "board": b, "n": n,
+                "corr": round(s_abs[1], 3),
+                "ex_corr": round(corr, 3),
+                "beta10": round(beta_ex * 10 * 100, 3),
+                "t": round(t_ex, 1),
+                "cls": cls,
+            })
+        out_rows.sort(key=lambda x: -x["ex_corr"])
+        return {"available": True, "date": datetime.now().strftime("%Y-%m-%d"),
+                "computed_at": datetime.now().strftime("%H:%M:%S"), "days": int(days),
+                "start": dates[start] if start < len(dates) else "",
+                "end": dates[-1] if dates else "", "rows": out_rows}
+
     _SENT_LIVE_MEM: dict = {"ts": None, "date": None, "val": None}
 
     def load_sentiment_live(self):

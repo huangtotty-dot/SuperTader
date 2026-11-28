@@ -71,8 +71,12 @@ def sent_series():
 
 
 def ma5_of(vals, min_n=3):
+    """当日原始 breadth 缺失时，当日 MA/comp 必须为空，不得拿前几日凑合出完整值。"""
     out = []
     for j in range(len(vals)):
+        if vals[j] is None:
+            out.append(None)
+            continue
         seg = [v for v in vals[max(0, j - 4):j + 1] if v is not None]
         out.append(round(sum(seg) / len(seg), 1) if len(seg) >= min_n else None)
     return out

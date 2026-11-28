@@ -48,21 +48,34 @@ def _maybe_flush_diag_metrics(now: datetime) -> None:
         log.warning(f"⚠️ 诊断指标落盘失败: {str(e)[:120]}")
 
 
+def _today_repair_succeeded(today: str) -> bool:
+    """复盘/预下载共享的输入闸门：只看真实完成态，不认进程启动占位。"""
+    from core.eod_tasks import _today_bar_repair_state
+    return (_today_bar_repair_state.get("date") == today
+            and _today_bar_repair_state.get("status") == "succeeded")
+
+
 def _maybe_run_daily_review(now: datetime) -> None:
-    """15:10 后交易日自动触发每日复盘——子进程 fire-and-forget，内部串行跑
-    equity_daily → daily_review → forward_tracker（后者读前者产出）；成功才占位，失败 10 分钟节流重试。
-    P0(2026-10-13): 链首补 equity_daily——主基准 sh000300 仅被该脚本刷新（其余四指数
-    走 facade 盘中路径），脚本不跑则指数缓存断更 + 净值文件缺日（10-12/10-13 实证断档）。"""
+    """今日行修复成功后，串行跑 equity_daily → daily_review → forward_tracker。
+
+    W48：15:12 只是开始修复的时点，不是数据已确认的凭据；修复 running/failed 时等待，
+    子进程成功才占位，失败 10 分钟节流重试。"""
     global _daily_review_state
     try:
         t = now.time()
-        if now.weekday() >= 5 or t < dtime(15, 10):
+        if now.weekday() >= 5 or t < dtime(15, 12):
             return
         today = now.strftime("%Y-%m-%d")
         if _daily_review_state.get("date") == today:
             return
         if _now().timestamp() < _daily_review_state.get("next_try", 0):
             return
+        if not _today_repair_succeeded(today):
+            if not _daily_review_state.get("waiting_repair"):
+                log.warning(f"⏳ 今日行修复尚未成功，复盘等待且不读未确认缓存: {today}")
+            _daily_review_state["waiting_repair"] = True
+            return
+        _daily_review_state["waiting_repair"] = False
         import subprocess
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         log_dir = os.path.join(_ROOT, "t_io", "logs")
@@ -125,7 +138,7 @@ def _maybe_run_daily_review(now: datetime) -> None:
 
 
 def _maybe_run_chart_prefetch(now: datetime) -> None:
-    """15:10 后交易日触发 K线缓存预下载（子进程 fire-and-forget）。
+    """今日行修复成功后触发预下载，避免与复盘争写同一批日线缓存。
 
     幂等由 `core.chart_cache.run_prefetch` 的跨进程锁 + 当日标记保证（与 gui 侧互斥）。
     成功才占位，失败 600s 重试。子进程不构建图表 payload（那是 gui 的活）。
@@ -133,12 +146,14 @@ def _maybe_run_chart_prefetch(now: datetime) -> None:
     global _chart_prefetch_state
     try:
         t = now.time()
-        if now.weekday() >= 5 or t < dtime(15, 10):
+        if now.weekday() >= 5 or t < dtime(15, 12):
             return
         today = now.strftime("%Y-%m-%d")
         if _chart_prefetch_state.get("date") == today:
             return
         if _now().timestamp() < _chart_prefetch_state.get("next_try", 0):
+            return
+        if not _today_repair_succeeded(today):
             return
         import subprocess
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -149,7 +164,7 @@ def _maybe_run_chart_prefetch(now: datetime) -> None:
             "import sys\n"
             f"sys.path.insert(0, {_ROOT!r})\n"
             "from core.chart_cache import run_prefetch\n"
-            "res = run_prefetch()\n"
+            "res = run_prefetch(eod_verified=True, eod_source='today_bar_repair')\n"
             "print('prefetch:', res, flush=True)\n"
             "# 锁被占（GUI 小池预取/另一个进程）不是成功：退非 0 ⇒ main 的 watcher 600s 后重试。\n"
             "# 旧逻辑 rc=0 被当成跑完，当天全池日线再也不会补（2026-11-11 实测 full 标记一直缺）。\n"

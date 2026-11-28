@@ -236,8 +236,9 @@ PARAMS = {
     #   不必改代码、也不必动 industry_map.csv（那会让入库文件变成工作区改动）。
     "osc_universe_full_market": True,
     "osc_single_budget": 100000.0,  # 单票名义上限（元，对齐 OGR 10 万/腿）
-    # 2026-W44 几何α=-4.6174%触发既定降额闸；owner 2026-10-30「请继续」批准W45降至20万。
-    "osc_daily_budget": 200000.0,   # 每日名义总额度（元，W45；α与市况同步回正后再评估）
+    # B40：owner 2026-11-26 批准 pack_v2 日预算 40 万；GM 显式参数必须与 hooks 默认一致，
+    # 否则这里的旧值会覆盖 DEFAULTS，令已批准配置静默失效。pack_v2 观察期不因此重置。
+    "osc_daily_budget": 400000.0,   # 每日名义总额度（元，B40；2026-11-26 owner 直投）
     "osc_cash_headroom": 0.95,      # 单票占用现金封顶比例
     "osc_exec_time_hhmm": 1000,     # 10:00 触发（GM 1800s 首根 10:00 棒）
     "osc_order_poll_rounds": 3,

@@ -575,6 +575,104 @@ class TestUnresolvedOrderFailure(unittest.TestCase):
             self.assertEqual(saved["reserved_notional"], 10000.0)
 
 
+class TestBackfillIntentSynchronization(unittest.TestCase):
+    """候选㊺：柜台终态先落意图账，再允许恢复检查与候补下单。"""
+
+    def test_unique_order_id_recovers_intent_identity_for_async_record(self):
+        """旧回报缺 intent_id 时，只能由唯一 order_id 找回已预留意图。"""
+        with tempfile.TemporaryDirectory() as directory:
+            rec = _buy_record(order_id="unique-order", qty=1000, price=10.0)
+            rec["intent_id"] = "intent-unique-order"
+            order_intents.upsert_fill_record(directory, DATE, rec, creating=True)
+            rec.pop("intent_id")
+            rec.update({"status": "filled", "filled_qty": 1000,
+                        "filled_price": 9.9, "filled_notional": 9900.0,
+                        "qty_remaining": 0, "reserved_notional": 0.0})
+
+            saved = executor.sync_order_intent_from_record(directory, DATE, rec)
+            self.assertEqual(saved["intent_id"], "intent-unique-order")
+            persisted = order_intents.load(directory, DATE, strict=True)
+            self.assertEqual(len(persisted), 1)
+            self.assertEqual(persisted[0]["order_id"], "unique-order")
+            self.assertEqual(persisted[0]["status"], "filled")
+            self.assertEqual(persisted[0]["filled_price"], 9.9)
+
+    @staticmethod
+    def _seed_unacked(directory, codes=("300339", "600520", "002261")):
+        rows = []
+        for code in codes:
+            rec = _buy_record(code=code, order_id=None, qty=1000)
+            rec["intent_id"] = "intent-" + code
+            rec["status"] = "submitted"
+            rec.pop("order_id", None)
+            order_intents.upsert_fill_record(directory, DATE, rec, creating=True)
+            rows.append(rec)
+        return {"date": DATE, "buys": rows}
+
+    class _ResolveGateway(_Gateway):
+        def cancel_order(self, order_id, code):
+            resolved = "resolved-" + code
+            self.calls.append({"kind": "cancel", "code": code, "order_id": resolved})
+            self.cancelled.add(resolved)
+            return {"ok": True, "order_id": resolved, "message": ""}
+
+    def test_multiple_missing_ids_cancelled_then_backfill_is_not_false_blocked(self):
+        """复现 11-27：三票同步回报无 ID，撤单找回 ID 后不得再报 recovery_order_id_missing。"""
+        with tempfile.TemporaryDirectory() as directory:
+            fills = self._seed_unacked(directory)
+            gateway = self._ResolveGateway()
+            spare = {"code": "600009", "gap": 0.04, "price": 10.0}
+            result = backfill.run_backfill_exec(
+                gateway, DATE, fills, backfill.pending_from_fills(fills), [spare],
+                {"600009": 9.0}, {"600009": {"price": 10.0, "vwap": 9.5, "ask_v": 100}},
+                positions={}, params=_cfg(order_poll_rounds=1, daily_budget=400000.0),
+                book_dir=directory, sleep_fn=lambda _: None, log=_log)
+            self.assertEqual(result["cancel"]["released"], ["300339", "600520", "002261"])
+            self.assertEqual([r["code"] for r in result["placed"]], ["600009"])
+            self.assertFalse(any(i.get("kind") == "recovery_order_id_missing"
+                                 for i in result["budget_bound_breaches"]))
+            saved = order_intents.load(directory, DATE, strict=True)
+            self.assertEqual(len(saved), 4)
+            for code in ("300339", "600520", "002261"):
+                row = next(r for r in saved if r["code"] == code)
+                self.assertEqual(row["status"], "cancelled")
+                self.assertEqual(row["order_id"], "resolved-" + code)
+                self.assertEqual(row["qty_remaining"], 0)
+                self.assertEqual(row["raw_status"], 5)
+
+    def test_terminal_intent_persist_failure_still_blocks_new_buy(self):
+        """安全边界：柜台虽报已撤，但磁盘未同步成功，绝不能假装恢复完成。"""
+        with tempfile.TemporaryDirectory() as directory:
+            fills = self._seed_unacked(directory, codes=("600001",))
+            gateway = self._ResolveGateway()
+            spare = {"code": "600002", "gap": 0.04, "price": 10.0}
+            with mock.patch.object(executor, "sync_order_intent_from_record",
+                                   side_effect=OSError("injected_terminal_sync_failure")):
+                result = backfill.run_backfill_exec(
+                    gateway, DATE, fills, backfill.pending_from_fills(fills), [spare],
+                    {"600002": 9.0}, {"600002": {"price": 10.0, "vwap": 9.5, "ask_v": 100}},
+                    positions={}, params=_cfg(order_poll_rounds=1), book_dir=directory,
+                    sleep_fn=lambda _: None, log=_log)
+            self.assertEqual(gateway.places, [])
+            self.assertEqual(result["placed"], [])
+            self.assertEqual(result["note"], "budget_bound_breach")
+            self.assertTrue(any(i.get("kind") == "order_intent_terminal_persist_failed"
+                                for i in result["budget_bound_breaches"]))
+
+    def test_backfill_round_persists_budget_breach_details(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _write_json(directory, "fills_%s.json" % DATE, {
+                "date": DATE, "mode": "live", "buys": [], "summary": {}})
+            issue = {"kind": "recovery_order_unresolved", "code": "600001",
+                     "order_id": "unknown-id"}
+            result = {"cancel": {"released": [], "unconfirmed": [], "failed": [], "filled": []},
+                      "cash_budget": 0.0, "skipped": [], "note": "budget_bound_breach",
+                      "budget_bound_breaches": [issue]}
+            executor.merge_backfill_fills(directory, DATE, 1, result, placed=[], log=_log)
+            fills = _read_json(directory, "fills_%s.json" % DATE)
+            self.assertEqual(fills["backfill_rounds"][0]["budget_bound_breaches"], [issue])
+
+
 class TestOrderIdentityAndRawStatus(unittest.TestCase):
     def test_same_symbol_multiple_orders_settle_by_order_id_not_code(self):
         first = _buy_record(order_id="order-a", qty=1000, price=10.0,
@@ -657,7 +755,8 @@ class TestNovemberThirdLimitReplay(unittest.TestCase):
             bars[code] = {"low": self.PREV[code], "close": close,
                           "vwap": vwap, "volume": 10000, "amount": vwap * 10000}
         board = {code: "半导体" for code in self.PREV}
-        params = _cfg(top_n=4, order_poll_rounds=1)
+        # 这是 11-03 历史规则回放：G8 8% 跳空帽 11-26 才上线，不能倒灌进旧样本。
+        params = _cfg(top_n=4, order_poll_rounds=1, gap_cap=None)
         # 生产锚点现金：199263.07 元；不得用人工抬价或合成组替代真实 VWAP/费用。
         gateway = self._Gateway(cash=199263.07)
         first = executor.run_buy_exec(

@@ -175,7 +175,7 @@ def build_spares(signals, pick_codes, done_codes, bars=None) -> list:
 
     signals 由 `decision.evaluate()` 返回（gap 降序，**含被板块过滤的**）。
     ⚠️ 只取 `decision == "TRADE"` 的（被板块过滤的 `NO_TRADE` 不能顺移）。
-    返回 [{code, gap, board, price}]，保持 gap 降序；`price` 取自 `bars[code]['close']`（10:00 收盘）。
+    返回 [{code, gap, open_gap, board, price}]，保持 gap 降序；`price` 取自 `bars[code]['close']`（10:00 收盘）。
     """
     from .decision import TRADE
     skip = set(pick_codes or ()) | set(done_codes or ())
@@ -190,8 +190,8 @@ def build_spares(signals, pick_codes, done_codes, bars=None) -> list:
             px = float(b.get("close") or 0)
             if px <= 0:
                 continue                     # 无 10:00 棒 ⇒ 无法折算股数 ⇒ fail-closed 跳过
-            out.append({"code": c, "gap": s.get("gap"), "board": s.get("board", ""),
-                        "price": px})
+            out.append({"code": c, "gap": s.get("gap"), "open_gap": s.get("open_gap"),
+                        "board": s.get("board", ""), "price": px})
         except Exception:
             _swallow("exec.oversold_gap_confirm.backfill.build_spares")  # 原静默吞点：计数化（P1-6 三批），行为等价
             continue
@@ -482,6 +482,18 @@ def run_backfill_exec(gateway, date, fills, pending, spares, prev_close, quotes,
             return blank[0] if len(blank) == 1 else None
         return candidates[0] if len(candidates) == 1 else None
 
+    def _persist_terminal_intent(hit, code, oid):
+        """柜台终态先落意图账，再允许后续恢复检查；写盘失败必须闭锁。"""
+        if not (book_dir and date and not dry_run):
+            return
+        try:
+            _ex.sync_order_intent_from_record(book_dir, date, hit)
+        except Exception as exc:
+            match_issues.append({
+                "kind": "order_intent_terminal_persist_failed",
+                "code": code, "order_id": oid,
+                "error": "%s:%s" % (type(exc).__name__, exc)})
+
     for terminal in (cres.get("terminal_orders") or []):
         code, oid = terminal.get("code"), str(terminal.get("order_id") or "")
         hit = _match(code, oid)
@@ -495,6 +507,7 @@ def run_backfill_exec(gateway, date, fills, pending, spares, prev_close, quotes,
             "filled_qty": int(terminal.get("filled_qty") or 0),
             "filled_price": terminal.get("filled_price"),
             "message": terminal.get("message") or ""})
+        _persist_terminal_intent(hit, code, oid)
     for race in (cres.get("filled") or []):
         code, oid = race.get("code"), str(race.get("order_id") or "")
         hit = _match(code, oid)
@@ -505,6 +518,7 @@ def run_backfill_exec(gateway, date, fills, pending, spares, prev_close, quotes,
             "order_id": oid or hit.get("order_id"), "status": "filled", "raw_status": 3,
             "filled_qty": int(race.get("qty") or 0), "filled_price": race.get("price"),
             "message": "撤单竞态成交"})
+        _persist_terminal_intent(hit, code, oid)
 
     bound_issues = match_issues + _ex._budget_bound_issues(budget_view, prev_close)
     out["budget_bound_breaches"] = list(bound_issues)

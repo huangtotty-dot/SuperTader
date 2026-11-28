@@ -163,8 +163,8 @@ def _compute_ic(panel: pd.DataFrame, universe, date_min: pd.Timestamp,
 
 
 def update_ic_store(as_of: pd.Timestamp, start: pd.Timestamp,
-                    rebuild: bool) -> tuple[pd.DataFrame, pd.Timestamp]:
-    """增量维护日度 IC 存储。返回 (store 宽表, 最新可算 IC 日期)。"""
+                    rebuild: bool, with_panel_end: bool = False) -> tuple:
+    """增量维护日度 IC 存储；可选同时返回面板实际末端，供陈旧度判定。"""
     store = pd.DataFrame()
     if IC_STORE.exists() and not rebuild:
         store = pd.read_csv(IC_STORE, index_col=0, parse_dates=True)
@@ -209,6 +209,8 @@ def update_ic_store(as_of: pd.Timestamp, start: pd.Timestamp,
     OUT.mkdir(parents=True, exist_ok=True)
     store.to_csv(IC_STORE, encoding="utf-8")
     print(f"[store] 存储 {len(store)} 日 -> {IC_STORE}", flush=True)
+    if with_panel_end:
+        return store, ic_end, pd.Timestamp(cal.max())
     return store, ic_end
 
 
@@ -224,7 +226,29 @@ def _consec_neg(s: pd.Series) -> pd.Series:
 
 
 def build_monitor(store: pd.DataFrame, ic_end: pd.Timestamp, as_of: pd.Timestamp,
-                  warn_days: int, alarm_days: int) -> dict:
+                  warn_days: int, alarm_days: int,
+                  panel_end: pd.Timestamp | None = None,
+                  expected_panel_end: pd.Timestamp | None = None,
+                  calendar_verified: bool = True,
+                  calendar_source: str = "unspecified",
+                  calendar_reason: str | None = None) -> dict:
+    """生成 IC 状态；面板或日历不合时点数可以展示，但绝不输出生产调权建议。
+
+    h5 的 ``ic_end`` 自然落后面板六个交易日，不属于陈旧。stale 只比较面板实际
+    末端与预期末端；末端未知、越过 as_of、或交易日历未核验同样 fail-closed。
+    """
+    panel_end_ts = pd.Timestamp(panel_end) if panel_end is not None else None
+    expected_ts = (pd.Timestamp(expected_panel_end) if expected_panel_end is not None
+                   else pd.Timestamp(as_of))
+    panel_stale = panel_end_ts is None or panel_end_ts < expected_ts
+    panel_ahead = panel_end_ts is not None and panel_end_ts > expected_ts
+    panel_exact = panel_end_ts is not None and panel_end_ts == expected_ts
+    panel_usable = panel_exact and bool(calendar_verified)
+    data_status = ("panel_end_unknown" if panel_end_ts is None else
+                   "stale_panel" if panel_stale else
+                   "panel_ahead_of_as_of" if panel_ahead else
+                   "calendar_unverified" if not calendar_verified else "ready")
+
     roll = store.rolling(ROLL_WIN, min_periods=ROLL_MINP).mean()
     consec = pd.DataFrame({f: _consec_neg(roll[f]) for f in FACTORS})
 
@@ -250,7 +274,6 @@ def build_monitor(store: pd.DataFrame, ic_end: pd.Timestamp, as_of: pd.Timestamp
         last_date = r.index.max() if len(r) else None
         last_roll = float(r.iloc[-1]) if len(r) else None
         n_neg = int(c.loc[last_date]) if last_date is not None else 0
-        # 历史统计：本监控窗内告警天数与最深连续<0
         alarm_mask = c >= alarm_days
         factors_status[f] = {
             "last_date": str(last_date.date()) if last_date is not None else None,
@@ -259,7 +282,8 @@ def build_monitor(store: pd.DataFrame, ic_end: pd.Timestamp, as_of: pd.Timestamp
             "roll60": round(last_roll, 4) if last_roll is not None else None,
             "consec_neg_days": n_neg,
             "status": status_of(n_neg),
-            "suggested_weight_mult": 0.5 if n_neg >= alarm_days else 1.0,
+            "suggested_weight_mult": ((0.5 if n_neg >= alarm_days else 1.0)
+                                      if panel_usable else None),
             "hist_alarm_days": int(alarm_mask.sum()),
             "hist_max_consec_neg": int(c.max()),
             "hist_last_alarm_date": (str(c.index[alarm_mask].max().date())
@@ -268,7 +292,15 @@ def build_monitor(store: pd.DataFrame, ic_end: pd.Timestamp, as_of: pd.Timestamp
 
     alarm_now = [f for f, s in factors_status.items() if s["status"] == "告警"]
     warn_now = [f for f, s in factors_status.items() if s["status"] == "预警"]
-    if alarm_now:
+    if not panel_usable:
+        if panel_exact and not calendar_verified:
+            action = (f"交易日历未核验（{calendar_source}，{calendar_reason or 'unknown'}）；"
+                      "禁止据此调整生产权重，请先核验本地指数交易日历")
+        else:
+            action = (f"面板末端 {panel_end_ts.date() if panel_end_ts is not None else '未知'}，"
+                      f"预期 {expected_ts.date()}（{data_status}）；禁止据此调整生产权重，"
+                      "请先更新并核验面板")
+    elif alarm_now:
         action = f"{'/'.join(alarm_now)} roll60 IC 连续<0 ≥{alarm_days}日 → 建议对应因子权重减半"
     elif warn_now:
         action = f"{'/'.join(warn_now)} 连续<0 ≥{warn_days}日，进入预警观察"
@@ -279,14 +311,26 @@ def build_monitor(store: pd.DataFrame, ic_end: pd.Timestamp, as_of: pd.Timestamp
         "generated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
         "as_of": str(as_of.date()),
         "ic_end": str(ic_end.date()),
+        "panel_end": str(panel_end_ts.date()) if panel_end_ts is not None else None,
+        "expected_panel_end": str(expected_ts.date()),
+        "stale": bool(panel_stale),
+        "data_status": data_status,
+        "calendar": {"verified": bool(calendar_verified), "source": calendar_source,
+                     "reason": calendar_reason},
         "params": {"h": H, "forward": "buy_open open(t+6)/open(t+1)-1",
                    "roll_win": ROLL_WIN, "roll_min_periods": ROLL_MINP,
                    "warn_days": warn_days, "alarm_days": alarm_days,
                    "min_coverage": MIN_COVERAGE,
+                   "freshness_rule": "panel_end 必须等于 expected_panel_end 且 calendar.verified=true；h5 的 ic_end 自然滞后不算 stale",
                    "monitor_start": str(store.index.min().date())},
         "factors": factors_status,
-        "overall": {"any_alarm": bool(alarm_now), "alarm_factors": alarm_now,
-                    "warn_factors": warn_now, "action": action},
+        "overall": {"any_alarm": bool(alarm_now) and panel_usable,
+                    "alarm_factors": alarm_now if panel_usable else [],
+                    "warn_factors": warn_now if panel_usable else [],
+                    "historical_alarm_factors": alarm_now if not panel_usable else [],
+                    "historical_warn_factors": warn_now if not panel_usable else [],
+                    "production_weight_change_allowed": panel_usable,
+                    "action": action},
     }
     STATUS_JSON.write_text(json.dumps(status, ensure_ascii=False, indent=1),
                            encoding="utf-8")
@@ -384,11 +428,72 @@ def validate(store: pd.DataFrame) -> dict:
 
 
 # ---------------------------------------------------------------------------
+def resolve_as_of(today=None, cache_dir=None) -> dict:
+    """从本地已完成指数日线解析最近交易日，法定节假日自然回退。
+
+    显式历史回放由 ``--date`` 负责；这里只服务生产默认口径。当日行必须带有
+    下游今日行修复链路写入的 ``eod_verified`` 证明才可纳入，否则回退到此前交易日。
+    缓存不可读时保留原工作日回退仅作为展示锚点，但 ``calendar_verified=False``，
+    调用方必须禁止生产调权，不能把它冒充权威交易日历。
+    """
+    d = pd.Timestamp(today).normalize() if today is not None else pd.Timestamp.now().normalize()
+    today_s = str(d.date())
+    root = Path(cache_dir) if cache_dir is not None else (
+        WORKSPACE / "t_io" / "cache" / "daily_kline")
+    candidates = []
+    for index_code in ("sh000300", "sh000001"):
+        fp = root / f"index_{index_code}.json"
+        try:
+            payload = json.loads(fp.read_text(encoding="utf-8"))
+            forming = {str(x)[:10] for x in (payload.get("forming") or [])}
+            verified_raw = payload.get("eod_verified") or []
+            if isinstance(verified_raw, dict):
+                verified = {str(k)[:10] for k, v in verified_raw.items() if v}
+            else:
+                verified = {str(x)[:10] for x in verified_raw}
+            for row in reversed(payload.get("rows") or []):
+                day = str((row or {}).get("date") or "")[:10]
+                try:
+                    ts = pd.Timestamp(day)
+                except Exception:
+                    continue
+                if not day or ts > d or day in forming:
+                    continue
+                if day == today_s and day not in verified:
+                    continue
+                close = float((row or {}).get("close") or 0)
+                if close <= 0:
+                    continue
+                candidates.append((ts, index_code, str(fp)))
+                break
+        except Exception:
+            continue
+    if candidates:
+        ts, source, fp = max(candidates, key=lambda x: x[0])
+        # 超过最长法定节假日加缓冲仍没有新行，不能声称这份日历仍然可信。
+        verified = 0 <= (d - ts).days <= 15
+        return {"as_of": ts, "calendar_verified": verified,
+                "calendar_source": f"local_index_daily:{source}",
+                "calendar_path": fp,
+                "calendar_reason": None if verified else "local_calendar_stale"}
+    fallback = d
+    while fallback.weekday() >= 5:
+        fallback -= pd.Timedelta(days=1)
+    return {"as_of": fallback, "calendar_verified": False,
+            "calendar_source": "weekday_fallback_unverified", "calendar_path": None,
+            "calendar_reason": "local_index_calendar_unavailable"}
+
+
+def _default_as_of(today=None, cache_dir=None) -> pd.Timestamp:
+    """兼容旧调用：只返回日期；生产 ``main()`` 同时消费可信度和来源元数据。"""
+    return resolve_as_of(today=today, cache_dir=cache_dir)["as_of"]
+
+
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="roll60 IC 衰减监控线")
     ap.add_argument("--date", default=None,
-                    help="截至日期 YYYY-MM-DD（默认=面板最大交易日）")
+                    help="截至日期 YYYY-MM-DD；显式指定用于历史回放，默认从本地已完成指数日线解析")
     ap.add_argument("--start", default="2024-03-05",
                     help="监控窗起点（默认 2024-03-05，与 D1 归因主窗对齐）")
     ap.add_argument("--warn", type=int, default=10, help="预警阈值：连续<0天数")
@@ -409,17 +514,22 @@ def main() -> None:
     start = pd.Timestamp(args.start)
     if args.date:
         as_of = pd.Timestamp(args.date)
-    elif PANEL_META.exists():
-        as_of = pd.Timestamp(json.loads(PANEL_META.read_text(
-            encoding="utf-8"))["date_max"])
+        calendar = {"as_of": as_of, "calendar_verified": True,
+                    "calendar_source": "explicit_date", "calendar_reason": None}
     else:
-        # 未跑过且无缓存：先探一次面板末端（全量加载，仅本次）
-        as_of = pd.Timestamp(_prep_panel(load_panel(str(PANEL_DIR)))["date"].max())
-        print(f"[cal] 未指定 --date，取面板末端 {as_of.date()}", flush=True)
+        calendar = resolve_as_of()
+        as_of = calendar["as_of"]
+        print(f"[cal] 预期面板末端={as_of.date()} source={calendar['calendar_source']} "
+              f"verified={calendar['calendar_verified']}", flush=True)
 
     t0 = time.perf_counter()
-    store, ic_end = update_ic_store(as_of, start, args.rebuild)
-    status = build_monitor(store, ic_end, as_of, args.warn, args.alarm)
+    store, ic_end, panel_end = update_ic_store(
+        as_of, start, args.rebuild, with_panel_end=True)
+    status = build_monitor(store, ic_end, as_of, args.warn, args.alarm,
+                           panel_end=panel_end, expected_panel_end=as_of,
+                           calendar_verified=calendar["calendar_verified"],
+                           calendar_source=calendar["calendar_source"],
+                           calendar_reason=calendar.get("calendar_reason"))
     if not args.no_plot:
         plot_monitor(store, status)
     if args.validate:
