@@ -1690,7 +1690,7 @@ function renderTradeHistory(d) {
     });
   } else echClear("echThCum");
 
-  // 2b) 累计收益趋势 —— 两账户合计（选了单账户就画那个账户）
+  // 2b) 累计收益趋势 —— 全部账户合计（选了单账户就画那个账户）
   //
   // 【两条线分别是什么】（2026-10-14 owner 问「黄线代表什么」—— 它此前**没有图例**，见下）
   //   · 蓝实线 `累计收益率(左·%)` —— 左轴。口径：累计已实现 ÷ **累计买入成本**（与账户汇总同源）。
@@ -1708,8 +1708,9 @@ function renderTradeHistory(d) {
     const cpTotal = document.getElementById("thCumPctTotal");
     if (cpTotal) {
       const last = curve[curve.length - 1];
+      const scope = acc ? "账户 " + esc(acc) : "全部账户合计（" + accs.length + "）";
       cpTotal.textContent = last
-        ? `${acc ? "账户 " + esc(acc) : "两账户合计"} · 末值 ${((last.pct_total ?? last.pct) >= 0 ? "+" : "") + fmt(last.pct_total ?? last.pct, 2)}%`
+        ? `${scope} · 截至 ${esc(last.date)} · 末值 ${((last.pct_total ?? last.pct) >= 0 ? "+" : "") + fmt(last.pct_total ?? last.pct, 2)}%`
           + `（总盈亏 ${f(last.cum_total)} / 累计买入 ${fmt(last.cum_buy || 0, 0)}）`
         : "";
     }
@@ -1745,7 +1746,7 @@ function renderTradeHistory(d) {
             + `<br>累计总盈亏: <b style="color:${pnlColor(r.cum_total)}">${f(r.cum_total)}</b>`
             + (d == null ? "" : `<br>当月变动: <b style="color:${pnlColor(d)}">${f(d)}</b>`)
             + `<br><span style="color:#8b949e">已实现 ${f(r.cum_realized)} · 累计买入 ${fmt(r.cum_buy || 0, 0)}</span>`
-            + (r.today_est ? '<br><span style="color:#8b949e">今日点：当天无成交，浮动按台账最新收盘价估</span>' : "");
+            + (r.today_est ? '<br><span style="color:#8b949e">无成交补点：浮动按该日已完成收盘价估算</span>' : "");
         } },
         // 2026-11-05 owner：「累计收益趋势没有更新11月月份的坐标」——数据里最后一点是
         // 收盘后补的「今天」（11-05），但 category 轴默认**不强制标注末端**，自动抽稀后

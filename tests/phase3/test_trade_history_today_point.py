@@ -13,7 +13,8 @@
 import os
 import sys
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
+from unittest.mock import patch
 
 sys.stdout.reconfigure(encoding="utf-8")
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,15 +39,38 @@ def _ledger():
 
 
 class TestLedgerTodayPoint(unittest.TestCase):
+    def setUp(self):
+        days = ("2026-10-22", "2026-10-23")
+
+        def target(now):
+            cutoff = (now.date() if now.strftime("%H:%M") >= "15:00"
+                      else now.date() - timedelta(days=1)).isoformat()
+            return max((day for day in days if day <= cutoff), default=None)
+
+        patcher = patch.object(gui.Api, "_ledger_eod_target", side_effect=target)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_收盘后补今日点(self):
         d = _ledger()
         APPEND(d, datetime(2026, 10, 23, 16, 30))
         self.assertEqual(d["cum"][-1]["date"], "2026-10-23")
         self.assertAlmostEqual(d["cum"][-1]["cum_total"], -120.0)      # 已实现 −100 + 浮动 −20
         self.assertTrue(d["cum"][-1]["today_est"])
+        self.assertEqual(d["cum"][-1]["price_date"], "2026-10-23")
         self.assertAlmostEqual(d["cum_all"][-1]["cum_total"], -120.0)
         self.assertAlmostEqual(d["cum_all"][-1]["delta_total"], 30.0)  # 比 10-22 的 −150 好了 30
         self.assertAlmostEqual(d["cum_all"][-1]["pct_total"], -12.0)
+        self.assertAlmostEqual(d["total_pnl"], -120.0)
+        self.assertEqual(d["curve_through"], "2026-10-23")
+
+    def test_周六也回补周五且末值与总盈亏一致(self):
+        d = _ledger()
+        APPEND(d, datetime(2026, 10, 24, 12, 20))
+        self.assertEqual(d["cum_all"][-1]["date"], "2026-10-23")
+        self.assertEqual(d["cum_all"][-1]["price_date"], "2026-10-23")
+        self.assertAlmostEqual(d["cum_all"][-1]["cum_total"], d["total_pnl"])
+        self.assertEqual(d["curve_through"], "2026-10-23")
 
     def test_盘中不补(self):
         d = _ledger()
